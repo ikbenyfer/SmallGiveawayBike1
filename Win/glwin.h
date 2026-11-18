@@ -8,6 +8,9 @@
 #include <windows.h>
 #include <GL/gl.h>
 #include <GL/glext.h>
+/* windows.h definieert near/far als lege macro's: weg ermee */
+#undef near
+#undef far
 
 #define SGB_DESKTOP_GL 1
 

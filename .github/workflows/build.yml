@@ -173,7 +173,7 @@ jobs:
           SDL=deps/SDL2-2.30.9/x86_64-w64-mingw32
           MIX=deps/SDL2_mixer-2.8.0/x86_64-w64-mingw32
           x86_64-w64-mingw32-gcc -std=gnu99 -O2 -Wall -Wno-unused-parameter -Wno-misleading-indentation \
-            -I$SDL/include -I$MIX/include -DNDEBUG \
+            -I$SDL/include -I$SDL/include/SDL2 -I$MIX/include -DNDEBUG \
             Game/*.c Render/*.c Win/main_win.c Win/glload.c Win/app_res.o \
             -o SmallGiveawayBike1.exe \
             -L$SDL/lib -L$MIX/lib -lmingw32 -lSDL2main -lSDL2 -lSDL2_mixer \
