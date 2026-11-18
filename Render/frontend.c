@@ -2730,77 +2730,82 @@ static void autotest_tick(float dt) {
             g->wanted = 0;
             g->money += 200000;
             home_door(g->homeLvl, &dx, &dz);
-            game_teleport(g, dx - 6.0f, dz + 3.0f, PI_F * 0.5f);
+            game_teleport(g, dx - 9.0f, dz + 4.0f, PI_F * 0.5f);
             g->camYaw = PI_F * 0.42f;
             F.atT3 = t;
             F.atStep++;
         }
-        else if (F.atStep == 101 && t > F.atT3 + 1.2f) {
+        else if (F.atStep == 101 && t > F.atT3 + 1.2f) { g->camYaw = PI_F * 0.42f; at_shot("33_home_outside"); F.atT3 = t; F.atStep++; }
+        else if (F.atStep == 102 && t > F.atT3 + 0.3f) {
             float dx, dz;
-            at_shot("33_home_outside");
             home_door(g->homeLvl, &dx, &dz);
             game_teleport(g, dx, dz, PI_F * 0.5f);
             F.atT3 = t;
             F.atStep++;
         }
-        else if (F.atStep == 102 && t > F.atT3 + 1.2f) {
+        else if (F.atStep == 103 && t > F.atT3 + 1.2f) {
             rep("Huis: binnen=%d (1 verwacht), huis %d, garage %d", game_home_inside(g), g->homeLvl, g->garLvl);
             at_shot("34_home_inside");
-            {   /* naar de laptop */
-                V3 hp[12]; int hk[12], q, n2; float hr[12];
-                n2 = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
-                for (q = 0; q < n2; q++) if (hk[q] == HM_LAPTOP) game_teleport(g, hp[q].x, hp[q].z, PI_F * 0.5f);
-            }
             F.atT3 = t;
             F.atStep++;
         }
-        else if (F.atStep == 103 && F.state == ST_GAME && t > F.atT3 + 0.5f) {
+        else if (F.atStep == 104 && t > F.atT3 + 0.3f) {   /* naar de laptop: menu gaat open */
+            V3 hp[12]; int hk[12], q, n2; float hr[12];
+            n2 = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
+            for (q = 0; q < n2; q++) if (hk[q] == HM_LAPTOP) game_teleport(g, hp[q].x, hp[q].z, PI_F * 0.5f);
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 105 && F.state == ST_GAME && t > F.atT3 + 0.5f) {
             int a = game_home_upgrade(g, 1), b = game_home_upgrade(g, 1), c = game_home_upgrade(g, 0) + game_home_upgrade(g, 0) + game_home_upgrade(g, 0);
+            float x0, z0, x1, z1;
             rep("Upgrades: huis %d+%d -> niveau %d, garage +%d -> %d plekken, geld $%ld", a, b, g->homeLvl, c, g->garLvl + 1, g->money);
-            g->camYaw = PI_F * 0.5f;
+            home_room(g->homeLvl, &x0, &z0, &x1, &z1);
+            game_teleport(g, x0 + 2.5f, z1 - 2.0f, PI_F * 0.75f);
+            g->camYaw = PI_F * 0.75f;
             F.atT3 = t;
             F.atStep++;
         }
-        else if (F.atStep == 104 && t > F.atT3 + 1.2f) {
-            at_shot("36_villa_inside");
-            {
-                V3 hp[12]; int hk[12], q, n2; float hr[12];
-                n2 = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
-                for (q = 0; q < n2; q++) if (hk[q] == HM_TOGARAGE) game_teleport(g, hp[q].x, hp[q].z, PI_F);
-            }
+        else if (F.atStep == 106 && t > F.atT3 + 1.2f) { g->camYaw = PI_F * 0.75f; at_shot("36_villa_inside"); F.atT3 = t; F.atStep++; }
+        else if (F.atStep == 107 && t > F.atT3 + 0.3f) {
+            V3 hp[12]; int hk[12], q, n2; float hr[12];
+            n2 = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
+            for (q = 0; q < n2; q++) if (hk[q] == HM_TOGARAGE) game_teleport(g, hp[q].x, hp[q].z, PI_F);
             F.atT3 = t;
-            F.atStep++;
+            F.atStep = 110;
         }
-        else if (F.atStep == 105 && t > F.atT3 + 1.5f) {
+        else if (F.atStep == 110 && t > F.atT3 + 1.5f) {
             int k, inGar = 0;
             for (k = 0; k < MAX_OWNED; k++) if (g->garage[k].exists && g->veh[g->firstOwned + k].x < HOME_ZONE_X) inGar++;
             rep("Garage: binnen=%d (2 verwacht), %d eigen auto('s) in de garage", game_home_inside(g), inGar);
-            g->camYaw = 0.0f;
-            at_shot("37_garage");
-            {
-                V3 hp[12]; int hk[12], q, n2; float hr[12];
-                n2 = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
-                for (q = 0; q < n2; q++) if (hk[q] == HM_GAR_EXIT) game_teleport(g, hp[q].x, hp[q].z, -PI_F * 0.5f);
-            }
+            g->camYaw = -PI_F * 0.35f;
             F.atT3 = t;
             F.atStep++;
         }
-        else if (F.atStep == 106 && t > F.atT3 + 1.0f) {
+        else if (F.atStep == 111 && t > F.atT3 + 0.6f) { g->camYaw = -PI_F * 0.35f; at_shot("37_garage"); F.atT3 = t; F.atStep++; }
+        else if (F.atStep == 112 && t > F.atT3 + 0.3f) {
+            V3 hp[12]; int hk[12], q, n2; float hr[12];
+            n2 = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
+            for (q = 0; q < n2; q++) if (hk[q] == HM_GAR_EXIT) game_teleport(g, hp[q].x, hp[q].z, -PI_F * 0.5f);
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 113 && t > F.atT3 + 1.0f) {
             float dx, dz;
             rep("Uit de garage: buiten=%d, op (%.0f, %.0f)", !game_home_inside(g), g->p.x, g->p.z);
             home_door(g->homeLvl, &dx, &dz);
-            game_teleport(g, dx - 9.0f, dz + 5.0f, PI_F * 0.5f);
-            g->camYaw = PI_F * 0.45f;
+            game_teleport(g, dx - 10.0f, dz + 5.0f, PI_F * 0.5f);
+            g->camYaw = PI_F * 0.42f;
             F.atT3 = t;
             F.atStep++;
         }
-        else if (F.atStep == 107 && t > F.atT3 + 1.2f) {
-            at_shot("38_villa_outside");
+        else if (F.atStep == 114 && t > F.atT3 + 1.2f) { g->camYaw = PI_F * 0.42f; at_shot("38_villa_outside"); F.atT3 = t; F.atStep++; }
+        else if (F.atStep == 115 && t > F.atT3 + 0.3f) {
             game_teleport(g, road_c(2), road_c(1) + 6.0f, 0);
             g->stamina = 100; g->tired = 0;
             F.atMaxSpeed = 0;
             F.atT3 = t;
-            F.atStep++;
+            F.atStep = 108;
         }
         else if (F.atStep == 108) {   /* rennen tot je buiten adem bent */
             in->my = 1.0f; in->run = 1;
@@ -3036,8 +3041,8 @@ void fe_frame(double now) {
         }
         r_draw_scene(R, &F.G);
         ui_begin(R);
-        if (F.state == ST_GAME) draw_hud();
-        else { draw_hud(); draw_pause(); }
+        draw_hud();
+        if (F.state == ST_PAUSE) draw_pause();   /* (niet als er net een winkel/huis-menu opengaat) */
         if (F.fade > 0) {
             ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, clampf(F.fade, 0, 1));
             F.fade -= dt * 2.0f;
