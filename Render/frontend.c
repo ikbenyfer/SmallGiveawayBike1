@@ -1976,6 +1976,8 @@ static void autotest_tick(float dt) {
             F.atStep = 70;
         }
         else if (F.atStep == 70) {
+            if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; g->p.veh = -1; }
+            g->mission = -1;
             g->money += 3000;
             g->wanted = 0;
             rep("Wapenwinkel: naar BLOCK ARMS");
