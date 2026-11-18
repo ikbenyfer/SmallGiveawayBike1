@@ -99,7 +99,7 @@ static struct {
 
 static const char *TIPS[] = {
     "TIP: TAP ENTER NEAR A BIKE OR CAR TO HOP ON",
-    "TIP: YELLOW MARKERS ON THE MINIMAP START MISSIONS",
+    "TIP: START MISSIONS FROM THE MISSIONS MENU",
     "TIP: GREEN CASH STACKS ON THE SIDEWALK ARE FREE MONEY",
     "TIP: HOLD GAS AND STEER WITH THE LEFT STICK",
     "TIP: PEOPLE JUMP ASIDE - BUT PLEASE RIDE CAREFULLY",
@@ -1175,11 +1175,13 @@ static void draw_bigmap(void) {
         int q;
         bm_w2s(w->mmOrg, w->mmOrgZ, &x0, &y0);
         ui_quad(R, &R->rw[0].minimap, x0, y0, w->mmSpan * F.bmScale, w->mmSpan * F.bmScale, 0, 0, 1, 1, 1, 1, 1, 1);
-        for (q = 0; q < NMISSIONS; q++) {
-            const MissionDef *md = &F.G.mdef[q];
-            bm_w2s(md->giver.x, md->giver.z, &sx, &sy);
-            ui_icon(R, F.G.completed[q] ? ICON_DONE : ICON_MISSION, sx, sy, 30, 1);
-            if (F.bmScale > 2.2f) ui_text(R, md->title, sx, sy + 15, 15, 1, 1, 0.85f, 0.95f, 1);
+        if (F.G.mission >= 0) {   /* alleen het doel van de lopende missie */
+            V3 tg[12];
+            int n2 = game_targets(&F.G, tg, 12);
+            for (q = 0; q < n2; q++) {
+                bm_w2s(tg[q].x, tg[q].z, &sx, &sy);
+                ui_icon(R, ICON_MISSION, sx, sy, 30, 1);
+            }
         }
         for (q = 0; q < 4; q++) {
             bm_w2s(w->poi[pois[q]].x, w->poi[pois[q]].z, &sx, &sy);
@@ -1231,11 +1233,11 @@ static void draw_bigmap(void) {
     if (F.mode == 1)
         ui_text(R, "Drag to move, tap to pick a place. Built-in: Heemskerk + Beverwijk. Grey = not loaded.", R->W * 0.5f, R->H - 20.0f, 14, 0.85f, 0.85f, 0.85f, 1, 1);
     else {
-        static const char *leg[6] = {"GUNS", "BANK", "CARS", "CUSTOMS", "MISSION", "DONE"};
+        static const char *leg[5] = {"GUNS", "BANK", "CARS", "CUSTOMS", "MISSION GOAL"};
         int q;
-        ui_rect(R, R->W * 0.5f - 330, R->H - 50.0f, 660, 44, 0, 0, 0, 0.6f);
-        for (q = 0; q < 6; q++) {
-            float lx = R->W * 0.5f - 300 + q * 110.0f;
+        ui_rect(R, R->W * 0.5f - 300, R->H - 50.0f, 600, 44, 0, 0, 0, 0.6f);
+        for (q = 0; q < 5; q++) {
+            float lx = R->W * 0.5f - 270 + q * 112.0f;
             ui_icon(R, q, lx, R->H - 28.0f, 30, 1);
             ui_text(R, leg[q], lx + 18, R->H - 38.0f, 16, 1, 1, 1, 1, 0);
         }
@@ -2003,7 +2005,7 @@ static void autotest_tick(float dt) {
     case 16:
         if (t > 25.0f) {
             rep("uit de auto: modus=%d", game_mode(g));
-            game_teleport(g, g->mdef[0].giver.x, g->mdef[0].giver.z + 0.5f, PI_F);
+            game_start_mission_at(g, 0);
             F.atStep++;
         }
         break;

@@ -225,22 +225,8 @@ static void update_missions(Game *g, float dt) {
     float px, pz;
     int i;
     player_pos(g, &px, &pz);
-    if (g->mission < 0) {
-        if (g->p.cool > 0) return;
-        for (i = 0; i < NMISSIONS; i++) {
-            MissionDef *m = &g->mdef[i];
-            float dx = px - m->giver.x, dz = pz - m->giver.z;
-            if (dx * dx + dz * dz < 2.4f * 2.4f) {
-                if (m->requireWeapon && !game_has_weapon(g)) {
-                    if (g->msgT <= 0) game_message(g, "You need a gun for this. Visit BLOCK ARMS (red marker).", 2.5f);
-                    continue;
-                }
-                game_start_mission(g, i);
-                break;
-            }
-        }
-        return;
-    }
+    (void)i;
+    if (g->mission < 0) return;   /* missies start je alleen via het MISSIONS-menu */
     {
         MissionDef *m = &g->mdef[g->mission];
         g->mclock += dt;
@@ -307,7 +293,7 @@ static void update_missions(Game *g, float dt) {
 
 int game_targets(const Game *g, V3 *out, int max) {
     int n = 0, i;
-    if (g->nl) return 0;
+    if (g->nl || g->mission < 0) return 0;   /* geen missie-cirkels in de stad */
     if (g->mission < 0) {
         for (i = 0; i < NMISSIONS && n < max; i++) {
             out[n] = g->mdef[i].giver;
