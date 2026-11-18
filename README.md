@@ -144,6 +144,12 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph�
   - `tools/build_region_pack.py` maakt het pakket opnieuw (op de pc, met internet).
   - Bronvermelding: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, PDOK), gemeentegrenzen en postcodes (PDOK). Alles valt onder CC BY 4.0.
   - iOS 9 kent de rootcertificaten van 3D BAG niet. Daarom zitten ISRG Root X1/X2 en DigiCert Global Root G2 in de app als **extra** vertrouwensanker; de normale controle blijft aan. Lukt 3D BAG toch niet, dan valt de app terug op PDOK BAG met geschatte hoogtes.
+- **ONLINE (multiplayer, peer-to-peer, max. 4 spelers)** – iPad en Windows kunnen samen spelen, er is geen server nodig.
+  - **HOST A GAME** (hoofdmenu → ONLINE) start de stad als host. Wil je samen in REAL NL spelen, kies dan in het pauzemenu **HOST ONLINE**: iedereen komt dan op dezelfde postcode.
+  - **Zelfde wifi:** het spel van de host verschijnt vanzelf in de lijst; tik erop om mee te doen.
+  - **Via internet:** de host ziet in het pauzemenu een **uitnodigingscode** (XXXXX-XXXXX). De ander typt die code in en tikt op JOIN. De app opent zelf poort 27016 (UDP) via UPnP op de router. Lukt dat niet, zet die poort dan handmatig door naar het apparaat van de host.
+  - Je ziet de anderen met hun naam en gezondheid boven het hoofd, lopend, op de fiets of in hun (getunede) auto. Schieten op elkaar werkt ook (PvP). Verkeer, voetgangers en politie zijn per speler apart.
+  - **LEAVE ONLINE** in het pauzemenu stopt het samenspelen. Windows-test met twee vensters: `--mptest-host` en `--mptest-join` (elk met `--appdata <map>`).
 - **Geld** verdien je met missies en met 18 stapels geld op de stoep, die na 2 minuten terugkomen. Je geld en je voortgang worden bewaard.
 - **Minimap** linksboven. Die draait mee met de camera en toont missiepunten en fietsen.
 - **Besturing:** een linker joystick om te bewegen of te sturen, een rechter joystick voor de camera, en de knoppen JUMP, RIDE/DRIVE/EXIT, GAS en BRAKE.

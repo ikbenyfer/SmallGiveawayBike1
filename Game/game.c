@@ -1092,7 +1092,9 @@ static void spawn_cops(Game *g) {
     for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) if (g->ped[k].active) n++;
     if (g->wanted < 2 || n >= MAX_COPS) return;
     /* versterking te voet als de auto's je niet bereiken (bijv. achter de bank) */
-    if (n < 2 && g->time - g->lastCopSpawn > 6.0f) {
+    /* niet terwijl je ontsnapt (sterren knipperen): anders verschijnt er steeds een agent naast je
+     * en begint de ontsnap-timer telkens opnieuw */
+    if (n < 2 && g->evadeT < 0.5f && g->time - g->lastCopSpawn > 6.0f) {
         int c;
         g->lastCopSpawn = g->time;
         for (c = 0; c < 2; c++) {
