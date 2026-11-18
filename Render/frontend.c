@@ -43,7 +43,7 @@ static struct {
     float fpsAcc, fps, worst, worstShown;
     int fpsFrames;
     float perfT;
-    int lastDC;
+    int lastDC, skipStat;
     long savedMoney; int savedDone;
     /* stof */
     float dust[40][4];
@@ -852,7 +852,7 @@ static void autotest_tick(float dt) {
         else if (F.atStep == 35 && t > 56.0f) { at_shot("13_night"); F.atStep++; }
         else if (F.atStep == 36 && t > 58.5f) {
             int i;
-            rep("---- FPS per onderdeel (echte tijd op dit apparaat) ----");
+            rep("---- FPS per onderdeel (echte tijd; frames met screenshot niet meegeteld) ----");
             for (i = 0; i < F.nseg; i++) {
                 Seg *q = &F.seg[i];
                 if (q->frames > 0)
@@ -891,6 +891,7 @@ static void autotest_tick(float dt) {
     if (t > 22.5f && t < 24.2f) in->brake = 1;
     if (t > 36.0f && t < 58.0f) { in->lx = 0.35f; in->my = 0.0f; }
     s = seg_cur();
+    if (F.skipStat > 0) { F.skipStat--; s = NULL; }  /* frames rond een screenshot niet meetellen */
     if (s) {
         s->frames++;
         s->time += dt;
@@ -994,6 +995,7 @@ void fe_frame(double now) {
     F.lastDC = R->drawCalls;
     if (pendingShot[0]) {
         plat_screenshot(pendingShot, R->W, R->H);
+        F.skipStat = 2;
         pendingShot[0] = 0;
     }
 }
