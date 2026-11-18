@@ -276,6 +276,23 @@ static void setup_missions(Game *g) {
     cp_set(&m->cp[3], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_ANY, "Lose the police, then hide the gold at the garage");
     m->cp[3].clean = 1;
     m->ncp = 4;
+    m = &g->mdef[20];
+    m->title = "THE ULTIMATE HEIST";
+    m->brief = "The job of a lifetime: hit the register, drill the bank vault, outrun the whole city and lose every cop.";
+    m->giver = w->poi[POI_BANK];
+    m->reward = 30000; m->repeatReward = 25000;
+    m->requireWeapon = 1; m->time = 420;
+    cp_set(&m->cp[0], w->poi[POI_BIKESHOP].x, w->poi[POI_BIKESHOP].z, 2.4f, NEED_FOOT, "Warm-up: empty the bike shop register");
+    m->cp[0].hold = 8.0f; m->cp[0].alarm = 2;
+    cp_set(&m->cp[1], w->poi[POI_VAULT].x, w->poi[POI_VAULT].z, 2.0f, NEED_FOOT, "Drill the main vault - this takes long, stay close!");
+    m->cp[1].hold = 45.0f; m->cp[1].alarm = 3;
+    cp_set(&m->cp[2], road_c(7), road_c(7), 5.0f, NEED_CAR, "Get a fast car - race to the south-east corner");
+    cp_set(&m->cp[3], road_c(0), road_c(7), 5.0f, NEED_CAR, "South-west corner");
+    cp_set(&m->cp[4], road_c(0), road_c(0), 5.0f, NEED_CAR, "North-west corner");
+    cp_set(&m->cp[5], road_c(7), road_c(0), 5.0f, NEED_CAR, "North-east corner");
+    cp_set(&m->cp[6], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_ANY, "Lose ALL the police, then hide the loot at the garage");
+    m->cp[6].clean = 1;
+    m->ncp = 7;
 #undef SW
 #undef RC
 
@@ -394,6 +411,7 @@ static void update_missions(Game *g, float dt) {
                 if (g->holdT >= c->hold) {
                     g->holdT = 0;
                     g->mstep++;
+                    g->alarmDone = 0;   /* volgende kluis/kassa kan weer alarm geven */
                     game_message(g, "Vault open - you got the cash!", 2.5f);
                     game_sfx(g, SFX_CASH, px, pz);
                     if (g->mstep >= m->ncp) mission_end(g, 1);

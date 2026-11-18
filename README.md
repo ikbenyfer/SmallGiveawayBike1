@@ -176,6 +176,13 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph�
     - Rijd naar het groene EXIT-bord om weer naar buiten te gaan.
   - Als de politie je zoekt, kun je niet naar binnen.
 - **GOLD RESERVE HEIST** (missie 20): de zwaarste klus. Je moet 30 seconden in de kluis blijven, met een alarm van 3 sterren. Daarna rijd je het goud langs twee hoeken van de stad en schud je de politie af bij de garage, binnen 5 minuten. De eerste keer krijg je $15.000, daarna $10.000 per keer.
+- **THE ULTIMATE HEIST** (missie 21): de allermoeilijkste klus, binnen 7 minuten.
+  1. Eerst beroof je de kassa van de fietsenwinkel (2 sterren).
+  2. Dan moet je 45 seconden de kluis van de bank openboren (3 sterren).
+  3. Daarna race je met een auto langs alle vier de hoeken van de stad.
+  4. Tot slot schud je alle politie af en verstop je de buit bij de garage.
+
+  De eerste keer krijg je $30.000, daarna $25.000 per keer.
 - **ONLINE (multiplayer, peer-to-peer, max. 4 spelers)** – iPad en Windows kunnen samen spelen, er is geen server nodig.
   - **HOST A GAME** (hoofdmenu → ONLINE) start de stad als host. Wil je samen in REAL NL spelen, kies dan in het pauzemenu **HOST ONLINE**: iedereen komt dan op dezelfde postcode.
   - **Zelfde wifi:** het spel van de host verschijnt vanzelf in de lijst; tik erop om mee te doen.
