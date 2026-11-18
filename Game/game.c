@@ -168,6 +168,96 @@ static void setup_missions(Game *g) {
     m->cp[1].clean = 1;
     m->ncp = 2;
 
+    /* ---- extra missies (11-18) ---- */
+#define SW(i, j) (block_x0(i) + BLOCKW * 0.5f), (block_x0(j) + 1.3f)      /* midden noordstoep van blok i,j */
+#define RC(i, j) road_c(i), road_c(j)                                       /* kruispunt */
+    m = &g->mdef[11];
+    m->title = "NIGHT DELIVERY";
+    m->brief = "Bring late-night parcels to five shops across town by bike.";
+    m->giver = v3(road_c(1), 0, road_c(2));
+    m->reward = 450; m->time = 210; m->startVeh = 1;
+    {
+        static const int s[5][2] = {{0, 2}, {6, 2}, {3, 5}, {6, 5}, {2, 6}};
+        for (i = 0; i < 5; i++) cp_set(&m->cp[i], block_x0(s[i][0]) + BLOCKW * 0.5f, block_x0(s[i][1]) + 1.3f, 2.8f, NEED_BIKE, "Drop the parcel at the shop");
+        m->ncp = 5;
+    }
+
+    m = &g->mdef[12];
+    m->title = "CASH COLLECTOR";
+    m->brief = "Six cash bags were dropped around town. Grab them all and bring them to the plaza.";
+    m->giver = v3(road_c(3), 0, road_c(3));
+    m->reward = 600; m->time = 180; m->gifts = 2; m->anyOrder = 6;
+    {
+        static const int s[6][2] = {{1, 1}, {5, 0}, {6, 4}, {4, 6}, {0, 5}, {2, 3}};
+        for (i = 0; i < 6; i++) cp_set(&m->cp[i], block_x0(s[i][0]) + BLOCKW * 0.5f, block_x0(s[i][1]) + 1.3f, 2.2f, NEED_ANY, "Collect the cash bags");
+        cp_set(&m->cp[6], w->poi[POI_PLAZA].x, w->poi[POI_PLAZA].z, 3.0f, NEED_ANY, "Bring the cash to the plaza");
+        m->ncp = 7;
+    }
+
+    m = &g->mdef[13];
+    m->title = "DOWNTOWN DASH";
+    m->brief = "On foot through downtown: reach every checkpoint before the clock hits zero.";
+    m->giver = v3(road_c(3), 0, road_c(2));
+    m->reward = 350; m->time = 120;
+    {
+        static const int s[8][2] = {{3, 2}, {4, 2}, {5, 2}, {5, 3}, {5, 4}, {4, 5}, {3, 5}, {2, 4}};
+        for (i = 0; i < 8; i++) cp_set(&m->cp[i], road_c(s[i][0]), road_c(s[i][1]), 3.0f, NEED_FOOT, "Run to the next checkpoint");
+        m->ncp = 8;
+    }
+
+    m = &g->mdef[14];
+    m->title = "SPEED TRAP";
+    m->brief = "A fast car race on the long roads. Floor it!";
+    m->giver = v3(road_c(1), 0, road_c(1));
+    m->reward = 700; m->time = 75; m->startVeh = 2;
+    {
+        static const int s[6][2] = {{6, 1}, {6, 6}, {1, 6}, {1, 3}, {4, 3}, {4, 1}};
+        for (i = 0; i < 6; i++) cp_set(&m->cp[i], road_c(s[i][0]), road_c(s[i][1]), 5.0f, NEED_CAR, "Race: next checkpoint");
+        m->ncp = 6;
+    }
+
+    m = &g->mdef[15];
+    m->title = "CORNER STORE STICK-UP";
+    m->brief = "Rob the bike shop register, then lose the police and hide at the garage.";
+    m->giver = v3(w->poi[POI_BIKESHOP].x, 0, w->poi[POI_BIKESHOP].z + 3.0f);
+    m->reward = 1500; m->requireWeapon = 1;
+    cp_set(&m->cp[0], w->poi[POI_BIKESHOP].x, w->poi[POI_BIKESHOP].z, 2.6f, NEED_FOOT, "Empty the register - stay close!");
+    m->cp[0].hold = 8.0f; m->cp[0].alarm = 2;
+    cp_set(&m->cp[1], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_ANY, "Lose the police, then hide at the garage");
+    m->cp[1].clean = 1;
+    m->ncp = 2;
+
+    m = &g->mdef[16];
+    m->title = "GETAWAY DRIVER";
+    m->brief = "Pick up the crew at the bank, outrun the cops and drop them at the hideout.";
+    m->giver = v3(road_c(4), 0, road_c(2) - 8.0f);
+    m->reward = 2500; m->startVeh = 2;
+    cp_set(&m->cp[0], road_c(4), block_x0(3) + 22.0f, 4.0f, NEED_CAR, "Pick up the crew at the bank");
+    m->cp[0].hold = 3.0f; m->cp[0].alarm = 2;
+    cp_set(&m->cp[1], road_c(7), road_c(6), 5.0f, NEED_CAR, "Drive to the east edge of town");
+    cp_set(&m->cp[2], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_CAR, "Lose the police, then go to the garage");
+    m->cp[2].clean = 1;
+    m->ncp = 3;
+
+    m = &g->mdef[17];
+    m->title = "MOST WANTED";
+    m->brief = "Three stars and the whole police force on your tail. Shake them off!";
+    m->giver = v3(road_c(6), 0, road_c(3));
+    m->reward = 1500; m->escape = 3; m->startVeh = 2; m->ncp = 0;
+
+    m = &g->mdef[18];
+    m->title = "TOUR DE STAD";
+    m->brief = "The big bike race: a full lap of the city in four minutes.";
+    m->giver = v3(road_c(0), 0, road_c(0) + 8.0f);
+    m->reward = 800; m->time = 240; m->startVeh = 1;
+    {
+        static const int s[10][2] = {{2, 0}, {4, 0}, {7, 0}, {7, 3}, {7, 7}, {4, 7}, {0, 7}, {0, 4}, {2, 3}, {0, 1}};
+        for (i = 0; i < 10; i++) cp_set(&m->cp[i], road_c(s[i][0]), road_c(s[i][1]), 4.0f, NEED_BIKE, "Race: next checkpoint");
+        m->ncp = 10;
+    }
+#undef SW
+#undef RC
+
     g->mdef[2].startVeh = 1;
     for (i = 0; i < NMISSIONS; i++) {
         int need = g->mdef[i].ncp > 0 ? g->mdef[i].cp[g->mdef[i].ncp - 1].need : NEED_CAR;
@@ -186,7 +276,7 @@ void game_start_mission(Game *g, int m) {
     g->alarmDone = 0;
     g->mtime = g->mdef[m].time;
     banner(g, g->mdef[m].title, g->mdef[m].brief, 1, 4.5f);
-    if (g->mdef[m].escape) { g->crimeCool = 0; game_add_wanted(g, 2); }
+    if (g->mdef[m].escape) { g->crimeCool = 0; g->wanted = 0; game_add_wanted(g, g->mdef[m].escape > 1 ? g->mdef[m].escape : 2); }
 }
 
 static void mission_end(Game *g, int ok) {
@@ -249,7 +339,7 @@ static void update_missions(Game *g, float dt) {
                     g->mstep++;
                     {
                         char b[64];
-                        snprintf(b, sizeof(b), "Gift %d of %d", g->mstep, m->anyOrder);
+                        snprintf(b, sizeof(b), "Got %d of %d", g->mstep, m->anyOrder);
                         game_message(g, b, 2.0f);
                     }
                 }

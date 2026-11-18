@@ -562,7 +562,8 @@ void r_draw_scene(Renderer *r, Game *g) {
         if (g->mission >= 0 && g->mdef[g->mission].gifts && g->mstep < g->mdef[g->mission].anyOrder) {
             for (k = 0; k < n; k++) {
                 M4 m = m4_trs_y(tg[k].x, CURB + 0.2f + sinf(t * 2 + k) * 0.1f, tg[k].z, t + k);
-                draw_mesh(r, &r->gift, &m);
+                if (g->mdef[g->mission].gifts == 2) { m = m4_mul(m, m4_scale(1.6f, 1.6f, 1.6f)); draw_mesh(r, &r->cash, &m); }
+                else draw_mesh(r, &r->gift, &m);
             }
         }
         glUniform1f(r->wUnlit, 1.0f);

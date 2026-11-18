@@ -32,8 +32,19 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
 - **De stad** (404 x 404 m, 7 x 7 blokken) heeft wegen met kruispunten, zebrapaden en middenstrepen. Er zijn flats en kantoren met verlichte ramen, winkelstraten met luifels (waaronder een pizzeria), steegjes met containers en graffiti, een buitenwijk met huizen, tuinen en hekken, parken met vijver en podium, parkeerplaatsen, een garage met tankstation en een plein met het gouden Giveaway Bike-standbeeld. Rondom de stad staan een bomenrand en een hek.
 - **Lopen en springen.** Je kunt **fietsen** en **autorijden**, en in- en uitstappen met de knop RIDE/DRIVE/EXIT. Je kunt ook een auto uit het verkeer pakken: de bestuurder loopt dan weg.
 - **Voetgangers** lopen over de stoep, springen opzij voor voertuigen en vallen om als je ze raakt (geen geweld). Het **verkeer** rijdt op rijstroken, slaat af op kruispunten en remt voor obstakels.
-- **11 missies**: je start ze alleen via het **missiekeuzescherm** (MISSIONS in het hoofdmenu of het pauzemenu); in de stad staan geen missie-cirkels meer. Daar sta je meteen op de goede plek en zit je zo nodig al op een fiets of in een auto:
+- **19 missies**: je start ze alleen via het **missiekeuzescherm** (MISSIONS in het hoofdmenu of het pauzemenu); in de stad staan geen missie-cirkels meer. Daar sta je meteen op de goede plek en zit je zo nodig al op een fiets of in een auto:
   Welcome Ride ($100), Pizza Panic ($250), Street Sprint ($300), Joyride Return ($400), The Big Giveaway ($750), Park Run (te voet, $200), Taxi Rush ($350), Alley Shortcut ($350), Cop Dodge ($400) en Grand Tour ($500).
+  Nieuw (missie 12-19):
+  - NIGHT DELIVERY: pakketjes bezorgen op de fiets, $450.
+  - CASH COLLECTOR: 6 geldzakken zoeken, $600.
+  - DOWNTOWN DASH: te voet, $350.
+  - SPEED TRAP: autorace, $700.
+  - CORNER STORE STICK-UP: overval op de fietsenwinkel, wapen nodig, $1500.
+  - GETAWAY DRIVER: de bankploeg wegrijden, $2500.
+  - MOST WANTED: 3 sterren afschudden, $1500.
+  - TOUR DE STAD: grote fietsrace, $800.
+
+  Het missiescherm heeft nu 2 pagina's (< PREV / NEXT >).
   Speel je een missie opnieuw, dan krijg je de halve beloning.
 - **Politie en sterren**: rijd je iemand aan of steel je een auto uit het verkeer, dan krijg je een ster (maximaal 3). Per ster komt er een politieauto met zwaailicht achter je aan, die ook op de minimap staat. Blijf 10 seconden ver weg van de politie, dan verlies je een ster. Sta je ongewapend (of in een auto) stil naast de politie, dan word je **BUSTED**. Met een wapen in de hand arresteren ze je niet, maar schieten ze: je betaalt een boete (10% van je geld, minstens $50) en begint opnieuw op het plein.
 - **Health bar** onder je geld. Je verliest health door harde botsingen, door aangereden te worden en als de politie je ramt. Na 5 seconden zonder schade herstelt je health vanzelf. Is je health op, dan ben je **KNOCKED OUT** en begin je opnieuw op het plein.

@@ -11,7 +11,7 @@
 #define MAX_COPS 4      /* laatste 4 voetganger-plekken: agenten */
 #define MAX_TRACERS 12
 #define MAX_TRAFFIC 10
-#define NMISSIONS 11
+#define NMISSIONS 19
 #define MAX_CP 10
 
 enum { NEED_ANY = 0, NEED_BIKE = 1, NEED_CAR = 2, NEED_FOOT = 3 };

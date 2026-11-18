@@ -65,7 +65,7 @@ static struct {
     float fpsAcc, fps, worst, worstShown;
     int fpsFrames;
     float perfT;
-    int lastDC, skipStat, missionsFrom;
+    int lastDC, skipStat, missionsFrom, missionPage;
     /* echte NL-kaart */
     int mode;                 /* 0 = stad, 1 = NL */
     Game Gcity;
@@ -752,9 +752,11 @@ static void draw_missions(void) {
         ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.5f);
     }
     ui_text(R, "MISSIONS", R->W * 0.5f, 18, 52, 1, 1, 1, 1, 1);
-    for (i = 0; i < NMISSIONS; i++) {
+    if (F.missionPage * 12 >= NMISSIONS) F.missionPage = 0;
+    for (i = F.missionPage * 12; i < NMISSIONS && i < F.missionPage * 12 + 12; i++) {
         const MissionDef *m = &F.G.mdef[i];
-        float x = (i & 1) ? 522.0f : 62.0f, y = 96.0f + (i / 2) * 98.0f;
+        int j = i - F.missionPage * 12;
+        float x = (j & 1) ? 522.0f : 62.0f, y = 96.0f + (j / 2) * 98.0f;
         int pr = F.pressed == i + 1, done = F.G.completed[i];
         ui_rect(R, x, y, 440, 90, pr ? 0.55f : 0.06f, pr ? 0.08f : 0.05f, pr ? 0.08f : 0.06f, 0.78f);
         ui_rect(R, x, y, 6, 90, done ? 0.35f : 0.95f, done ? 0.9f : 0.75f, done ? 0.4f : 0.15f, 1);
@@ -774,6 +776,16 @@ static void draw_missions(void) {
         }
     }
     big_button("BACK", R->W * 0.5f, R->H - 60.0f, 44, F.pressed == 100, 1);
+    {
+        int pages = (NMISSIONS + 11) / 12;
+        char pg[16];
+        snprintf(pg, sizeof(pg), "PAGE %d/%d", F.missionPage + 1, pages);
+        ui_text(R, pg, R->W * 0.5f, 74, 18, 0.85f, 0.85f, 0.85f, 1, 1);
+        ui_rect(R, 62, R->H - 92.0f, 150, 62, F.pressed == 101 ? 0.6f : 0.12f, 0.12f, 0.15f, 0.9f);
+        ui_text(R, "< PREV", 137, R->H - 78.0f, 28, 1, 1, 1, F.missionPage > 0 ? 1.0f : 0.3f, 1);
+        ui_rect(R, R->W - 212.0f, R->H - 92.0f, 150, 62, F.pressed == 102 ? 0.6f : 0.12f, 0.12f, 0.15f, 0.9f);
+        ui_text(R, "NEXT >", R->W - 137.0f, R->H - 78.0f, 28, 1, 1, 1, F.missionPage + 1 < pages ? 1.0f : 0.3f, 1);
+    }
 }
 
 static void ui_star(float cx, float cy, float rad, float cr, float cg, float cb, float ca) {
@@ -1796,19 +1808,24 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_MISSIONS) {
-        for (i = 0; i < NMISSIONS; i++) {
-            float cxl = (i & 1) ? 522.0f : 62.0f, cyl = 96.0f + (i / 2) * 98.0f;
+        for (i = F.missionPage * 12; i < NMISSIONS && i < F.missionPage * 12 + 12; i++) {
+            int j = i - F.missionPage * 12;
+            float cxl = (j & 1) ? 522.0f : 62.0f, cyl = 96.0f + (j / 2) * 98.0f;
             if (x > cxl && x < cxl + 440 && y > cyl && y < cyl + 90) hit = i + 1;
         }
         if (hit_text(x, y, "BACK", R->W * 0.5f, R->H - 60.0f + 22, 44)) hit = 100;
+        if (x > 62 && x < 212 && y > R->H - 92.0f && y < R->H - 30.0f) hit = 101;
+        if (x > R->W - 212.0f && x < R->W - 62.0f && y > R->H - 92.0f && y < R->H - 30.0f) hit = 102;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
+        if (hit == 101) { if (F.missionPage > 0) F.missionPage--; return; }
+        if (hit == 102) { if ((F.missionPage + 1) * 12 < NMISSIONS) F.missionPage++; return; }
         if (hit == 100) set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU);
         else if (hit >= 1 && hit <= NMISSIONS && F.G.mdef[hit - 1].requireWeapon && !game_has_weapon(&F.G)) {
             /* geen wapen: start in de stad bij BLOCK ARMS */
             if (F.missionsFrom == ST_PAUSE) set_state(ST_GAME); else start_game();
             game_teleport(&F.G, F.G.w->poi[POI_GUNSHOP].x + 3.0f, F.G.w->poi[POI_GUNSHOP].z - 4.0f, 0);
-            game_message(&F.G, "You need a gun for the heist. Walk into BLOCK ARMS (red marker).", 4.0f);
+            game_message(&F.G, "You need a gun for this mission. Walk into BLOCK ARMS (red marker).", 4.0f);
         }
         else if (hit >= 1 && hit <= NMISSIONS) {
             if (F.missionsFrom == ST_PAUSE) set_state(ST_GAME);
@@ -2483,7 +2500,8 @@ void fe_frame(double now) {
         if (F.missionsFrom != ST_PAUSE) ui_begin(R);
         draw_missions();
         ui_flush(R);
-        if (F.at && F.st > 1.0f) { at_shot("15_missions"); set_state(ST_GAME); }
+        if (F.at && F.st > 1.0f && F.missionPage == 0) { at_shot("15_missions"); F.missionPage = 1; F.st = 0; }
+        else if (F.at && F.st > 1.0f && F.missionPage == 1) { at_shot("15b_missions_page2"); F.missionPage = 0; set_state(ST_GAME); }
         break;
     case ST_GAME:
     case ST_PAUSE:
