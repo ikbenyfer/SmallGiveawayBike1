@@ -255,6 +255,7 @@ void r_build_models(Renderer *r) {
     BUILD(r->gun, model_gun(&m));
     BUILD(r->spoiler, model_spoiler(&m));
     for (i = 0; i < CAR_MODELS; i++) { BUILD(r->carBody[i], model_car_body(&m, i)); BUILD(r->carDetail[i], model_car_detail(&m, i)); }
+    for (i = 0; i < MOTO_MODELS; i++) BUILD(r->moto[i], model_moto(&m, i));
     BUILD(r->tracer, model_tracer(&m));
 #undef BUILD
     mb_free(&m);
@@ -489,8 +490,13 @@ void r_draw_scene(Renderer *r, Game *g) {
         m = m4_trs_y(v->x, v->y, v->z, v->h);
         if (v->type == VEH_BIKE) {
             m = m4_mul(m, m4_rot_z(v->lean));
-            draw_mesh(r, &r->bike[v->variant % BIKE_VARIANTS], &m);
-            if (i == g->p.veh) draw_char(r, 0, m, g->p.anim * 2.0f, 1, 0, 0);
+            if (v->custom && IS_MOTO(v->model)) {
+                draw_mesh(r, &r->moto[(v->model - CAR_MODELS) % MOTO_MODELS], &m);
+                if (i == g->p.veh) draw_char(r, 0, m, 0, 1, 0, 0);   /* motor: niet trappen */
+            } else {
+                draw_mesh(r, &r->bike[v->variant % BIKE_VARIANTS], &m);
+                if (i == g->p.veh) draw_char(r, 0, m, g->p.anim * 2.0f, 1, 0, 0);
+            }
         } else {
             if (v->custom) {
                 Col pc = paint_color(v->paint);
@@ -559,8 +565,13 @@ void r_draw_scene(Renderer *r, Game *g) {
                 draw_mesh(r, &r->carDetail[rp->vmodel % CAR_MODELS], &m);
             } else draw_mesh(r, &r->car[rp->vvariant % CAR_VARIANTS], &m);
         } else if (rp->mode == 1) {
-            draw_mesh(r, &r->bike[rp->vvariant % BIKE_VARIANTS], &m);
-            draw_char(r, shirt[rp->id & 3], m, rp->animLocal * 2.0f, 1, 0, 0);
+            if (rp->vcustom && IS_MOTO(rp->vmodel)) {
+                draw_mesh(r, &r->moto[(rp->vmodel - CAR_MODELS) % MOTO_MODELS], &m);
+                draw_char(r, shirt[rp->id & 3], m, 0, 1, 0, 0);
+            } else {
+                draw_mesh(r, &r->bike[rp->vvariant % BIKE_VARIANTS], &m);
+                draw_char(r, shirt[rp->id & 3], m, rp->animLocal * 2.0f, 1, 0, 0);
+            }
         } else {
             draw_char(r, shirt[rp->id & 3], m, fabsf(rp->speed) > 0.2f ? rp->animLocal : 0, 0, rp->health <= 0 ? 1.0f : 0, rp->weapon != WP_NONE);
         }

@@ -123,6 +123,38 @@ void model_bike(MeshB *m, int v) {
     mb_box(m, v3(-0.06f, 0.80f, 0.44f), v3(0.06f, 0.90f, 0.52f), col_e(255, 240, 200, 255), 0); /* lampje */
 }
 
+/* motor: wielbasis 1,4 m, zadel op ~0,9 m (zelfde rijhouding als de fiets) */
+void model_moto(MeshB *m, int k) {
+    static const int body[MOTO_MODELS][3] = {{30, 90, 200}, {210, 25, 30}};
+    Col bc = col(body[k % MOTO_MODELS][0], body[k % MOTO_MODELS][1], body[k % MOTO_MODELS][2]);
+    Col dark = col(22, 22, 25), metal = col(175, 175, 182), engine = col(70, 70, 76);
+    float r = 0.33f;
+    V3 rear = v3(0, r, -0.70f), front = v3(0, r, 0.72f), head = v3(0, 0.98f, 0.52f);
+    wheel(m, rear, r, dark, metal);
+    wheel(m, front, r, dark, metal);
+    /* wielen dikker maken: tweede band iets ernaast */
+    wheel(m, v3(0.05f, r, -0.70f), r, dark, metal);
+    wheel(m, v3(-0.05f, r, -0.70f), r, dark, metal);
+    tube(m, rear, v3(0, 0.40f, -0.18f), 0.045f, metal);             /* achterbrug */
+    tube(m, head, front, 0.04f, metal);                               /* voorvork */
+    tube(m, v3(0.07f, 0.98f, 0.52f), v3(0.07f, r, 0.72f), 0.03f, metal);
+    tube(m, v3(-0.07f, 0.98f, 0.52f), v3(-0.07f, r, 0.72f), 0.03f, metal);
+    tube(m, v3(-0.34f, 1.06f, 0.46f), v3(0.34f, 1.06f, 0.46f), 0.03f, dark);   /* stuur */
+    tube(m, head, v3(0, 1.06f, 0.46f), 0.035f, dark);
+    mb_box(m, v3(-0.17f, 0.22f, -0.28f), v3(0.17f, 0.62f, 0.22f), engine, 0);   /* motorblok */
+    mb_box(m, v3(-0.21f, 0.62f, -0.08f), v3(0.21f, 0.92f, 0.42f), bc, 0);       /* tank */
+    mb_box(m, v3(-0.17f, 0.80f, -0.62f), v3(0.17f, 0.90f, -0.06f), dark, 0);    /* zadel */
+    mb_box(m, v3(-0.14f, 0.74f, -0.92f), v3(0.14f, 0.96f, -0.56f), bc, 0);      /* staart */
+    mb_box(m, v3(-0.10f, 0.80f, -0.94f), v3(0.10f, 0.86f, -0.92f), col_e(255, 40, 30, 255), 0); /* achterlicht */
+    tube(m, v3(0.20f, 0.30f, 0.05f), v3(0.22f, 0.48f, -0.86f), 0.05f, metal);  /* uitlaat */
+    if (k == 1) {   /* superbike: kuip rond de voorkant */
+        mb_box(m, v3(-0.25f, 0.42f, 0.30f), v3(0.25f, 1.02f, 0.66f), bc, 0);
+        mb_box(m, v3(-0.18f, 1.02f, 0.40f), v3(0.18f, 1.16f, 0.58f), col(40, 55, 75), 0);   /* ruitje */
+        mb_box(m, v3(-0.26f, 0.30f, -0.30f), v3(0.26f, 0.62f, 0.30f), bc, BOX_NOTOP);         /* zijkuip */
+    }
+    mb_box(m, v3(-0.08f, 0.88f, 0.64f), v3(0.08f, 0.98f, 0.70f), col_e(255, 245, 210, 255), 0);   /* koplamp */
+}
+
 Col car_color(int v) {
     static const int cc[CAR_VARIANTS][3] = {{200, 30, 34}, {40, 80, 170}, {240, 190, 30}, {225, 225, 225}, {50, 130, 80}, {40, 40, 46}, {238, 238, 242}};
     v = ((v % CAR_VARIANTS) + CAR_VARIANTS) % CAR_VARIANTS;
@@ -225,7 +257,7 @@ static const int NEONS[NNEONS][3] = {{0, 0, 0}, {255, 40, 40}, {40, 120, 255}, {
 
 Col paint_color(int i) { i = ((i % NPAINTS) + NPAINTS) % NPAINTS; return col(PAINTS[i][0], PAINTS[i][1], PAINTS[i][2]); }
 Col neon_color(int i) { i = ((i % NNEONS) + NNEONS) % NNEONS; return col(NEONS[i][0], NEONS[i][1], NEONS[i][2]); }
-int model_default_paint(int model) { static const int d[CAR_MODELS] = {1, 6, 0, 2}; return d[model % CAR_MODELS]; }
+int model_default_paint(int model) { static const int d[DEALER_MODELS] = {1, 6, 0, 2, 3, 1}; return d[((model % DEALER_MODELS) + DEALER_MODELS) % DEALER_MODELS]; }
 
 static void wheels4(MeshB *m, float wx, float wzf, float wzr, float r, float rr) {
     Col dark = col(22, 22, 25), rim = col(185, 185, 192);

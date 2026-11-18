@@ -33,6 +33,10 @@ void model_shadow(MeshB *m);       /* schijf r=1 */
 void model_marker(MeshB *m);
 void model_siren(MeshB *m);
 #define CAR_MODELS 4      /* 0 CITY HATCH, 1 RHINO V8, 2 VORTEX GT, 3 BOLT X */
+#define MOTO_MODELS 2     /* 4 STREET 600, 5 DRAGON 1000R (motoren bij de dealer) */
+#define DEALER_MODELS (CAR_MODELS + MOTO_MODELS)
+#define IS_MOTO(model) ((model) >= CAR_MODELS)
+void model_moto(MeshB *m, int k);   /* k = 0..MOTO_MODELS-1 */
 #define NPAINTS 10
 #define NNEONS 6
 void model_car_body(MeshB *m, int model);     /* wit: wordt met de lakkleur getint */

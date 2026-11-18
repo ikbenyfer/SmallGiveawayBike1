@@ -322,8 +322,10 @@ static void mission_end(Game *g, int ok) {
 
 static int need_ok(const Game *g, int need) {
     int mode = game_mode(g);
-    if (need == NEED_BIKE) return mode == MODE_BIKE;
-    if (need == NEED_CAR) return mode == MODE_CAR;
+    /* een gekochte motor telt als motorvoertuig (auto-opdrachten), niet als fiets */
+    int moto = g->p.veh >= 0 && g->veh[g->p.veh].custom && g->veh[g->p.veh].type == VEH_BIKE;
+    if (need == NEED_BIKE) return mode == MODE_BIKE && !moto;
+    if (need == NEED_CAR) return mode == MODE_CAR || moto;
     if (need == NEED_FOOT) return mode == MODE_FOOT;
     return 1;
 }
@@ -562,8 +564,8 @@ static void drive_vehicle(Game *g, Vehicle *v, float thr, float brk, float steer
     int bike = v->type == VEH_BIKE;
     float maxF = bike ? 11.5f : 19.0f, acc = bike ? 4.8f : 6.5f, brake = bike ? 10.0f : 13.0f, maxR = bike ? -2.0f : -6.0f;
     float steerK = bike ? 1.35f : 0.95f;
-    if (!bike && v->custom) {
-        const CarDef *cd = &CARS[v->model % CAR_MODELS];
+    if (v->custom) {   /* gekochte auto of motor */
+        const CarDef *cd = &CARS[v->model % DEALER_MODELS];
         maxF = cd->maxF * (1.0f + 0.08f * v->eng);
         acc = cd->acc * (1.0f + 0.15f * v->eng);
         brake = 13.0f + v->hand * 2.0f;
@@ -1354,17 +1356,19 @@ static void update_weapons(Game *g, const Input *in, float dt) {
 
 /* ------------------------------------------------------------------ autodealer en BLOCK CUSTOMS */
 
-const CarDef CARS[CAR_MODELS] = {
+const CarDef CARS[DEALER_MODELS] = {
     {"CITY HATCH", 1500, 19.0f, 6.5f, 0.95f},
     {"RHINO V8", 6000, 25.0f, 9.5f, 0.90f},
     {"VORTEX GT", 9000, 28.0f, 10.5f, 1.05f},
     {"BOLT X", 20000, 34.0f, 12.5f, 1.10f},
+    {"STREET 600", 4500, 27.0f, 11.0f, 1.30f},     /* motor */
+    {"DRAGON 1000R", 14000, 36.0f, 14.0f, 1.35f},  /* superbike */
 };
 const int ENGINE_PRICE[3] = {1000, 2500, 5000};
 const int HANDLING_PRICE[3] = {800, 1600, 3200};
 
 float car_top_speed(const Vehicle *v) {
-    return CARS[v->model % CAR_MODELS].maxF * (1.0f + 0.08f * v->eng);
+    return CARS[v->model % DEALER_MODELS].maxF * (1.0f + 0.08f * v->eng);
 }
 
 static void place_owned(Game *g, int slot) {
@@ -1372,7 +1376,7 @@ static void place_owned(Game *g, int slot) {
     GarageCar *c = &g->garage[slot];
     memset(v, 0, sizeof(*v));
     if (!c->exists) return;
-    v->active = 1; v->type = VEH_CAR; v->variant = 1; v->custom = 1;
+    v->active = 1; v->type = IS_MOTO(c->model) ? VEH_BIKE : VEH_CAR; v->variant = 1; v->custom = 1;
     v->model = c->model; v->paint = c->paint; v->eng = c->eng; v->hand = c->hand; v->neon = c->neon; v->spoiler = c->spoiler;
     v->garageSlot = slot;
     v->x = g->w->dealerSpot[slot].x; v->z = g->w->dealerSpot[slot].z; v->h = g->w->dealerSpotH;
@@ -1388,7 +1392,7 @@ void game_spawn_owned(Game *g) {
 /* 1 = gekocht (speler zit erin), 0 = te weinig geld, -1 = garage vol */
 int game_buy_car(Game *g, int model) {
     int slot;
-    if (model < 0 || model >= CAR_MODELS) return 0;
+    if (model < 0 || model >= DEALER_MODELS) return 0;
     for (slot = 0; slot < MAX_OWNED && g->garage[slot].exists; slot++) {}
     if (slot >= MAX_OWNED) return -1;
     if (g->money < CARS[model].price) return 0;

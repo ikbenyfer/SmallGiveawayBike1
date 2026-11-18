@@ -29,7 +29,7 @@ typedef struct {
     GMesh body[CHAR_VARIANTS], leg[CHAR_VARIANTS], arm[CHAR_VARIANTS];
     GMesh bike[BIKE_VARIANTS], car[CAR_VARIANTS];
     GMesh cash, gift, cp, arrow, shadow, marker, siren, gun, tracer, spoiler;
-    GMesh carBody[CAR_MODELS], carDetail[CAR_MODELS];
+    GMesh carBody[CAR_MODELS], carDetail[CAR_MODELS], moto[MOTO_MODELS];
     struct RWorld {
         GMesh ground;
         GMesh chunk[RW_SLOTS];

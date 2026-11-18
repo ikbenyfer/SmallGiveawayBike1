@@ -155,7 +155,7 @@ int game_has_weapon(const Game *g);
 int game_buy(Game *g, int item);   /* 0 pistool, 1 SMG, 2 shotgun, 3 kogels, 4 vest */
 typedef struct GarageCar GarageCar;
 typedef struct { const char *name; int price; float maxF, acc, steer; } CarDef;
-extern const CarDef CARS[];
+extern const CarDef CARS[];   /* DEALER_MODELS: eerst auto's, dan motoren (IS_MOTO) */
 extern const int ENGINE_PRICE[3], HANDLING_PRICE[3];
 float car_top_speed(const Vehicle *v);
 void game_spawn_owned(Game *g);

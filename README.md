@@ -120,6 +120,10 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
     | RHINO V8 (muscle car) | $6.000 | 90 km/h |
     | VORTEX GT (sportwagen) | $9.000 | 100 km/h |
     | BOLT X (supercar) | $20.000 | 122 km/h |
+    | STREET 600 (motor) | $4.500 | 97 km/h |
+    | DRAGON 1000R (superbike) | $14.000 | 130 km/h |
+
+    Motoren tellen bij missies als motorvoertuig (net als een auto) en niet als fiets. Bij BLOCK CUSTOMS kun je ze niet aanpassen.
 
     Gekochte auto's zijn van jou. Ze worden bewaard en staan op het terrein van de dealer. Er passen maximaal 4 in je garage.
   - **BLOCK CUSTOMS** heeft een blauwe marker en is de linker deur van de garage bij het tankstation. Rijd er langzaam in met een auto en je kunt aanpassen:
