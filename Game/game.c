@@ -1,4 +1,5 @@
 #include "game.h"
+#include "models.h"
 #include <string.h>
 #include <stdio.h>
 
