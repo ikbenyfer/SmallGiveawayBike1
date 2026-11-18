@@ -165,3 +165,125 @@ long plat_memory_kb(void) {
     if (task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&info, &n) != KERN_SUCCESS) return -1;
     return (long)(info.resident_size / 1024);
 }
+
+/* ------------------------------------------------------------------ netwerk (NSURLSession)
+ * iOS 9 kent de Let's Encrypt-root ISRG Root X2 (3D BAG) nog niet. We voegen de officiele
+ * rootcertificaten uit de app-bundel toe als extra vertrouwensanker; de systeemroots blijven
+ * gewoon gelden en de hostnaam wordt nog steeds gecontroleerd. Geen certificaat wordt overgeslagen. */
+
+@interface SGBNet : NSObject <NSURLSessionDelegate>
+@property (strong) NSURLSession *session;
+@property (strong) NSMutableDictionary *results;   /* id -> NSData of NSNull (fout) */
+@property (strong) NSArray *anchors;
+@end
+
+@implementation SGBNet
+- (instancetype)init {
+    if ((self = [super init])) {
+        NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
+        cfg.timeoutIntervalForRequest = 45;
+        cfg.timeoutIntervalForResource = 120;
+        cfg.HTTPAdditionalHeaders = @{@"User-Agent": @"SmallGiveawayBike1/1.0 (iOS 9)"};
+        self.session = [NSURLSession sessionWithConfiguration:cfg delegate:self delegateQueue:nil];
+        self.results = [NSMutableDictionary dictionary];
+        NSMutableArray *a = [NSMutableArray array];
+        for (NSString *n in @[@"isrg-root-x1", @"isrg-root-x2", @"digicert-global-root-g2"]) {
+            NSString *p = [[NSBundle mainBundle] pathForResource:n ofType:@"der"];
+            NSData *d = p ? [NSData dataWithContentsOfFile:p] : nil;
+            SecCertificateRef c = d ? SecCertificateCreateWithData(NULL, (__bridge CFDataRef)d) : NULL;
+            if (c) { [a addObject:(__bridge_transfer id)c]; }
+            else NSLog(@"SGB-NET kan certificaat %@ niet laden", n);
+        }
+        self.anchors = a;
+    }
+    return self;
+}
+
+- (void)URLSession:(NSURLSession *)session didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
+ completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential *))completionHandler {
+    if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust]) {
+        SecTrustRef trust = challenge.protectionSpace.serverTrust;
+        SecTrustResultType res = kSecTrustResultInvalid;
+        SecTrustSetAnchorCertificates(trust, (__bridge CFArrayRef)self.anchors);
+        SecTrustSetAnchorCertificatesOnly(trust, false);
+        OSStatus st = SecTrustEvaluate(trust, &res);
+        if (st == errSecSuccess && (res == kSecTrustResultUnspecified || res == kSecTrustResultProceed)) {
+            completionHandler(NSURLSessionAuthChallengeUseCredential, [NSURLCredential credentialForTrust:trust]);
+        } else {
+            NSLog(@"SGB-NET certificaat NIET vertrouwd voor %@ (status %d, resultaat %d)", challenge.protectionSpace.host, (int)st, (int)res);
+            completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, nil);
+        }
+        return;
+    }
+    completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, nil);
+}
+@end
+
+static SGBNet *gNet;
+static int gNetId;
+
+int plat_http_start(const char *url) {
+    @autoreleasepool {
+        int myId;
+        NSURL *u;
+        if (!gNet) gNet = [[SGBNet alloc] init];
+        myId = ++gNetId;
+        u = [NSURL URLWithString:[NSString stringWithUTF8String:url]];
+        if (!u) return -1;
+        NSLog(@"SGB-NET start %d: %@", myId, u.host);
+        double t0 = CACurrentMediaTime();
+        NSURLSessionDataTask *task = [gNet.session dataTaskWithURL:u completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
+            NSInteger code = [resp isKindOfClass:[NSHTTPURLResponse class]] ? ((NSHTTPURLResponse *)resp).statusCode : 0;
+            id val = (!err && code == 200 && data) ? data : (id)[NSNull null];
+            NSLog(@"SGB-NET klaar %d: http %ld, %lu bytes, %.1f s, fout=%@", myId, (long)code, (unsigned long)data.length,
+                  CACurrentMediaTime() - t0, err ? [NSString stringWithFormat:@"%@ %ld", err.domain, (long)err.code] : @"geen");
+            @synchronized (gNet.results) { gNet.results[@(myId)] = val; }
+        }];
+        [task resume];
+        return myId;
+    }
+}
+
+int plat_http_poll(int id, char **data, long *len) {
+    id val;
+    if (!gNet || id <= 0) return -1;
+    @synchronized (gNet.results) {
+        val = gNet.results[@(id)];
+        if (val) [gNet.results removeObjectForKey:@(id)];
+    }
+    if (!val) return 0;
+    if (val == [NSNull null]) return -1;
+    {
+        NSData *d = (NSData *)val;
+        char *buf = (char *)malloc(d.length + 1);
+        if (!buf) return -1;
+        memcpy(buf, d.bytes, d.length);
+        buf[d.length] = 0;
+        *data = buf;
+        *len = (long)d.length;
+    }
+    return 1;
+}
+
+int plat_read_file(const char *name, char **data, long *len) {
+    @autoreleasepool {
+        NSData *d = [NSData dataWithContentsOfFile:[docs() stringByAppendingPathComponent:[NSString stringWithUTF8String:name]]];
+        char *buf;
+        if (!d) return 0;
+        buf = (char *)malloc(d.length + 1);
+        if (!buf) return 0;
+        memcpy(buf, d.bytes, d.length);
+        buf[d.length] = 0;
+        *data = buf;
+        *len = (long)d.length;
+        return 1;
+    }
+}
+
+int plat_write_file(const char *name, const char *data, long len) {
+    @autoreleasepool {
+        NSString *p = [docs() stringByAppendingPathComponent:[NSString stringWithUTF8String:name]];
+        [[NSFileManager defaultManager] createDirectoryAtPath:[p stringByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
+        return [[NSData dataWithBytes:data length:(NSUInteger)len] writeToFile:p atomically:YES] ? 1 : 0;
+    }
+}

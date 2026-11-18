@@ -595,13 +595,14 @@ static void gen_outer(void) {
 
 /* ------------------------------------------------------------------ raster + minimap */
 
-static void build_grid(void) {
-    World *w = W;
+static void build_grid(void) { world_build_grid(W, -BORDER - 10.0f, MAPW + 2 * BORDER + 20.0f); }
+
+void world_build_grid(World *w, float org, float size) {
     int i, cx, cz, total = 0;
     int *counts;
     w->gcell = 8.0f;
-    w->gorg = -BORDER - 10.0f;
-    w->gn = (int)ceilf((MAPW + 2 * BORDER + 20.0f) / w->gcell);
+    w->gorg = org;
+    w->gn = (int)ceilf(size / w->gcell);
     counts = (int *)calloc((size_t)w->gn * w->gn + 1, sizeof(int));
     w->gstart = (int *)calloc((size_t)w->gn * w->gn + 1, sizeof(int));
     for (i = 0; i < w->nboxes; i++) {
@@ -630,6 +631,32 @@ static void build_grid(void) {
     free(counts);
     w->stamp = (int *)calloc((size_t)w->nboxes + 1, sizeof(int));
     w->curstamp = 0;
+    if (w->nsegs > 0) {
+        int *cnt = (int *)calloc((size_t)w->gn * w->gn + 1, sizeof(int));
+        int tot = 0, pass;
+        w->sstart = (int *)calloc((size_t)w->gn * w->gn + 1, sizeof(int));
+        for (pass = 0; pass < 2; pass++) {
+            for (i = 0; i < w->nsegs; i++) {
+                WSeg *s = &w->segs[i];
+                int ax = (int)floorf((fminf(s->x0, s->x1) - w->gorg) / w->gcell), bx = (int)floorf((fmaxf(s->x0, s->x1) - w->gorg) / w->gcell);
+                int az = (int)floorf((fminf(s->z0, s->z1) - w->gorg) / w->gcell), bz = (int)floorf((fmaxf(s->z0, s->z1) - w->gorg) / w->gcell);
+                if (ax < 0) ax = 0; if (az < 0) az = 0; if (bx >= w->gn) bx = w->gn - 1; if (bz >= w->gn) bz = w->gn - 1;
+                for (cz = az; cz <= bz; cz++) for (cx = ax; cx <= bx; cx++) {
+                    int c = cz * w->gn + cx;
+                    if (pass == 0) { cnt[c]++; tot++; }
+                    else w->sitems[w->sstart[c] + cnt[c]++] = i;
+                }
+            }
+            if (pass == 0) {
+                int acc = 0;
+                w->sitems = (int *)malloc((size_t)(tot + 1) * sizeof(int));
+                for (i = 0; i < w->gn * w->gn; i++) { w->sstart[i] = acc; acc += cnt[i]; cnt[i] = 0; }
+                w->sstart[w->gn * w->gn] = acc;
+            }
+        }
+        free(cnt);
+        w->sstamp = (int *)calloc((size_t)w->nsegs + 1, sizeof(int));
+    }
 }
 
 static void mm_put(World *w, int x, int y, int r, int g, int b) {
@@ -644,6 +671,8 @@ static void build_minimap(void) {
     int x, y, i;
     float span = MAPW + 2 * BORDER, px = span / 256.0f;
     w->mm = 256;
+    w->mmOrg = -BORDER;
+    w->mmSpan = span;
     w->minimap = (uint8_t *)malloc(256 * 256 * 4);
     for (y = 0; y < 256; y++)
         for (x = 0; x < 256; x++) {
@@ -752,18 +781,22 @@ void world_free(World *w) {
     for (i = 0; i < CHN * CHN; i++) mb_free(&w->chunks[i].mb);
     mb_free(&w->ground);
     free(w->boxes); free(w->gstart); free(w->gitems); free(w->stamp); free(w->minimap);
+    free(w->segs); free(w->sstart); free(w->sitems); free(w->sstamp); free(w->rsegs); free(w->names);
     w->boxes = NULL; w->gstart = w->gitems = w->stamp = NULL; w->minimap = NULL;
+    w->segs = NULL; w->sstart = w->sitems = w->sstamp = NULL; w->rsegs = NULL; w->names = NULL;
+    w->nsegs = w->nrsegs = w->nboxes = 0;
 }
 
 float world_ground_y(const World *w, float x, float z) {
     int bi = (int)floorf((x - ROADW) / PITCH), bj = (int)floorf((z - ROADW) / PITCH);
-    (void)w;
+    if (w->real) return 0.0f;
     if (bi < 0 || bj < 0 || bi >= NB || bj >= NB) return 0.0f;
     if (x - block_x0(bi) > BLOCKW || z - block_x0(bj) > BLOCKW) return 0.0f;
     return CURB;
 }
 
 int world_on_road(const World *w, float x, float z) {
+    if (w->real) return 1;
     if (x < 0 || z < 0 || x > MAPW || z > MAPW) return 0;
     return world_ground_y(w, x, z) < 0.01f;
 }
@@ -812,6 +845,34 @@ int world_push_circle(World *w, float *px, float *pz, float r, float y, float *n
                 hit = 1;
             }
         }
+    if (w->nsegs > 0 && w->sstart) {
+        w->sstampc++;
+        for (cz = az; cz <= bz; cz++)
+            for (cx = ax; cx <= bx; cx++) {
+                int c = cz * w->gn + cx;
+                for (k = w->sstart[c]; k < w->sstart[c + 1]; k++) {
+                    int si = w->sitems[k];
+                    WSeg *s;
+                    float ex, ez, l2, t, qx, qz, dx, dz, d2;
+                    if (w->sstamp[si] == w->sstampc) continue;
+                    w->sstamp[si] = w->sstampc;
+                    s = &w->segs[si];
+                    if (y > s->h - 0.05f) continue;
+                    ex = s->x1 - s->x0; ez = s->z1 - s->z0; l2 = ex * ex + ez * ez;
+                    t = l2 > 1e-6f ? clampf(((*px - s->x0) * ex + (*pz - s->z0) * ez) / l2, 0, 1) : 0;
+                    qx = s->x0 + ex * t; qz = s->z0 + ez * t;
+                    dx = *px - qx; dz = *pz - qz; d2 = dx * dx + dz * dz;
+                    if (d2 >= r * r || d2 < 1e-8f) continue;
+                    {
+                        float d = sqrtf(d2), push = r - d;
+                        dx /= d; dz /= d;
+                        *px += dx * push; *pz += dz * push;
+                        sx += dx; sz += dz;
+                        hit = 1;
+                    }
+                }
+            }
+    }
     if (hit) {
         float l = sqrtf(sx * sx + sz * sz);
         if (l < 1e-5f) { sx = 1; sz = 0; l = 1; }
@@ -858,5 +919,28 @@ float world_raycast(World *w, V3 a, V3 b) {
                 if (t0 <= 1 && t0 < best) best = t0;
             }
         }
+    if (w->nsegs > 0 && w->sstart) {
+        w->sstampc++;
+        for (cz = az; cz <= bz; cz++)
+            for (cx = ax; cx <= bx; cx++) {
+                int c = cz * w->gn + cx;
+                for (k = w->sstart[c]; k < w->sstart[c + 1]; k++) {
+                    int si = w->sitems[k];
+                    WSeg *s;
+                    float ex, ez, den, t, u;
+                    if (w->sstamp[si] == w->sstampc) continue;
+                    w->sstamp[si] = w->sstampc;
+                    s = &w->segs[si];
+                    ex = s->x1 - s->x0; ez = s->z1 - s->z0;
+                    den = d.x * ez - d.z * ex;
+                    if (fabsf(den) < 1e-6f) continue;
+                    t = ((s->x0 - a.x) * ez - (s->z0 - a.z) * ex) / den;
+                    u = ((s->x0 - a.x) * d.z - (s->z0 - a.z) * d.x) / den;
+                    if (t < 0 || t > 1 || u < 0 || u > 1) continue;
+                    if (a.y + d.y * t > s->h) continue;
+                    if (t < best) best = t;
+                }
+            }
+    }
     return best;
 }

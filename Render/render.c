@@ -188,18 +188,19 @@ static void upload(GMesh *g, MeshB *m) {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void r_upload_world(Renderer *r, World *w) {
+void r_upload_world(Renderer *r, World *w, int slot) {
     int i;
+    struct RWorld *rw = &r->rw[slot];
     for (i = 0; i < CHN * CHN; i++) {
         Chunk *c = &w->chunks[i];
-        upload(&r->chunk[i], &c->mb);
-        r->chb[i][0] = c->x0; r->chb[i][1] = c->y0; r->chb[i][2] = c->z0;
-        r->chb[i][3] = c->x1; r->chb[i][4] = c->y1; r->chb[i][5] = c->z1;
+        upload(&rw->chunk[i], &c->mb);
+        rw->chb[i][0] = c->x0; rw->chb[i][1] = c->y0; rw->chb[i][2] = c->z0;
+        rw->chb[i][3] = c->x1; rw->chb[i][4] = c->y1; rw->chb[i][5] = c->z1;
         mb_free(&c->mb);
     }
-    upload(&r->ground, &w->ground);
+    upload(&rw->ground, &w->ground);
     mb_free(&w->ground);
-    tex_from_rgba(&r->minimap, w->mm, w->mm, w->minimap, 1, 0);
+    if (w->minimap) tex_from_rgba(&rw->minimap, w->mm, w->mm, w->minimap, 1, 0);
 }
 
 void r_build_models(Renderer *r) {
@@ -429,15 +430,16 @@ void r_draw_scene(Renderer *r, Game *g) {
 
     {
         M4 id = m4_identity();
-        draw_mesh(r, &r->ground, &id);
+        struct RWorld *rw = &r->rw[r->cur];
+        draw_mesh(r, &rw->ground, &id);
         for (i = 0; i < CHN * CHN; i++) {
-            const float *b = r->chb[i];
+            const float *b = rw->chb[i];
             float cx = clampf(g->camPos.x, b[0], b[3]), cz = clampf(g->camPos.z, b[2], b[5]);
             float dx = cx - g->camPos.x, dz = cz - g->camPos.z;
-            if (r->chunk[i].count <= 0) continue;
+            if (rw->chunk[i].count <= 0) continue;
             if (dx * dx + dz * dz > (fogEnd + 10) * (fogEnd + 10)) continue;
             if (!box_visible(r, b)) continue;
-            draw_mesh(r, &r->chunk[i], &id);
+            draw_mesh(r, &rw->chunk[i], &id);
             r->drawnChunks++;
         }
     }

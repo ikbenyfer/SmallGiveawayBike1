@@ -89,6 +89,7 @@ typedef struct {
     float time;
     Rng rng;
     int quality;
+    int nl;   /* 1 = echte NL-kaart: geen missies, verkeer of voetgangers */
     float drawDist;
 
     /* statistiek voor test/rapport */

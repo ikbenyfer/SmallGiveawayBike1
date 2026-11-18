@@ -261,6 +261,7 @@ static void update_missions(Game *g, float dt) {
 
 int game_targets(const Game *g, V3 *out, int max) {
     int n = 0, i;
+    if (g->nl) return 0;
     if (g->mission < 0) {
         for (i = 0; i < NMISSIONS && n < max; i++) {
             out[n] = g->mdef[i].giver;
@@ -693,6 +694,7 @@ void game_set_quality(Game *g, int q) {
     g->wantPeds = peds[q];
     g->wantTraffic = traf[q];
     g->drawDist = dd[q];
+    if (g->nl) { g->wantPeds = 0; g->wantTraffic = 0; g->drawDist = dd[q] + 40.0f; }
     for (i = g->wantPeds; i < MAX_PED; i++) g->ped[i].active = 0;
     for (i = 0; i < MAX_TRAFFIC; i++) {
         Vehicle *v = &g->veh[g->firstTraffic + i];
@@ -706,6 +708,7 @@ void game_init(Game *g, World *w) {
     g->w = w;
     g->rng.s = 20261118u;
     g->mission = -1;
+    g->nl = w->real;
     g->p.x = w->poi[POI_SPAWN].x;
     g->p.z = w->poi[POI_SPAWN].z;
     g->p.h = w->spawn_heading;
@@ -1081,6 +1084,15 @@ void game_update(Game *g, const Input *in, float dt) {
         update_player_foot(g, in, dt);
     }
 
+    if (g->nl) {   /* niet van de echte kaart af */
+        float lo = -30.0f, hi = g->w->realSize + 30.0f;
+        if (g->p.veh >= 0) {
+            Vehicle *v = &g->veh[g->p.veh];
+            if (v->x < lo || v->x > hi || v->z < lo || v->z > hi) { v->x = clampf(v->x, lo, hi); v->z = clampf(v->z, lo, hi); v->speed *= 0.5f; game_message(g, "Edge of the map", 1.5f); }
+        } else if (g->p.x < lo || g->p.x > hi || g->p.z < lo || g->p.z > hi) {
+            g->p.x = clampf(g->p.x, lo, hi); g->p.z = clampf(g->p.z, lo, hi); game_message(g, "Edge of the map", 1.5f);
+        }
+    }
     player_pos(g, &px, &pz);
 
     /* verkeer: pooling rond de speler */
@@ -1133,7 +1145,7 @@ void game_update(Game *g, const Input *in, float dt) {
     }
 
     update_police_and_health(g, dt);
-    update_missions(g, dt);
+    if (!g->nl) update_missions(g, dt);
     update_camera(g, in, dt);
 
     /* geldteller loopt op */

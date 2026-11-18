@@ -28,11 +28,15 @@ typedef struct {
     GMesh body[CHAR_VARIANTS], leg[CHAR_VARIANTS], arm[CHAR_VARIANTS];
     GMesh bike[BIKE_VARIANTS], car[CAR_VARIANTS];
     GMesh cash, gift, cp, arrow, shadow, marker, siren;
-    GMesh ground;
-    GMesh chunk[CHN * CHN];
-    float chb[CHN * CHN][6];
+    struct RWorld {
+        GMesh ground;
+        GMesh chunk[CHN * CHN];
+        float chb[CHN * CHN][6];
+        Tex minimap;
+    } rw[2];
+    int cur;   /* 0 = verzonnen stad, 1 = echte NL-kaart */
 
-    Tex white, circle, glow, font, logo, bg, minimap;
+    Tex white, circle, glow, font, logo, bg;
     FontData fd;
     int logoX, logoY, logoW, logoH;   /* plaats van het uitgeknipte logo in de achtergrond */
 
@@ -52,7 +56,7 @@ typedef struct {
 
 int r_init(Renderer *r, int w, int h);          /* shaders, basistexturen, logo + achtergrond */
 int r_load_font(Renderer *r);
-void r_upload_world(Renderer *r, World *w);       /* chunks naar VBO's, CPU-geheugen vrij */
+void r_upload_world(Renderer *r, World *w, int slot); /* chunks naar VBO's, CPU-geheugen vrij */
 void r_build_models(Renderer *r);
 void r_set_tod(Renderer *r, int tod);
 void r_draw_scene(Renderer *r, Game *g);

@@ -18,6 +18,8 @@
 enum { BOX_BUILDING = 0, BOX_PROP = 1, BOX_WALL = 2, BOX_TREE = 3, BOX_FENCE = 4 };
 
 typedef struct { float x0, z0, x1, z1, y1; int kind; } Box;
+typedef struct { float x0, z0, x1, z1, h; } WSeg;        /* muur (echte gebouwen) */
+typedef struct { float x0, z0, x1, z1; int name; } RSeg; /* wegstuk met straatnaam */
 
 typedef struct {
     MeshB mb;
@@ -58,6 +60,15 @@ typedef struct {
     V3 gifts[8]; int ngifts;
 
     int verts_total;
+    float mmOrg, mmSpan;     /* minimap: wereldgebied */
+
+    /* echte NL-kaart */
+    int real;
+    float realSize;
+    WSeg *segs; int nsegs, capsegs;
+    int *sstart, *sitems, *sstamp; int sstampc;
+    RSeg *rsegs; int nrsegs, caprsegs;
+    char *names; int nameslen, namescap;
 } World;
 
 /* Bouwt alles op de CPU. step: 0..N (voor laadbalk), geeft 1 terug als klaar. */
@@ -67,6 +78,7 @@ int world_build_steps(void);
 void world_free(World *w);
 
 float world_ground_y(const World *w, float x, float z);
+void world_build_grid(World *w, float org, float size);
 /* Cirkel uit de muren duwen. Geeft 1 als er botsing was; normaal in nx,nz. */
 int world_push_circle(World *w, float *x, float *z, float r, float y, float *nx, float *nz);
 /* Straal (van a naar b) tegen gebouwen; geeft fractie 0..1 van eerste raak. */

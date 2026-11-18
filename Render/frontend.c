@@ -1,10 +1,12 @@
 #include "frontend.h"
 #include "render.h"
+#include "../Game/nlmap.h"
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD };
 enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI };
 
 #define NTOUCH 10
@@ -44,6 +46,23 @@ static struct {
     int fpsFrames;
     float perfT;
     int lastDC, skipStat, missionsFrom;
+    /* echte NL-kaart */
+    int mode;                 /* 0 = stad, 1 = NL */
+    Game Gcity;
+    World WNL;
+    char pcIn[8]; int pcLen;
+    char nlPc[8];
+    int nlStep, nlErr, nlBagPdok, nlFrom, nlInFrom;
+    char nlErrMsg[128];
+    char nlStatus[6][110];
+    int nlReq[6], nlDone[6], nlCached[6];
+    char *nlBuf[6]; long nlLen[6];
+    NLGeo nlGeo;
+    NLStats nlStats;
+    double nlT0;
+    float nlBuildSecs, nlTotalSecs, streetT, atNlT;
+    char street[96];
+    char nlRecent[5][8]; int nlRecentN;
     long savedMoney; int savedDone;
     /* stof */
     float dust[40][4];
@@ -102,7 +121,7 @@ static void save_all(void) {
     plat_save_int("camspeed", F.camSpeed);
     plat_save_int("inverty", F.invertY);
     plat_save_int("showfps", F.showFps);
-    if (F.loadDone && !F.at) {
+    if (F.loadDone && !F.at && F.mode == 0) {
         for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;
         plat_save_int("money", (int)F.G.money);
         plat_save_int("done", done);
@@ -153,7 +172,7 @@ static void load_step(void) {
     int nb = world_build_steps();
     if (s == 0) r_load_font(&F.R);
     else if (s >= 1 && s <= nb) world_build_step(&F.W, s - 1);
-    else if (s == nb + 1) r_upload_world(&F.R, &F.W);
+    else if (s == nb + 1) r_upload_world(&F.R, &F.W, 0);
     else if (s == nb + 2) r_build_models(&F.R);
     else if (s == nb + 3) {
         int i, done;
@@ -284,8 +303,8 @@ static void draw_logo_and_load(void) {
     }
 }
 
-static const char *MENU_ITEMS[4] = {"PLAY", "MISSIONS", "SETTINGS", "CREDITS"};
-#define MENU_X(i) (R->W * 0.5f + ((i) - 1.5f) * 235.0f)
+static const char *MENU_ITEMS[5] = {"PLAY", "MISSIONS", "REAL NL", "SETTINGS", "CREDITS"};
+#define MENU_X(i) (R->W * 0.5f + ((i) - 2.0f) * 198.0f)
 
 static void draw_menu(void) {
     Renderer *R = &F.R;
@@ -295,10 +314,10 @@ static void draw_menu(void) {
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
     draw_backdrop(1, 1, F.t);
     bottom_band(1);
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < 5; i++) {
         float cx = MENU_X(i);
         float pulse = (i == 0) ? 0.04f * sinf(F.t * 3.0f) : 0;
-        big_button(MENU_ITEMS[i], cx, R->H - 74.0f, 46.0f * (1.0f + pulse), F.pressed == i + 1, a);
+        big_button(MENU_ITEMS[i], cx, R->H - 74.0f, 38.0f * (1.0f + pulse), F.pressed == i + 1, a);
     }
     for (i = 0; i < NMISSIONS; i++) done += F.G.completed[i];
     snprintf(line, sizeof(line), "$%ld   -   %d/%d MISSIONS", F.G.money, done, NMISSIONS);
@@ -368,7 +387,7 @@ static void draw_minimap(void) {
     Renderer *R = &F.R;
     Game *g = &F.G;
     float mx = 18, my = 18, ms = 196, half = ms * 0.5f, cx = mx + half, cy = my + half;
-    float span = MAPW + 2 * BORDER, rad = 75.0f;
+    float span = F.G.w->mmSpan, org = F.G.w->mmOrg, rad = 75.0f;
     V3 f = fwd_of(g->camYaw), rt = right_of(g->camYaw);
     float px = g->p.x, pz = g->p.z;
     float xy[8], uv[8];
@@ -380,9 +399,9 @@ static void draw_minimap(void) {
         float wx = px + rt.x * sx * rad + f.x * (-sy) * rad;
         float wz = pz + rt.z * sx * rad + f.z * (-sy) * rad;
         xy[k * 2] = cx + sx * half; xy[k * 2 + 1] = cy + sy * half;
-        uv[k * 2] = (wx + BORDER) / span; uv[k * 2 + 1] = (wz + BORDER) / span;
+        uv[k * 2] = (wx - org) / span; uv[k * 2 + 1] = (wz - org) / span;
     }
-    ui_quad4(R, &R->minimap, xy, uv, 1, 1, 1, 1);
+    ui_quad4(R, &R->rw[R->cur].minimap, xy, uv, 1, 1, 1, 1);
     /* fietsen in de buurt */
     for (i = 0; i < g->nveh; i++) {
         Vehicle *v = &g->veh[i];
@@ -512,6 +531,21 @@ static void draw_hud(void) {
     ui_rect(R, x - 9, y - 11, 6, 22, 1, 1, 1, 0.9f);
     ui_rect(R, x + 3, y - 11, 6, 22, 1, 1, 1, 0.9f);
 
+    if (F.mode == 1) {
+        F.streetT -= 1.0f / 30.0f;
+        if (F.streetT <= 0) {
+            const char *sn = nl_street_name(g->w, g->p.x, g->p.z);
+            snprintf(F.street, sizeof(F.street), "%s", sn ? sn : "");
+            F.streetT = 0.4f;
+        }
+        if (F.street[0]) {
+            float tw = ui_text_w(R, F.street, 30);
+            ui_rect(R, W * 0.5f - tw * 0.5f - 20, 12, tw + 40, 48, 0, 0, 0, 0.55f);
+            ui_text(R, F.street, W * 0.5f, 18, 30, 1, 1, 1, 1, 1);
+        }
+        ui_text(R, F.nlStats.heightsReal ? "3D BAG + PDOK (CC BY 4.0)" : "PDOK (CC BY 4.0) - heights estimated",
+                20, 246, 14, 0.9f, 0.9f, 0.9f, 0.8f, 0);
+    }
     /* missie-paneel */
     if (g->mission >= 0) {
         const MissionDef *m = &g->mdef[g->mission];
@@ -641,10 +675,324 @@ static void ui_star(float cx, float cy, float rad, float cr, float cg, float cb,
     }
 }
 
+/* ------------------------------------------------------------------ echte NL-kaart: postcode-scherm en laden */
+
+static const char *NL_FILES[5] = {"geo", "bag", "roads", "water", "terrain"};
+
+static void nl_free_bufs(void) {
+    int i;
+    for (i = 0; i < 6; i++) { free(F.nlBuf[i]); F.nlBuf[i] = NULL; F.nlLen[i] = 0; F.nlReq[i] = 0; F.nlDone[i] = 0; }
+}
+
+static void nl_status(int line, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(F.nlStatus[line], sizeof(F.nlStatus[line]), fmt, ap);
+    va_end(ap);
+}
+
+static void nl_error(const char *msg) {
+    snprintf(F.nlErrMsg, sizeof(F.nlErrMsg), "%s", msg);
+    F.nlErr = 1;
+    plat_log("SGB-NL fout: %s", msg);
+}
+
+static void nl_begin(const char *pc, int from) {
+    nl_free_bufs();
+    memset(F.nlStatus, 0, sizeof(F.nlStatus));
+    snprintf(F.nlPc, sizeof(F.nlPc), "%s", pc);
+    F.nlStep = 0; F.nlErr = 0; F.nlErrMsg[0] = 0; F.nlBagPdok = 0;
+    F.nlFrom = from;
+    F.nlT0 = plat_time();
+    set_state(ST_NLLOAD);
+}
+
+static void nl_exit_to_city(void) {
+    if (F.mode != 1) return;
+    memcpy(&F.G, &F.Gcity, sizeof(Game));
+    F.R.cur = 0;
+    F.mode = 0;
+    apply_settings();
+}
+
+static void nl_save_recent(const char *pc) {
+    char *old = NULL, out[64];
+    long len = 0;
+    int n = 0;
+    snprintf(out, sizeof(out), "%s\n", pc);
+    if (plat_read_file("nl/recent.txt", &old, &len)) {
+        char *line = strtok(old, "\n");
+        while (line && n < 4) {
+            if (strcmp(line, pc) != 0 && strlen(line) == 6) { strncat(out, line, sizeof(out) - strlen(out) - 2); strcat(out, "\n"); n++; }
+            line = strtok(NULL, "\n");
+        }
+        free(old);
+    }
+    plat_write_file("nl/recent.txt", out, (long)strlen(out));
+}
+
+static void nl_load_recent(void) {
+    char *d = NULL;
+    long len = 0;
+    F.nlRecentN = 0;
+    if (plat_read_file("nl/recent.txt", &d, &len)) {
+        char *line = strtok(d, "\n");
+        while (line && F.nlRecentN < 5) {
+            if (strlen(line) == 6) snprintf(F.nlRecent[F.nlRecentN++], 8, "%s", line);
+            line = strtok(NULL, "\n");
+        }
+        free(d);
+    }
+}
+
+/* index: 0 geo, 1 bag (3D BAG), 2 wegen, 3 water, 4 terrein, 5 bag-reserve (PDOK) */
+static void nl_start(int i) {
+    char url[700], name[64];
+    if (i < 5) {
+        snprintf(name, sizeof(name), "nl/%s_%s.json", F.nlPc, NL_FILES[i]);
+        if (plat_read_file(name, &F.nlBuf[i], &F.nlLen[i])) { F.nlDone[i] = 1; F.nlCached[i] = 1; return; }
+    }
+    F.nlCached[i] = 0;
+    if (i == 0) nl_url_geocode(url, sizeof(url), F.nlPc);
+    else if (i == 1) nl_url_bag3d(url, sizeof(url), F.nlGeo.cx, F.nlGeo.cy);
+    else if (i == 2) nl_url_top10(url, sizeof(url), "wegdeel_hartlijn", F.nlGeo.cx, F.nlGeo.cy);
+    else if (i == 3) nl_url_top10(url, sizeof(url), "waterdeel_vlak", F.nlGeo.cx, F.nlGeo.cy);
+    else if (i == 4) nl_url_top10(url, sizeof(url), "terrein_vlak", F.nlGeo.cx, F.nlGeo.cy);
+    else nl_url_bagpdok(url, sizeof(url), F.nlGeo.cx, F.nlGeo.cy);
+    F.nlReq[i] = plat_http_start(url);
+    if (F.nlReq[i] <= 0) F.nlDone[i] = -1;
+}
+
+static void nl_poll(int i) {
+    int r;
+    if (F.nlDone[i] || F.nlReq[i] <= 0) return;
+    r = plat_http_poll(F.nlReq[i], &F.nlBuf[i], &F.nlLen[i]);
+    if (r == 0) return;
+    F.nlDone[i] = r > 0 ? 1 : -1;
+    if (r > 0 && i < 5 && !(i == 0 && strstr(F.nlBuf[0], "\"numFound\":0"))) {
+        char name[64];
+        snprintf(name, sizeof(name), "nl/%s_%s.json", F.nlPc, NL_FILES[i]);
+        plat_write_file(name, F.nlBuf[i], F.nlLen[i]);
+    }
+}
+
+static const char *nl_state_txt(int i) {
+    static char b[6][48];
+    if (F.nlDone[i] == 1) snprintf(b[i], sizeof(b[i]), "%s %.0f kB", F.nlCached[i] ? "OK (saved)" : "OK", F.nlLen[i] / 1024.0);
+    else if (F.nlDone[i] == -1) snprintf(b[i], sizeof(b[i]), "FAILED");
+    else snprintf(b[i], sizeof(b[i]), "downloading...");
+    return b[i];
+}
+
+static void nl_tick(void) {
+    int i;
+    if (F.nlErr) return;
+    switch (F.nlStep) {
+    case 0:
+        nl_status(0, "Looking up postcode %s ...", F.nlPc);
+        nl_start(0);
+        F.nlStep = 1;
+        break;
+    case 1:
+        nl_poll(0);
+        if (F.nlDone[0] == -1) { nl_error("No connection with PDOK (postcode lookup). Is Wi-Fi on?"); break; }
+        if (F.nlDone[0] == 1) {
+            if (!nl_parse_geocode(F.nlBuf[0], F.nlLen[0], &F.nlGeo)) { nl_error("Postcode not found."); break; }
+            nl_status(0, "Postcode: %s", F.nlGeo.name);
+            plat_log("SGB-NL %s -> RD %.0f %.0f (%s)", F.nlPc, F.nlGeo.cx, F.nlGeo.cy, F.nlGeo.name);
+            for (i = 1; i <= 4; i++) nl_start(i);
+            F.nlStep = 2;
+        }
+        break;
+    case 2: {
+        int pending = 0;
+        for (i = 1; i <= 5; i++) nl_poll(i);
+        if (F.nlDone[1] == -1 && !F.nlReq[5] && !F.nlDone[5]) {
+            plat_log("SGB-NL 3D BAG niet bereikbaar, reserve: PDOK BAG zonder hoogtes");
+            F.nlBagPdok = 1;
+            nl_start(5);
+        }
+        nl_status(1, "Buildings + heights (3D BAG): %s", nl_state_txt(1));
+        if (F.nlBagPdok) nl_status(2, "Backup buildings (PDOK BAG, no heights): %s", nl_state_txt(5));
+        else F.nlStatus[2][0] = 0;
+        nl_status(3, "Streets (PDOK TOP10NL): %s", nl_state_txt(2));
+        nl_status(4, "Water + land use (TOP10NL): %s / %s", nl_state_txt(3), nl_state_txt(4));
+        for (i = 1; i <= 4; i++) if (!F.nlDone[i]) pending = 1;
+        if (F.nlBagPdok && !F.nlDone[5]) pending = 1;
+        if (!pending) { F.nlStep = 3; nl_status(5, "Building the 3D neighbourhood..."); }
+        break;
+    }
+    case 3:
+        F.nlStep = 4;   /* een frame met de melding laten zien */
+        break;
+    case 4: {
+        int b = F.nlBagPdok ? 5 : 1;
+        double t0 = plat_time();
+        int ok = nl_build_world(&F.WNL, F.nlGeo.cx, F.nlGeo.cy,
+                                F.nlDone[b] == 1 ? F.nlBuf[b] : NULL, F.nlLen[b], F.nlBagPdok,
+                                F.nlDone[2] == 1 ? F.nlBuf[2] : NULL, F.nlLen[2],
+                                F.nlDone[3] == 1 ? F.nlBuf[3] : NULL, F.nlLen[3],
+                                F.nlDone[4] == 1 ? F.nlBuf[4] : NULL, F.nlLen[4], &F.nlStats);
+        double t1 = plat_time();
+        nl_free_bufs();
+        if (!ok) { nl_error("No map data received for this place."); break; }
+        r_upload_world(&F.R, &F.WNL, 1);
+        plat_log("SGB-NL gebouwd: %d gebouwen (hoogtes %s, max %.0f m), %d wegen, %d water, %d terrein, %d vertices, %d muren; bouwen %.2f s, totaal %.1f s, geheugen %ld kB",
+                 F.nlStats.buildings, F.nlStats.heightsReal ? "echt" : "geschat", F.nlStats.maxH, F.nlStats.roads, F.nlStats.water,
+                 F.nlStats.terrain, F.nlStats.verts, F.nlStats.segs, t1 - t0, t1 - F.nlT0, plat_memory_kb());
+        F.nlBuildSecs = (float)(t1 - t0);
+        F.nlTotalSecs = (float)(t1 - F.nlT0);
+        if (F.mode == 0) memcpy(&F.Gcity, &F.G, sizeof(Game));
+        game_init(&F.G, &F.WNL);
+        F.mode = 1;
+        F.R.cur = 1;
+        apply_settings();
+        snprintf(F.G.banner, sizeof(F.G.banner), "REAL NL");
+        snprintf(F.G.sub, sizeof(F.G.sub), "%s", F.nlGeo.name);
+        F.G.bannerT = 5.0f; F.G.bannerGood = 1;
+        nl_save_recent(F.nlPc);
+        set_state(ST_GAME);
+        F.fade = 1.0f;
+        break;
+    }
+    default: break;
+    }
+}
+
+static void draw_nl_load(void) {
+    Renderer *R = &F.R;
+    int i;
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
+    draw_backdrop(0.25f, 0.0f, F.t);
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.55f);
+    ui_text(R, "REAL NETHERLANDS", R->W * 0.5f, 60, 54, 1, 1, 1, 1, 1);
+    for (i = 0; i < 6; i++)
+        if (F.nlStatus[i][0]) ui_text(R, F.nlStatus[i], 130, 190.0f + i * 50.0f, 26, 1, 1, 1, 1, 0);
+    if (F.nlErr) {
+        ui_text(R, F.nlErrMsg, R->W * 0.5f, 520, 28, 1.0f, 0.4f, 0.4f, 1, 1);
+        ui_text(R, "TAP TO GO BACK", R->W * 0.5f, 600, 34, 1, 1, 1, 0.6f + 0.4f * sinf(F.t * 4), 1);
+    } else {
+        int k;
+        for (k = 0; k < 8; k++) {
+            float ang = F.t * 4.0f + k * (2 * PI_F / 8);
+            ui_circle(R, R->W * 0.5f + cosf(ang) * 22, 560 + sinf(ang) * 22, 5, 1, 1, 1, 0.15f + 0.85f * (k / 7.0f));
+        }
+    }
+    ui_text(R, "Map data: 3D BAG (TU Delft / 3DGI), BAG + TOP10NL (Kadaster, PDOK) - CC BY 4.0", R->W * 0.5f, R->H - 40.0f, 16, 0.8f, 0.8f, 0.8f, 1, 1);
+}
+
+/* toetsenbord */
+#define KEY_DEL 1
+#define KEY_GO 2
+#define KEY_BACK 3
+static const char *KROWS[4] = {"1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"};
+
+static void key_rect(int row, int col, float *x, float *y, float *w, float *h) {
+    float x0[4] = {92, 92, 134, 176};
+    *w = 76; *h = 64;
+    *x = x0[row] + col * 84.0f;
+    *y = 250.0f + row * 80.0f;
+}
+
+static int nl_key_at(float px, float py) {
+    int r, c;
+    float x, y, w, h;
+    for (r = 0; r < 4; r++)
+        for (c = 0; KROWS[r][c]; c++) {
+            key_rect(r, c, &x, &y, &w, &h);
+            if (px >= x && px < x + w && py >= y && py < y + h) return KROWS[r][c];
+        }
+    key_rect(3, 7, &x, &y, &w, &h);
+    if (px >= x && px < x + 160 && py >= y && py < y + h) return KEY_DEL;
+    if (px >= 392 && px < 632 && py >= 572 && py < 646) return KEY_GO;
+    if (px >= 20 && px < 220 && py >= 670 && py < 740) return KEY_BACK;
+    for (r = 0; r < F.nlRecentN; r++) {
+        float rx = 380.0f + r * 125.0f;
+        if (px >= rx && px < rx + 115 && py >= 672 && py < 722) return 200 + r;
+    }
+    return 0;
+}
+
+static void draw_nl_input(void) {
+    Renderer *R = &F.R;
+    int r, c, valid;
+    char shown[16], norm[8];
+    float x, y, w, h;
+    if (F.nlInFrom == ST_PAUSE) {
+        ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0.02f, 0.02f, 0.03f, 1);
+    } else {
+        ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
+        draw_backdrop(0.3f, 0.0f, F.t);
+        ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.55f);
+    }
+    ui_text(R, "REAL NETHERLANDS", R->W * 0.5f, 18, 50, 1, 1, 1, 1, 1);
+    ui_text(R, "Type a Dutch postcode and explore the real streets and buildings in 3D", R->W * 0.5f, 84, 20, 0.85f, 0.85f, 0.85f, 1, 1);
+    ui_rect(R, 312, 128, 400, 96, 0, 0, 0, 0.7f);
+    if (F.pcLen > 4) snprintf(shown, sizeof(shown), "%.4s %s", F.pcIn, F.pcIn + 4);
+    else snprintf(shown, sizeof(shown), "%s", F.pcIn);
+    if (F.pcLen == 0) ui_text(R, "1234 AB", 512, 138, 64, 0.5f, 0.5f, 0.5f, 0.6f, 1);
+    else ui_text(R, shown, 512, 138, 64, 1, 1, 1, 1, 1);
+    for (r = 0; r < 4; r++)
+        for (c = 0; KROWS[r][c]; c++) {
+            int ch = KROWS[r][c], ok = (r == 0) ? (F.pcLen < 4 && !(F.pcLen == 0 && ch == '0')) : (F.pcLen >= 4 && F.pcLen < 6);
+            char lab[2] = {(char)ch, 0};
+            int pr = F.pressed == ch;
+            key_rect(r, c, &x, &y, &w, &h);
+            ui_rect(R, x, y, w, h, pr ? 0.7f : 0.12f, pr ? 0.1f : 0.12f, pr ? 0.1f : 0.14f, ok ? 0.9f : 0.4f);
+            ui_text(R, lab, x + w * 0.5f, y + 8, 40, 1, 1, 1, ok ? 1.0f : 0.35f, 1);
+        }
+    key_rect(3, 7, &x, &y, &w, &h);
+    ui_rect(R, x, y, 160, h, F.pressed == KEY_DEL ? 0.7f : 0.3f, 0.08f, 0.08f, 0.9f);
+    ui_text(R, "DELETE", x + 80, y + 14, 30, 1, 1, 1, 1, 1);
+    valid = nl_normalize_postcode(F.pcIn, norm);
+    ui_rect(R, 392, 572, 240, 74, valid ? (F.pressed == KEY_GO ? 0.9f : 0.75f) : 0.2f, valid ? 0.12f : 0.2f, valid ? 0.12f : 0.2f, 0.95f);
+    ui_text(R, "GO!", 512, 580, 50, 1, 1, 1, valid ? 1.0f : 0.4f, 1);
+    big_button("BACK", 120, 704, 40, F.pressed == KEY_BACK, 1);
+    if (F.nlRecentN > 0) {
+        ui_text(R, "RECENT:", 370, 682, 24, 0.85f, 0.85f, 0.85f, 1, 2);
+        for (r = 0; r < F.nlRecentN; r++) {
+            float rx = 380.0f + r * 125.0f;
+            ui_rect(R, rx, 672, 115, 50, F.pressed == 200 + r ? 0.6f : 0.1f, 0.12f, 0.16f, 0.9f);
+            ui_text(R, F.nlRecent[r], rx + 57, 680, 28, 1.0f, 0.85f, 0.4f, 1, 1);
+        }
+    }
+    ui_text(R, "Needs Wi-Fi the first time; visited places are saved on the iPad.  Data: 3D BAG, PDOK/Kadaster (CC BY 4.0)",
+            R->W * 0.5f, R->H - 26.0f, 14, 0.75f, 0.75f, 0.75f, 1, 1);
+}
+
+static void nl_input_tap(float x, float y, int phase) {
+    int k = nl_key_at(x, y);
+    char norm[8];
+    if (phase != TOUCH_END) { F.pressed = k; return; }
+    F.pressed = 0;
+    if (k >= '0' && k <= '9') {
+        if (F.pcLen < 4 && !(F.pcLen == 0 && k == '0')) { F.pcIn[F.pcLen++] = (char)k; F.pcIn[F.pcLen] = 0; }
+    } else if (k >= 'A' && k <= 'Z') {
+        if (F.pcLen >= 4 && F.pcLen < 6) { F.pcIn[F.pcLen++] = (char)k; F.pcIn[F.pcLen] = 0; }
+    } else if (k == KEY_DEL) {
+        if (F.pcLen > 0) F.pcIn[--F.pcLen] = 0;
+    } else if (k == KEY_GO) {
+        if (nl_normalize_postcode(F.pcIn, norm)) nl_begin(norm, F.nlInFrom);
+    } else if (k == KEY_BACK) {
+        set_state(F.nlInFrom == ST_PAUSE ? ST_PAUSE : ST_MENU);
+    } else if (k >= 200 && k < 200 + F.nlRecentN) {
+        snprintf(F.pcIn, sizeof(F.pcIn), "%s", F.nlRecent[k - 200]);
+        F.pcLen = 6;
+        nl_begin(F.pcIn, F.nlInFrom);
+    }
+}
+
+static void open_nl_input(int from) {
+    F.nlInFrom = from;
+    nl_load_recent();
+    set_state(ST_NLINPUT);
+}
+
 static void draw_pause(void) {
     Renderer *R = &F.R;
     int i;
-    static const char *items[4] = {"RESUME", "MISSIONS", "SETTINGS", "MAIN MENU"};
+    const char *items[4] = {"RESUME", "MISSIONS", "SETTINGS", "MAIN MENU"};
+    if (F.mode == 1) items[1] = "NEW POSTCODE";
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.6f);
     ui_text(R, "PAUSED", R->W * 0.5f, 130, 70, 1, 1, 1, 1, 1);
     for (i = 0; i < 4; i++) big_button(items[i], R->W * 0.5f, 290.0f + i * 100.0f, 48, F.pressed == i + 1, 1);
@@ -709,14 +1057,20 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_MENU) {
-        for (i = 0; i < 4; i++)
-            if (hit_text(x, y, MENU_ITEMS[i], MENU_X(i), R->H - 74.0f + 24, 46)) hit = i + 1;
+        for (i = 0; i < 5; i++)
+            if (hit_text(x, y, MENU_ITEMS[i], MENU_X(i), R->H - 74.0f + 20, 38)) hit = i + 1;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
         if (hit == 1) start_game();
         else if (hit == 2) { set_state(ST_MISSIONS); F.missionsFrom = ST_MENU; }
-        else if (hit == 3) set_state(ST_SETTINGS);
-        else if (hit == 4) set_state(ST_CREDITS);
+        else if (hit == 3) open_nl_input(ST_MENU);
+        else if (hit == 4) set_state(ST_SETTINGS);
+        else if (hit == 5) set_state(ST_CREDITS);
+        return;
+    }
+    if (F.state == ST_NLINPUT) { nl_input_tap(x, y, phase); return; }
+    if (F.state == ST_NLLOAD) {
+        if (F.nlErr && phase == TOUCH_END) open_nl_input(F.nlFrom);
         return;
     }
     if (F.state == ST_MISSIONS) {
@@ -773,15 +1127,17 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_PAUSE) {
-        static const char *pi[4] = {"RESUME", "MISSIONS", "SETTINGS", "MAIN MENU"};
+        const char *pi[4] = {"RESUME", "MISSIONS", "SETTINGS", "MAIN MENU"};
+        if (F.mode == 1) pi[1] = "NEW POSTCODE";
         for (i = 0; i < 4; i++)
             if (hit_text(x, y, pi[i], R->W * 0.5f, 290.0f + i * 100.0f + 24, 48)) hit = i + 1;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
         if (hit == 1) set_state(ST_GAME);
+        else if (hit == 2 && F.mode == 1) open_nl_input(ST_PAUSE);
         else if (hit == 2) { set_state(ST_MISSIONS); F.missionsFrom = ST_PAUSE; }
         else if (hit == 3) { set_state(ST_SETTINGS); F.prevState = ST_PAUSE; }
-        else if (hit == 4) { save_all(); set_state(ST_MENU); }
+        else if (hit == 4) { save_all(); nl_exit_to_city(); set_state(ST_MENU); }
     }
 }
 
@@ -994,6 +1350,33 @@ static void autotest_tick(float dt) {
         }
         else if (F.atStep == 41 && t > 72.0f) { at_shot("16_mission_select_start"); F.atStep++; }
         else if (F.atStep == 42 && t > 74.5f) {
+            rep("NL-modus: postcode 1012JS laden (Dam, Amsterdam)...");
+            F.atStep++;
+            nl_begin("1012JS", ST_MENU);
+            return;
+        }
+        else if (F.atStep == 43 && F.mode == 1) {
+            F.atNlT = t;
+            rep("NL geladen in %.1f s (bouwen %.2f s): %d gebouwen (hoogtes %s, hoogste %.0f m), %d wegen, %d water, %d terrein, %d vertices, %d muren, geheugen %ld kB",
+                F.nlTotalSecs, F.nlBuildSecs, F.nlStats.buildings, F.nlStats.heightsReal ? "echt uit 3D BAG" : "GESCHAT", F.nlStats.maxH,
+                F.nlStats.roads, F.nlStats.water, F.nlStats.terrain, F.nlStats.verts, F.nlStats.segs, plat_memory_kb());
+            F.atStep++;
+        }
+        else if (F.atStep == 44 && t > F.atNlT + 1.5f) { at_shot("17_nl_area"); F.atStep++; }
+        else if (F.atStep == 45 && t > F.atNlT + 2.0f) { in->actionPressed = 1; F.atStep++; }
+        else if (F.atStep == 46 && t > F.atNlT + 2.3f) { rep("NL: in voertuig, modus=%d", game_mode(g)); F.atStep++; }
+        else if (F.atStep == 47 && t > F.atNlT + 7.0f) {
+            const char *sn = nl_street_name(g->w, g->p.x, g->p.z);
+            at_shot("18_nl_drive");
+            rep("NL: straat='%s', positie %.0f,%.0f", sn ? sn : "-", g->p.x, g->p.z);
+            F.atStep++;
+        }
+        else if (F.atStep == 48 && t > F.atNlT + 9.0f) {
+            nl_exit_to_city();
+            rep("NL-modus verlaten, terug in de stad (modus=%d)", F.mode);
+            F.atStep++;
+        }
+        else if (F.atStep == 49) {
             int i;
             rep("---- FPS per onderdeel (echte tijd; frames met screenshot niet meegeteld) ----");
             for (i = 0; i < F.nseg; i++) {
@@ -1033,6 +1416,8 @@ static void autotest_tick(float dt) {
     if (t > 16.0f && t < 22.5f) { in->gas = 1; in->mx = 0.4f * sinf(t * 0.7f); }
     if (t > 22.5f && t < 24.2f) in->brake = 1;
     if (t > 36.0f && t < 58.0f) { in->lx = 0.35f; in->my = 0.0f; }
+    if (F.mode == 1 && F.atNlT > 0 && t > F.atNlT + 2.6f && t < F.atNlT + 8.5f) { in->gas = 1; in->mx = 0.15f; }
+    if (F.mode == 1 && F.atNlT > 0 && t > F.atNlT + 1.5f && t < F.atNlT + 2.0f) { in->lx = 0.0f; }
     s = seg_cur();
     if (F.skipStat > 0) { F.skipStat--; s = NULL; }  /* frames rond een screenshot niet meetellen */
     if (s) {
@@ -1105,6 +1490,21 @@ void fe_frame(double now) {
     case ST_CREDITS:
         ui_begin(R); draw_credits(); ui_flush(R);
         break;
+    case ST_NLINPUT:
+        ui_begin(R); draw_nl_input(); ui_flush(R);
+        break;
+    case ST_NLLOAD:
+        nl_tick();
+        if (F.state == ST_NLLOAD) {
+            ui_begin(R); draw_nl_load(); ui_flush(R);
+            if (F.at && F.nlErr) {
+                rep("NL-modus MISLUKT: %s", F.nlErrMsg);
+                plat_screenshot("17_nl_area", R->W, R->H);
+                set_state(ST_GAME);
+                F.atStep = 49;
+            }
+        }
+        break;
     case ST_MISSIONS:
         if (F.missionsFrom != ST_PAUSE) ui_begin(R);
         draw_missions();
@@ -1117,7 +1517,7 @@ void fe_frame(double now) {
             if (F.at) autotest_tick(dt);
             else build_input();
             if (F.state == ST_GAME || F.at) game_update(&F.G, &F.in, dt);
-            if (!F.at) {
+            if (!F.at && F.mode == 0) {
                 int i, done = 0;
                 for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;
                 if (done != F.savedDone || (F.G.money != F.savedMoney && F.G.bannerT <= 0 && F.G.msgT <= 0)) save_all();

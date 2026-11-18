@@ -107,6 +107,73 @@ long plat_memory_kb(void) {
     return b * 4;
 }
 
+/* netwerk: synchroon via curl (alleen voor de CI-test) */
+static struct { char *data; long len; int ok; } NET[64];
+static int netn;
+
+int plat_http_start(const char *url) {
+    char cmd[2048];
+    FILE *p;
+    char *buf = NULL;
+    long len = 0, cap = 0;
+    int id;
+    if (netn >= 63) return -1;
+    id = ++netn;
+    snprintf(cmd, sizeof(cmd), "curl -s -f -m 90 -A SGB-CI '%s'", url);
+    p = popen(cmd, "r");
+    if (p) {
+        for (;;) {
+            size_t r;
+            if (len + 65536 + 1 > cap) { cap = (cap + 65536) * 2; buf = (char *)realloc(buf, (size_t)cap); }
+            r = fread(buf + len, 1, 65536, p);
+            if (r == 0) break;
+            len += (long)r;
+        }
+        NET[id].ok = pclose(p) == 0 && len > 0;
+    }
+    NET[id].data = buf; NET[id].len = len;
+    printf("NET %d: %ld bytes, ok=%d\n", id, len, NET[id].ok);
+    return id;
+}
+
+int plat_http_poll(int id, char **data, long *len) {
+    if (id <= 0 || id > netn) return -1;
+    if (!NET[id].ok) { free(NET[id].data); NET[id].data = NULL; return -1; }
+    *data = NET[id].data; *len = NET[id].len;
+    (*data)[*len] = 0;
+    NET[id].data = NULL; NET[id].ok = 0;
+    return 1;
+}
+
+int plat_read_file(const char *name, char **data, long *len) {
+    char p[512];
+    FILE *f;
+    long n;
+    snprintf(p, sizeof(p), "%s/docs/%s", OUT, name);
+    f = fopen(p, "rb");
+    if (!f) return 0;
+    fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
+    *data = (char *)malloc((size_t)n + 1);
+    if (fread(*data, 1, (size_t)n, f) != (size_t)n) { fclose(f); free(*data); return 0; }
+    (*data)[n] = 0; *len = n;
+    fclose(f);
+    return 1;
+}
+
+int plat_write_file(const char *name, const char *data, long len) {
+    char p[512], d[512], *s;
+    FILE *f;
+    snprintf(p, sizeof(p), "%s/docs/%s", OUT, name);
+    snprintf(d, sizeof(d), "%s", p);
+    s = strrchr(d, '/');
+    if (s) { *s = 0; { char cmd[600]; snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", d); if (system(cmd) != 0) return 0; } }
+    f = fopen(p, "wb");
+    if (!f) return 0;
+    fwrite(data, 1, (size_t)len, f);
+    fclose(f);
+    return 1;
+}
+
 int main(void) {
     const int W = 1024, H = 768;
     EGLDisplay dpy;
@@ -153,7 +220,7 @@ int main(void) {
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { printf("FBO niet compleet\n"); return 2; }
 
     fe_init(W, H);
-    for (frame = 0; frame < 30 * 140; frame++) {
+    for (frame = 0; frame < 30 * 200; frame++) {
         t += 1.0 / 30.0;
         fe_frame(t);
         if (frame == 25) plat_screenshot("00a_logo_fadein", W, H);
