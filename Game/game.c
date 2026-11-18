@@ -261,6 +261,20 @@ static void setup_missions(Game *g) {
         for (i = 0; i < 10; i++) cp_set(&m->cp[i], road_c(s[i][0]), road_c(s[i][1]), 4.0f, NEED_BIKE, "Race: next checkpoint");
         m->ncp = 10;
     }
+    m = &g->mdef[19];
+    m->title = "GOLD RESERVE HEIST";
+    m->brief = "The hardest job in town: crack the gold reserve, drive it to the east edge and lose a full alarm.";
+    m->giver = w->poi[POI_BANK];
+    m->reward = 15000; m->repeatReward = 10000;
+    m->requireWeapon = 1; m->time = 300;
+    cp_set(&m->cp[0], w->poi[POI_VAULT].x, w->poi[POI_VAULT].z, 2.2f, NEED_FOOT, "Drill the gold reserve - stay close!");
+    m->cp[0].hold = 30.0f;
+    m->cp[0].alarm = 3;
+    cp_set(&m->cp[1], road_c(7), road_c(0), 5.0f, NEED_CAR, "Grab a car and get the gold to the north-east corner");
+    cp_set(&m->cp[2], road_c(0), road_c(7), 5.0f, NEED_CAR, "Switch route: south-west corner");
+    cp_set(&m->cp[3], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_ANY, "Lose the police, then hide the gold at the garage");
+    m->cp[3].clean = 1;
+    m->ncp = 4;
 #undef SW
 #undef RC
 
@@ -289,7 +303,7 @@ static void mission_end(Game *g, int ok) {
     int m = g->mission;
     if (m < 0) return;
     if (ok) {
-        int rew = g->completed[m] ? g->mdef[m].reward / 2 : g->mdef[m].reward;
+        int rew = !g->completed[m] ? g->mdef[m].reward : (g->mdef[m].repeatReward ? g->mdef[m].repeatReward : g->mdef[m].reward / 2);
         char b[64];
         g->money += rew;
         g->moneyFlash = 2.0f;

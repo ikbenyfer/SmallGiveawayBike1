@@ -11,7 +11,7 @@
 #define MAX_COPS 4      /* laatste 4 voetganger-plekken: agenten */
 #define MAX_TRACERS 12
 #define MAX_TRAFFIC 10
-#define NMISSIONS 19
+#define NMISSIONS 20
 #define MAX_CP 10
 
 enum { NEED_ANY = 0, NEED_BIKE = 1, NEED_CAR = 2, NEED_FOOT = 3 };
@@ -71,6 +71,7 @@ typedef struct {
     const char *title, *brief;
     V3 giver;
     int ncp, anyOrder, reward;
+    int repeatReward; /* beloning bij opnieuw spelen (0 = de helft) */
     float time;
     Checkpoint cp[MAX_CP];
     int gifts;  /* toon cadeautjes op de any-order punten */

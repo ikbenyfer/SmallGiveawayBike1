@@ -144,6 +144,7 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph�
   - `tools/build_region_pack.py` maakt het pakket opnieuw (op de pc, met internet).
   - Bronvermelding: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, PDOK), gemeentegrenzen en postcodes (PDOK). Alles valt onder CC BY 4.0.
   - iOS 9 kent de rootcertificaten van 3D BAG niet. Daarom zitten ISRG Root X1/X2 en DigiCert Global Root G2 in de app als **extra** vertrouwensanker; de normale controle blijft aan. Lukt 3D BAG toch niet, dan valt de app terug op PDOK BAG met geschatte hoogtes.
+- **GOLD RESERVE HEIST** (missie 20): de zwaarste klus. Je moet 30 seconden in de kluis blijven, met een alarm van 3 sterren. Daarna rijd je het goud langs twee hoeken van de stad en schud je de politie af bij de garage, binnen 5 minuten. De eerste keer krijg je $15.000, daarna $10.000 per keer.
 - **ONLINE (multiplayer, peer-to-peer, max. 4 spelers)** – iPad en Windows kunnen samen spelen, er is geen server nodig.
   - **HOST A GAME** (hoofdmenu → ONLINE) start de stad als host. Wil je samen in REAL NL spelen, kies dan in het pauzemenu **HOST ONLINE**: iedereen komt dan op dezelfde postcode.
   - **Zelfde wifi:** het spel van de host verschijnt vanzelf in de lijst; tik erop om mee te doen.
