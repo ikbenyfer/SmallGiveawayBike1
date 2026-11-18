@@ -844,6 +844,7 @@ void game_init(Game *g, World *w) {
     g->rng.s = 20261118u;
     g->mission = -1;
     g->nl = w->real;
+    g->autoAim = 1;
     g->p.x = w->poi[POI_SPAWN].x;
     g->p.z = w->poi[POI_SPAWN].z;
     g->p.h = w->spawn_heading;
@@ -1189,35 +1190,56 @@ static void update_weapons(Game *g, const Input *in, float dt) {
     g->muzzleT = 0.06f;
     g->statShots++;
     {
-        /* auto-richten: dichtstbijzijnde doel in de kijkrichting van de camera */
+        /* Richten. Auto-aim AAN: eerst politie (agenten en politieauto's) in de kijkrichting, pas als die er
+         * niet is gewone mensen. Auto-aim UIT: alleen wat precies in de schietlijn van de camera staat. */
         V3 cf = fwd_of(g->camYaw), muzzle = v3(g->p.x, g->p.y + 1.35f, g->p.z), aim = v3(0, 0, 0);
         float best = 1e9f;
-        int bestPed = -1, bestVeh = -1, i, pel;
-        for (i = 0; i < MAX_PED; i++) {
-            Ped *p = &g->ped[i];
-            float dx, dz, d, ang;
-            if (!p->active || p->state == PED_DOWN) continue;
-            dx = p->x - g->p.x; dz = p->z - g->p.z; d = sqrtf(dx * dx + dz * dz);
-            if (d > wd->range || d < 0.3f) continue;
-            ang = acosf(clampf((dx * cf.x + dz * cf.z) / d, -1, 1));
-            if (ang > 0.55f) continue;
-            if (!line_of_sight(g, muzzle, v3(p->x, p->y + 1.2f, p->z))) continue;
-            if (ang * 10.0f + d * 0.1f + (p->cop ? -2.0f : 0.0f) < best) { best = ang * 10.0f + d * 0.1f + (p->cop ? -2.0f : 0.0f); bestPed = i; bestVeh = -1; }
-        }
-        for (i = 0; i < MAX_POLICE; i++) {
-            Vehicle *v = &g->veh[g->firstPolice + i];
-            float dx, dz, d, ang;
-            if (!v->active || v->wrecked) continue;
-            dx = v->x - g->p.x; dz = v->z - g->p.z; d = sqrtf(dx * dx + dz * dz);
-            if (d > wd->range || d < 0.5f) continue;
-            ang = acosf(clampf((dx * cf.x + dz * cf.z) / d, -1, 1));
-            if (ang > 0.45f) continue;
-            if (ang * 10.0f + d * 0.1f + 1.0f < best) { best = ang * 10.0f + d * 0.1f + 1.0f; bestVeh = g->firstPolice + i; bestPed = -1; }
+        int bestPed = -1, bestVeh = -1, i, pel, pass, npass = g->autoAim ? 2 : 1;
+        for (pass = 0; pass < npass && bestPed < 0 && bestVeh < 0; pass++) {
+            int wantCops = g->autoAim ? (pass == 0) : -1;   /* -1 = alles */
+            for (i = 0; i < MAX_PED; i++) {
+                Ped *p = &g->ped[i];
+                float dx, dz, d, score;
+                if (!p->active || p->state == PED_DOWN) continue;
+                if (wantCops == 1 && !p->cop) continue;
+                if (wantCops == 0 && p->cop) continue;
+                dx = p->x - g->p.x; dz = p->z - g->p.z; d = sqrtf(dx * dx + dz * dz);
+                if (d > wd->range || d < 0.3f) continue;
+                if (g->autoAim) {
+                    float ang = acosf(clampf((dx * cf.x + dz * cf.z) / d, -1, 1));
+                    if (ang > 0.55f) continue;
+                    score = ang * 10.0f + d * 0.1f;
+                } else {
+                    float along = dx * cf.x + dz * cf.z, lat = fabsf(dx * cf.z - dz * cf.x);
+                    if (along <= 0 || lat > 0.6f) continue;
+                    score = along;
+                }
+                if (!line_of_sight(g, muzzle, v3(p->x, p->y + 1.2f, p->z))) continue;
+                if (score < best) { best = score; bestPed = i; bestVeh = -1; }
+            }
+            if (wantCops == 0) continue;
+            for (i = 0; i < MAX_POLICE; i++) {
+                Vehicle *v = &g->veh[g->firstPolice + i];
+                float dx, dz, d, score;
+                if (!v->active || v->wrecked) continue;
+                dx = v->x - g->p.x; dz = v->z - g->p.z; d = sqrtf(dx * dx + dz * dz);
+                if (d > wd->range || d < 0.5f) continue;
+                if (g->autoAim) {
+                    float ang = acosf(clampf((dx * cf.x + dz * cf.z) / d, -1, 1));
+                    if (ang > 0.45f) continue;
+                    score = ang * 10.0f + d * 0.1f + 1.0f;
+                } else {
+                    float along = dx * cf.x + dz * cf.z, lat = fabsf(dx * cf.z - dz * cf.x);
+                    if (along <= 0 || lat > 1.2f) continue;
+                    score = along;
+                }
+                if (score < best) { best = score; bestVeh = g->firstPolice + i; bestPed = -1; }
+            }
         }
         if (bestPed >= 0) aim = v3(g->ped[bestPed].x, g->ped[bestPed].y + 1.2f, g->ped[bestPed].z);
         else if (bestVeh >= 0) aim = v3(g->veh[bestVeh].x, 0.9f, g->veh[bestVeh].z);
         else aim = v3add(muzzle, v3scale(cf, wd->range));
-        g->p.h = atan2f(aim.x - g->p.x, aim.z - g->p.z);
+        g->p.h = g->autoAim ? atan2f(aim.x - g->p.x, aim.z - g->p.z) : g->camYaw;
         for (pel = 0; pel < wd->pellets; pel++) {
             V3 d = v3norm(v3sub(aim, muzzle));
             float dist = v3len(v3sub(aim, muzzle)), hitP = 1.0f - wd->spread * (dist / wd->range) * 2.5f;

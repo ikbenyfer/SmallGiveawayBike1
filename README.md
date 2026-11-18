@@ -60,7 +60,7 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
     | Kogelwerend vest | $300 |
 
     Het vest vangt 75% van de schade op tot het op is. Je wapens, kogels en vest worden bewaard.
-  - **Schieten:** de knop **FIRE** richt vanzelf op het dichtstbijzijnde doel in je kijkrichting. Met **GUN** wissel je van wapen, en "FISTS" is geen wapen. Rechtsboven zie je je kogels. Schieten in de buurt van mensen, iemand raken of de politie raken geeft sterren. Mensen in de buurt rennen weg.
+  - **Schieten:** de knop **FIRE** richt vanzelf (auto-aim): **eerst op politie** (agenten en politieauto's), en alleen als die er niet is op gewone mensen. In SETTINGS zet je **AUTO AIM** uit. Dan schiet je recht vooruit in de kijkrichting van de camera en raak je alleen wat precies in die lijn staat. Met **GUN** wissel je van wapen, en "FISTS" is geen wapen. Rechtsboven zie je je kogels. Schieten in de buurt van mensen, iemand raken of de politie raken geeft sterren. Mensen in de buurt rennen weg.
   - **Agenten te voet:** vanaf 2 sterren stappen er agenten (blauw uniform, pet) uit de politieauto's. Ze rennen naar je toe en schieten terug. Je kunt politieauto's ook kapotschieten; die blijven dan donker staan.
   - **De Giveaway Bank** staat aan het plein, naast het standbeeld: een stenen gebouw met zuilen en een gouden bord. Aan de achterkant zit de kluisdeur, met een rode alarmlamp.
   - **Missie 11: THE BIG HEIST** ($5000, je hebt een wapen nodig):
@@ -102,7 +102,7 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
 - **Geld** verdien je met missies en met 18 stapels geld op de stoep, die na 2 minuten terugkomen. Je geld en je voortgang worden bewaard.
 - **Minimap** linksboven. Die draait mee met de camera en toont missiepunten en fietsen.
 - **Besturing:** een linker joystick om te bewegen of te sturen, een rechter joystick voor de camera, en de knoppen JUMP, RIDE/DRIVE/EXIT, GAS en BRAKE.
-- **Instellingen:** Graphics (laag, midden of hoog: zichtafstand 95, 135 of 180 m, 6, 10 of 14 voetgangers, 4, 7 of 10 auto's), tijd van de dag (schemer, nacht of dag), camerasnelheid, camera-Y omkeren, FPS tonen en voortgang wissen.
+- **Instellingen:** Auto aim aan/uit, Graphics (laag, midden of hoog: zichtafstand 95, 135 of 180 m, 6, 10 of 14 voetgangers, 4, 7 of 10 auto's), tijd van de dag (schemer, nacht of dag), camerasnelheid, camera-Y omkeren, FPS tonen en voortgang wissen.
 
 ## Prestaties: zo is het gebouwd
 Het spel draait op vaste 30 FPS. De wereld heeft geen texturen, alleen kleuren per vertex met vast ("gebakken") licht en zelf-lichtgevende ramen. Er zijn alleen blob-schaduwen en geen nabewerking. De stad zit in 64 statische VBO's met frustum- en afstandsculling en mist. Voetgangers en auto's worden hergebruikt (object pooling). De physics zijn simpel (cirkels tegen boxen).

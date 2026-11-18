@@ -56,7 +56,7 @@ static struct {
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
     int lOn, rOn;
     /* instellingen */
-    int quality, tod, camSpeed, invertY, showFps, resetArm;
+    int quality, tod, camSpeed, invertY, showFps, resetArm, autoAim;
     /* menu */
     int pressed;
     float fade, fadeDir;
@@ -147,6 +147,7 @@ static void apply_settings(void) {
         game_set_quality(&F.G, F.quality);
         F.G.camSens = sens[F.camSpeed % 3];
         F.G.invertY = F.invertY;
+        F.G.autoAim = F.autoAim;
     }
     r_set_tod(&F.R, F.tod);
 }
@@ -158,6 +159,7 @@ static void save_all(void) {
     plat_save_int("camspeed", F.camSpeed);
     plat_save_int("inverty", F.invertY);
     plat_save_int("showfps", F.showFps);
+    plat_save_int("autoaim", F.autoAim);
     if (F.loadDone && !F.at && F.mode == 0) {
         for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;
         plat_save_int("money", (int)F.G.money);
@@ -188,6 +190,7 @@ void fe_init(int w, int h) {
     F.camSpeed = plat_load_int("camspeed", 1);
     F.invertY = plat_load_int("inverty", 0);
     F.showFps = plat_load_int("showfps", 0);
+    F.autoAim = plat_load_int("autoaim", 1);
     r_set_tod(&F.R, F.tod);
     world_init(&F.W);
     F.loadTotal = 1 + world_build_steps() + 3;
@@ -403,22 +406,23 @@ static const char *C_NAMES[3] = {"SLOW", "NORMAL", "FAST"};
 static void draw_settings(void) {
     Renderer *R = &F.R;
     int i;
-    const char *labels[6] = {"GRAPHICS", "TIME OF DAY", "CAMERA SPEED", "INVERT CAMERA Y", "SHOW FPS", "RESET PROGRESS"};
-    const char *vals[6];
+    const char *labels[7] = {"GRAPHICS", "TIME OF DAY", "CAMERA SPEED", "INVERT CAMERA Y", "SHOW FPS", "AUTO AIM", "RESET PROGRESS"};
+    const char *vals[7];
     vals[0] = Q_NAMES[F.quality % 3];
     vals[1] = T_NAMES[F.tod % 3];
     vals[2] = C_NAMES[F.camSpeed % 3];
     vals[3] = F.invertY ? "ON" : "OFF";
     vals[4] = F.showFps ? "ON" : "OFF";
-    vals[5] = F.resetArm ? "TAP AGAIN!" : "";
+    vals[5] = F.autoAim ? "ON (POLICE FIRST)" : "OFF";
+    vals[6] = F.resetArm ? "TAP AGAIN!" : "";
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
     draw_backdrop(0.35f, 0.0f, F.t);
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.45f);
     ui_text(R, "SETTINGS", R->W * 0.5f, 40, 60, 1, 1, 1, 1, 1);
-    for (i = 0; i < 6; i++) {
-        float y = 160.0f + i * 74.0f;
+    for (i = 0; i < 7; i++) {
+        float y = 140.0f + i * 66.0f;
         int pr = F.pressed == i + 1;
-        ui_rect(R, 180, y - 6, R->W - 360.0f, 60, pr ? 0.5f : 0.08f, 0.04f, 0.04f, 0.55f);
+        ui_rect(R, 180, y - 6, R->W - 360.0f, 56, pr ? 0.5f : 0.08f, 0.04f, 0.04f, 0.55f);
         ui_text(R, labels[i], 210, y, 30, 1, 1, 1, 1, 0);
         ui_text(R, vals[i], R->W - 210.0f, y, 30, 1.0f, 0.8f, 0.3f, 1, 2);
     }
@@ -1835,21 +1839,22 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_SETTINGS) {
-        for (i = 0; i < 6; i++) {
-            float ry = 160.0f + i * 74.0f;
-            if (x > 180 && x < R->W - 180 && y > ry - 6 && y < ry + 54) hit = i + 1;
+        for (i = 0; i < 7; i++) {
+            float ry = 140.0f + i * 66.0f;
+            if (x > 180 && x < R->W - 180 && y > ry - 6 && y < ry + 50) hit = i + 1;
         }
         if (hit_text(x, y, "BACK", R->W * 0.5f, R->H - 74.0f + 24, 48)) hit = 10;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
-        if (hit != 6) F.resetArm = 0;
+        if (hit != 7) F.resetArm = 0;
         switch (hit) {
         case 1: F.quality = (F.quality + 1) % 3; break;
         case 2: F.tod = (F.tod + 1) % 3; break;
         case 3: F.camSpeed = (F.camSpeed + 1) % 3; break;
         case 4: F.invertY = !F.invertY; break;
         case 5: F.showFps = !F.showFps; break;
-        case 6:
+        case 6: F.autoAim = !F.autoAim; break;
+        case 7:
             if (F.resetArm) {
                 for (i = 0; i < NMISSIONS; i++) F.G.completed[i] = 0;
                 F.G.money = 0; F.G.moneyShown = 0;

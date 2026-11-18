@@ -92,7 +92,7 @@ typedef struct {
     float cashTimer[24];
 
     float health, hurtT, hurtFlash, armor;
-    int owned[4], ammo[4], weapon;
+    int owned[4], ammo[4], weapon, autoAim;
     float fireCool, muzzleT;
     struct { V3 a, b; float t; } tracer[MAX_TRACERS];
     int trNext;
