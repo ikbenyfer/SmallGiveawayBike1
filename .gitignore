@@ -1,0 +1,7 @@
+.theos/
+packages/
+ipa/
+*.o
+build-preview/
+preview_out/
+device_results/shots_tmp/

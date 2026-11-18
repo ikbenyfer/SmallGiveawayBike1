@@ -1,0 +1,140 @@
+name: Bouw Small Giveaway Bike 1
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  preview:
+    name: Linux-test + voorbeeldbeelden (geen iPad!)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pakketten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libegl-dev libgles-dev libegl-mesa0 libgl1-mesa-dri mesa-utils fonts-dejavu-core python3-pil
+
+      - name: Plaatjes en lettertype voor Linux
+        run: python3 tools/linux_assets.py preview_assets
+
+      - name: Compileren met strenge waarschuwingen + AddressSanitizer
+        shell: bash
+        run: |
+          gcc -std=c99 -O1 -g -Wall -Wextra -Wno-unused-parameter -Wno-misleading-indentation \
+            -fsanitize=address,undefined -fno-sanitize-recover=undefined \
+            Game/*.c Render/*.c Tests/preview_linux.c -o preview -lEGL -lGLESv2 -lm 2>&1 | tee compile.log
+          test -x preview
+
+      - name: Hele game + automatische test draaien
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          mkdir -p preview_out
+          ./preview | tee preview_out/run.log
+          cat preview_out/autotest_report.txt
+
+      - name: PPM naar PNG
+        run: |
+          python3 - <<'EOF'
+          import glob, os
+          from PIL import Image
+          for p in glob.glob("preview_out/*.ppm"):
+              Image.open(p).save(p[:-4] + ".png")
+              os.remove(p)
+          EOF
+          ls -l preview_out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview
+          path: |
+            preview_out
+            compile.log
+
+  build:
+    name: App bouwen (iOS 9, armv7)
+    runs-on: ubuntu-24.04
+    env:
+      THEOS: ${{ github.workspace }}/theos
+      SDK_NAME: iPhoneOS14.5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: project
+
+      - name: Linux-pakketten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential fakeroot rsync curl perl zip unzip git libtinfo6 file
+          sudo apt-get install -y libxml2 || sudo apt-get install -y libxml2-16
+
+      - name: Theos
+        run: git clone --recursive --depth=1 https://github.com/theos/theos.git "$THEOS"
+
+      - name: iOS-toolchain
+        run: |
+          mkdir -p "$THEOS/toolchain"
+          curl -fsSL "https://github.com/L1ghtmann/llvm-project/releases/latest/download/iOSToolchain-x86_64.tar.xz" \
+            | tar -xJf - -C "$THEOS/toolchain/"
+          ls "$THEOS/toolchain/linux/iphone/bin" | head
+
+      - name: ldid
+        run: |
+          TC="$THEOS/toolchain/linux/iphone/bin"
+          if command -v ldid >/dev/null 2>&1; then echo "ldid: $(command -v ldid)"
+          elif [ -x "$TC/ldid" ]; then sudo ln -sf "$TC/ldid" /usr/local/bin/ldid
+          else
+            sudo curl -fsSL -o /usr/local/bin/ldid "https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64"
+            sudo chmod +x /usr/local/bin/ldid
+          fi
+
+      - name: SDK
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          "$THEOS/bin/install-sdk" "$SDK_NAME"
+          rm -rf "$THEOS/sdks/$SDK_NAME.sdk/System/Library/PrivateFrameworks/WebKit.framework"
+
+      - name: App bouwen
+        working-directory: project
+        run: |
+          sed -i 's/\r$//' layout/DEBIAN/postinst
+          chmod 755 layout/DEBIAN/postinst
+          make clean package FINALPACKAGE=1 messages=yes
+
+      - name: Controleren (ARMv7 en iOS 9)
+        working-directory: project
+        run: |
+          APP=".theos/_/Applications/SmallGiveawayBike1.app"
+          BIN="$APP/SmallGiveawayBike1"
+          TC="$THEOS/toolchain/linux/iphone/bin"
+          INFO="$(file "$BIN")"
+          if [ -x "$TC/lipo" ]; then INFO="$INFO / $("$TC/lipo" -info "$BIN")"; fi
+          echo "Architectuur: $INFO"
+          echo "$INFO" | grep -qiE "armv7|arm_v7" || { echo "::error::geen armv7"; exit 1; }
+          if [ -x "$TC/otool" ]; then
+            "$TC/otool" -l "$BIN" | grep -A4 -E "LC_VERSION_MIN_IPHONEOS|LC_BUILD_VERSION" || true
+            "$TC/otool" -L "$BIN" || true
+          fi
+          ls -l "$APP"
+          du -sh "$APP"
+
+      - name: IPA maken
+        working-directory: project
+        run: |
+          rm -rf ipa
+          mkdir -p ipa/Payload
+          cp -R ".theos/_/Applications/SmallGiveawayBike1.app" ipa/Payload/
+          (cd ipa && zip -qr ../packages/SmallGiveawayBike1.ipa Payload)
+          ls -l packages
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SmallGiveawayBike1
+          path: |
+            project/packages/*.ipa
+            project/packages/*.deb
