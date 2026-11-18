@@ -5,3 +5,5 @@ ipa/
 build-preview/
 preview_out/
 device_results/shots_tmp/
+/*.ipa
+build-ipa/
