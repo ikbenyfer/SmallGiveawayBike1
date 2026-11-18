@@ -983,6 +983,31 @@ static void spawn_cops(Game *g) {
     int k, n = 0;
     for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) if (g->ped[k].active) n++;
     if (g->wanted < 2 || n >= MAX_COPS) return;
+    /* versterking te voet als de auto's je niet bereiken (bijv. achter de bank) */
+    if (n < 2 && g->time - g->lastCopSpawn > 6.0f) {
+        int c;
+        g->lastCopSpawn = g->time;
+        for (c = 0; c < 2; c++) {
+            int s, tries;
+            for (s = MAX_PED - MAX_COPS; s < MAX_PED && g->ped[s].active; s++) {}
+            if (s >= MAX_PED) break;
+            for (tries = 0; tries < 12; tries++) {
+                float a = rng_f(&g->rng) * 2 * PI_F, x = g->p.x + cosf(a) * 28.0f, z = g->p.z + sinf(a) * 28.0f, nx, nz;
+                world_push_circle(g->w, &x, &z, 0.5f, 0, &nx, &nz);
+                if (world_raycast(g->w, v3(x, 1.5f, z), v3(x, 1.5f, z)) < 0.5f) continue;
+                {
+                    Ped *p = &g->ped[s];
+                    memset(p, 0, sizeof(*p));
+                    p->active = 1; p->cop = 1; p->variant = COP_VARIANT;
+                    p->x = x; p->z = z; p->y = world_ground_y(g->w, x, z);
+                    p->hp = 70; p->speed = 4.2f; p->shootCool = 1.5f + c;
+                    p->h = atan2f(g->p.x - x, g->p.z - z);
+                    n++;
+                }
+                break;
+            }
+        }
+    }
     for (k = 0; k < MAX_POLICE && n < MAX_COPS; k++) {
         Vehicle *v = &g->veh[g->firstPolice + k];
         float dx, dz;

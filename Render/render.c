@@ -621,9 +621,10 @@ void r_draw_scene(Renderer *r, Game *g) {
                 tint(r, rr * 0.25f, gr * 0.2f, 0.04f);
                 draw_mesh(r, &r->cp, &m);
             } else {
+                float cdx = g->camPos.x - tg[k].x, cdz = g->camPos.z - tg[k].z;
                 m = m4_mul(m4_trs_y(tg[k].x, 0, tg[k].z, 0), m4_scale(rad, 4.5f, rad));
                 tint(r, 0.55f * pulse, 0.42f * pulse, 0.06f);
-                draw_mesh(r, &r->cp, &m);
+                if (cdx * cdx + cdz * cdz > (rad + 0.8f) * (rad + 0.8f)) draw_mesh(r, &r->cp, &m);   /* niet als de camera erin staat */
                 m = m4_mul(m4_trs_y(tg[k].x, world_ground_y(g->w, tg[k].x, tg[k].z) + 0.06f, tg[k].z, t), m4_scale(rad, 1, rad));
                 tint(r, 0.9f, 0.7f, 0.1f);
                 draw_mesh(r, &r->marker, &m);

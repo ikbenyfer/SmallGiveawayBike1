@@ -97,6 +97,7 @@ typedef struct {
     float holdT; int alarmDone;
     int shopOpen, inShop;
     int statShots, statHits, copShots;
+    float lastCopSpawn;
     int wanted;
     float evadeT, bustT, crimeCool, ramCool;
 
