@@ -608,7 +608,10 @@ static void draw_missions(void) {
         ui_rect(R, x, y, 6, 94, done ? 0.35f : 0.95f, done ? 0.9f : 0.75f, done ? 0.4f : 0.15f, 1);
         snprintf(b, sizeof(b), "%d. %s", i + 1, m->title);
         ui_text(R, b, x + 18, y + 6, 30, 1, 1, 1, 1, 0);
-        ui_text(R, m->brief, x + 18, y + 44, 15, 0.82f, 0.82f, 0.82f, 1, 0);
+        {
+            float bw = ui_text_w(R, m->brief, 15.0f), bs = bw > 404.0f ? 15.0f * 404.0f / bw : 15.0f;
+            ui_text(R, m->brief, x + 18, y + 44 + (15.0f - bs) * 0.5f, bs, 0.82f, 0.82f, 0.82f, 1, 0);
+        }
         snprintf(b, sizeof(b), "$%d", done ? m->reward / 2 : m->reward);
         ui_text(R, b, x + 426, y + 8, 26, 0.55f, 1.0f, 0.55f, 1, 2);
         ui_text(R, m->tag ? m->tag : "", x + 426, y + 66, 17, 1.0f, 0.8f, 0.3f, 1, 2);
