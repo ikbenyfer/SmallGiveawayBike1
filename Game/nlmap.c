@@ -42,14 +42,14 @@ void nl_url_bag3d(char *buf, int n, double cx, double cy) {
 
 void nl_url_bagpdok(char *buf, int n, double cx, double cy) {
     snprintf(buf, n, "https://api.pdok.nl/kadaster/bag/ogc/v2/collections/pand/items?bbox=%.0f,%.0f,%.0f,%.0f"
-             "&bbox-crs=" CRS "&crs=" CRS "&limit=1000&f=json",
-             cx - NL_HALF, cy - NL_HALF, cx + NL_HALF, cy + NL_HALF);
+             "&bbox-crs=%s&crs=%s&limit=1000&f=json",
+             cx - NL_HALF, cy - NL_HALF, cx + NL_HALF, cy + NL_HALF, CRS, CRS);
 }
 
 void nl_url_top10(char *buf, int n, const char *collection, double cx, double cy) {
     snprintf(buf, n, "https://api.pdok.nl/brt/top10nl/ogc/v1/collections/%s/items?bbox=%.0f,%.0f,%.0f,%.0f"
-             "&bbox-crs=" CRS "&crs=" CRS "&limit=1000&f=json",
-             collection, cx - NL_HALF, cy - NL_HALF, cx + NL_HALF, cy + NL_HALF);
+             "&bbox-crs=%s&crs=%s&limit=1000&f=json",
+             collection, cx - NL_HALF, cy - NL_HALF, cx + NL_HALF, cy + NL_HALF, CRS, CRS);
 }
 
 int nl_parse_geocode(char *json, long len, NLGeo *out) {
@@ -324,7 +324,7 @@ static void do_building(float *x, float *z, int n, const JV *props) {
     wall = col(walls[k][0], walls[k][1], walls[k][2]);
     roof = h < 12 ? col(96, 70, 62) : col(84, 84, 88);
     floors = (int)(h / 3.0f);
-    if (floors > 10) floors = 10;
+    if (floors > 6) floors = 6;
     for (i = 0; i < n; i++) {
         int j = (i + 1) % n, f, wn, q;
         float ex = x[j] - x[i], ez = z[j] - z[i], L = sqrtf(ex * ex + ez * ez);
@@ -337,9 +337,9 @@ static void do_building(float *x, float *z, int n, const JV *props) {
         mb_quad4(m, v3(x[i], 0, z[i]), v3(x[j], 0, z[j]), v3(x[j], h, z[j]), v3(x[i], h, z[i]), nrm,
                  col_mul(wall, 0.7f), col_mul(wall, 0.7f), wall, wall);
         add_seg(x[i], z[i], x[j], z[j], h);
-        if (L < 3.5f) continue;
-        wn = (int)(L / 3.2f);
-        if (wn > 6) wn = 6;
+        if (L < 4.5f) continue;
+        wn = (int)(L / 3.6f);
+        if (wn > 4) wn = 4;
         for (f = 0; f < floors; f++) {
             float y = f * 3.0f + 1.0f;
             for (q = 0; q < wn; q++) {

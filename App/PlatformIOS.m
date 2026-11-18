@@ -244,12 +244,12 @@ int plat_http_start(const char *url) {
     }
 }
 
-int plat_http_poll(int id, char **data, long *len) {
+int plat_http_poll(int rid, char **data, long *len) {
     id val;
-    if (!gNet || id <= 0) return -1;
+    if (!gNet || rid <= 0) return -1;
     @synchronized (gNet.results) {
-        val = gNet.results[@(id)];
-        if (val) [gNet.results removeObjectForKey:@(id)];
+        val = gNet.results[@(rid)];
+        if (val) [gNet.results removeObjectForKey:@(rid)];
     }
     if (!val) return 0;
     if (val == [NSNull null]) return -1;
