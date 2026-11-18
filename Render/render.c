@@ -661,6 +661,8 @@ void r_draw_scene(Renderer *r, Game *g) {
                 draw_mesh(r, &r->cp, &m);
             } else {
                 float cdx = g->camPos.x - tg[k].x, cdz = g->camPos.z - tg[k].z;
+                float pdx = g->p.x - tg[k].x, pdz = g->p.z - tg[k].z;
+                if (pdx * pdx + pdz * pdz < rad * rad) { cdx = 0; cdz = 0; }   /* speler staat erin: geen zuil */
                 m = m4_mul(m4_trs_y(tg[k].x, 0, tg[k].z, 0), m4_scale(rad, 4.5f, rad));
                 tint(r, 0.55f * pulse, 0.42f * pulse, 0.06f);
                 if (cdx * cdx + cdz * cdz > (rad + 0.8f) * (rad + 0.8f)) draw_mesh(r, &r->cp, &m);   /* niet als de camera erin staat */

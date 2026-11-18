@@ -1370,7 +1370,7 @@ static void update_police(Game *g, Vehicle *v, float dt) {
         drive_vehicle(g, v, 0, 1, -steer, dt);
         return;
     }
-    if (d < 6.0f) { thr = 0; brk = fabsf(v->speed) > 1.5f ? 1.0f : 0.0f; }
+    if (d < 12.0f) { thr = d > 7.0f && fabsf(v->speed) < 3.0f ? 0.4f : 0.0f; brk = fabsf(v->speed) > 3.0f || d < 7.0f ? 1.0f : 0.0f; }
     else if (fabsf(diff) > 1.7f && d < 14.0f) { thr = 0; brk = 1; }
     if (v->speed > 17.0f) thr = 0;
     drive_vehicle(g, v, thr, brk, steer, dt);
