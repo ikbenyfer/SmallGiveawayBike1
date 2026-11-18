@@ -161,6 +161,20 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph�
   - `tools/build_region_pack.py` maakt het pakket opnieuw (op de pc, met internet).
   - Bronvermelding: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, PDOK), gemeentegrenzen en postcodes (PDOK). Alles valt onder CC BY 4.0.
   - iOS 9 kent de rootcertificaten van 3D BAG niet. Daarom zitten ISRG Root X1/X2 en DigiCert Global Root G2 in de app als **extra** vertrouwensanker; de normale controle blijft aan. Lukt 3D BAG toch niet, dan valt de app terug op PDOK BAG met geschatte hoogtes.
+- **Rennen en uithoudingsvermogen:**
+  - Houd **RUN** ingedrukt (op Windows/Linux: Shift) om te rennen. Normaal lopen gaat 15 km/h, rennen 27 km/h.
+  - Rennen kost uithoudingsvermogen: de gele balk onder je gezondheid. Is die leeg, dan ben je buiten adem en kun je pas weer rennen als hij terug op 30% staat.
+- **Eigen huis** (paars huisje op de kaart, aan de oostrand van de stad):
+  - **Binnen:** loop naar de voordeur (paarse ring) om naar binnen te gaan. Binnen staan een bed, een bank met tv en een bureau met laptop.
+    - In het bed herstel je je gezondheid en je uithoudingsvermogen.
+    - Op de laptop koop je upgrades.
+    - De gele deur naast de tv gaat naar de garage.
+  - **Groter maken:** van SMALL HOUSE naar FAMILY HOUSE ($25.000, met keuken en veranda) en daarna naar VILLA ($75.000, met glazen gevel, balkon, eettafel en boekenkast).
+  - **Ondergrondse garage:** rijd de oprit in (paarse ring bij de garage-ingang).
+    - De garage begint met 1 plek en groeit tot 4 plekken ($10.000, $20.000, $35.000).
+    - Je gekochte auto's en motoren staan hier geparkeerd. Wat niet past, blijft bij GIVEAWAY MOTORS staan.
+    - Rijd naar het groene EXIT-bord om weer naar buiten te gaan.
+  - Als de politie je zoekt, kun je niet naar binnen.
 - **GOLD RESERVE HEIST** (missie 20): de zwaarste klus. Je moet 30 seconden in de kluis blijven, met een alarm van 3 sterren. Daarna rijd je het goud langs twee hoeken van de stad en schud je de politie af bij de garage, binnen 5 minuten. De eerste keer krijg je $15.000, daarna $10.000 per keer.
 - **ONLINE (multiplayer, peer-to-peer, max. 4 spelers)** – iPad en Windows kunnen samen spelen, er is geen server nodig.
   - **HOST A GAME** (hoofdmenu → ONLINE) start de stad als host. Wil je samen in REAL NL spelen, kies dan in het pauzemenu **HOST ONLINE**: iedereen komt dan op dezelfde postcode.

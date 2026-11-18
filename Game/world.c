@@ -655,6 +655,7 @@ static void gen_outer(void) {
         else if (side == 1) { x = MAPW + d; z = u; }
         else if (side == 2) { x = u; z = MAPW + d; }
         else { x = -d; z = u; }
+        if (x > 401.0f && x < 437.0f && z > 172.0f && z < 226.0f) continue;   /* perceel van het eigen huis */
         at(x, z);
         tree(x, z, &r);
     }

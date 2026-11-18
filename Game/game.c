@@ -1,4 +1,5 @@
 #include "game.h"
+#include "home.h"
 #include "models.h"
 #include <string.h>
 #include <stdio.h>
@@ -333,6 +334,7 @@ static int need_ok(const Game *g, int need) {
 static void player_pos(const Game *g, float *x, float *z) {
     if (g->p.veh >= 0) { *x = g->veh[g->p.veh].x; *z = g->veh[g->p.veh].z; }
     else { *x = g->p.x; *z = g->p.z; }
+    if (!g->nl && *x < HOME_ZONE_X) { home_door(g->homeLvl, x, z); return; }
 }
 
 static void update_missions(Game *g, float dt) {
@@ -538,8 +540,21 @@ static void collide_vehicles(Game *g, Vehicle *a) {
 static void vehicle_world_collide(Game *g, Vehicle *v) {
     float nx = 0, nz = 0;
     int hit = 0;
+    if (!g->nl) {
+        float ox = v->x, oz = v->z;
+        if (v->type == VEH_BIKE) hit = home_push(g->homeLvl, g->garLvl, &v->x, &v->z, 0.5f);
+        else {
+            V3 f = fwd_of(v->h);
+            int k;
+            for (k = -1; k <= 1; k += 2) {
+                float cx = v->x + f.x * 1.15f * k, cz = v->z + f.z * 1.15f * k, px = cx, pz = cz;
+                if (home_push(g->homeLvl, g->garLvl, &cx, &cz, 0.95f)) { v->x += cx - px; v->z += cz - pz; hit = 1; }
+            }
+        }
+        if (hit) { nx = v->x - ox; nz = v->z - oz; { float l = sqrtf(nx * nx + nz * nz); if (l > 1e-5f) { nx /= l; nz /= l; } } }
+    }
     if (v->type == VEH_BIKE) {
-        hit = world_push_circle(g->w, &v->x, &v->z, 0.5f, v->y + 0.2f, &nx, &nz);
+        hit |= world_push_circle(g->w, &v->x, &v->z, 0.5f, v->y + 0.2f, &nx, &nz);
     } else {
         V3 f = fwd_of(v->h);
         int k;
@@ -890,6 +905,7 @@ void game_init(Game *g, World *w) {
     g->p.h = w->spawn_heading;
     g->p.y = world_ground_y(w, g->p.x, g->p.z);
     g->p.veh = -1;
+    g->stamina = 100.0f;
     g->p.onGround = 1;
     g->camYaw = g->p.h;
     g->camPitch = 0.32f;
@@ -936,6 +952,109 @@ void game_teleport(Game *g, float x, float z, float h) {
     g->camYaw = h;
 }
 
+
+/* ------------------------------------------------------------------ eigen huis */
+
+int game_home_inside(const Game *g) {
+    float x = g->p.veh >= 0 ? g->veh[g->p.veh].x : g->p.x, z = g->p.veh >= 0 ? g->veh[g->p.veh].z : g->p.z;
+    float a, b, c, d;
+    if (g->nl) return 0;
+    return home_room_at(g->homeLvl, g->garLvl, x, z, &a, &b, &c, &d);
+}
+
+int game_home_upgrade(Game *g, int house) {
+    int *lvl = house ? &g->homeLvl : &g->garLvl;
+    int price = home_upgrade_price(house, *lvl);
+    if (price < 0) return -1;
+    if (g->money < price) return 0;
+    g->money -= price;
+    (*lvl)++;
+    g->moneyFlash = 1.0f;
+    game_sfx(g, SFX_BUY, g->p.x, g->p.z);
+    if (!house) game_spawn_owned(g);
+    else if (game_home_inside(g) == 1) {   /* nieuwe kamer: bij de voordeur binnen beginnen */
+        float x0, z0, x1, z1;
+        home_room(g->homeLvl, &x0, &z0, &x1, &z1);
+        game_teleport(g, x1 - 2.2f, z1 - 1.8f, -PI_F * 0.5f);
+    }
+    return 1;
+}
+
+static void home_go(Game *g, float x, float z, float h, const char *msg) {
+    if (g->p.veh >= 0) g->veh[g->p.veh].speed *= 0.3f;
+    game_teleport(g, x, z, h);
+    g->camPos = v3(x - sinf(h) * 3.0f, 2.2f, z - cosf(h) * 3.0f);
+    g->homeCool = 0.8f;
+    if (msg) game_message(g, msg, 2.0f);
+}
+
+static void home_action(Game *g, int kind) {
+    float x0, z0, x1, z1, dx, dz;
+    int foot = g->p.veh < 0;
+    switch (kind) {
+    case HM_FRONTDOOR:
+        if (!foot) break;
+        if (g->wanted > 0) { game_message(g, "The police are watching - lose them first!", 2.0f); break; }
+        home_room(g->homeLvl, &x0, &z0, &x1, &z1);
+        home_go(g, x0 + 2.0f, (z0 + z1) * 0.5f, PI_F * 0.5f, "Home sweet home");
+        break;
+    case HM_RAMP:
+        if (g->wanted > 0) { game_message(g, "The police are watching - lose them first!", 2.0f); break; }
+        home_garage_room(g->garLvl, &x0, &z0, &x1, &z1);
+        if (foot) home_go(g, x1 - 4.0f, z1 - 1.6f, -PI_F * 0.5f, "Your garage");
+        else home_go(g, x1 - 6.5f, z1 - 3.5f, -PI_F * 0.5f, "Your garage - park on a free spot");
+        break;
+    case HM_EXIT:
+        if (!foot) break;
+        home_door(g->homeLvl, &dx, &dz);
+        home_go(g, dx - 1.2f, dz, -PI_F * 0.5f, NULL);
+        break;
+    case HM_LAPTOP:
+        if (foot) g->homeMenuOpen = 1;
+        break;
+    case HM_BED:
+        if (!foot) break;
+        g->health = 100.0f;
+        g->stamina = 100.0f; g->tired = 0;
+        game_message(g, "You took a nap. Health restored!", 2.5f);
+        game_sfx(g, SFX_CASH, g->p.x, g->p.z);
+        break;
+    case HM_TOGARAGE:
+        if (!foot) break;
+        home_garage_room(g->garLvl, &x0, &z0, &x1, &z1);
+        home_go(g, x0 + 2.6f, z1 - 1.5f, PI_F * 0.5f, "Your garage");
+        break;
+    case HM_GAR_EXIT:
+        home_go(g, HOME_RAMP_X - 4.8f, HOME_RAMP_Z, -PI_F * 0.5f, NULL);
+        break;
+    case HM_GAR_HOUSE:
+        if (!foot) break;
+        home_room(g->homeLvl, &x0, &z0, &x1, &z1);
+        home_go(g, x0 + 1.6f, z0 + 2.2f, 0.0f, NULL);
+        break;
+    default: break;
+    }
+}
+
+static void home_tick(Game *g, float dt) {
+    V3 pos[12];
+    int kind[12], n, i, cur = HM_NONE;
+    float rad[12], px, pz;
+    if (g->nl) return;
+    if (g->homeCool > 0) g->homeCool -= dt;
+    px = g->p.veh >= 0 ? g->veh[g->p.veh].x : g->p.x;
+    pz = g->p.veh >= 0 ? g->veh[g->p.veh].z : g->p.z;
+    n = home_markers(g->homeLvl, g->garLvl, pos, kind, rad, 12);
+    for (i = 0; i < n; i++) {
+        float dx = px - pos[i].x, dz = pz - pos[i].z;
+        if (dx * dx + dz * dz < rad[i] * rad[i]) { cur = kind[i]; break; }
+    }
+    if (cur != g->homeMarker) {
+        g->homeMarker = cur;
+        if (cur != HM_NONE && g->homeCool <= 0) home_action(g, cur);
+    }
+}
+
 /* ------------------------------------------------------------------ update */
 
 static void update_player_foot(Game *g, const Input *in, float dt) {
@@ -946,10 +1065,19 @@ static void update_player_foot(Game *g, const Input *in, float dt) {
     float ground, nx, nz;
     int i;
     if (mag > 1) { mx /= mag; my /= mag; mag = 1; }
+    /* rennen kost uithoudingsvermogen; leeg = even uitgeput tot 30 */
+    g->running = in->run && mag > 0.3f && !g->tired && g->stamina > 0;
+    if (g->running) {
+        g->stamina -= 20.0f * dt;
+        g->staminaCool = 0.9f;
+        if (g->stamina <= 0) { g->stamina = 0; g->tired = 1; game_message(g, "Out of breath!", 1.2f); }
+    } else if (g->staminaCool > 0) g->staminaCool -= dt;
+    else g->stamina = fminf(100.0f, g->stamina + (mag > 0.3f ? 11.0f : 22.0f) * dt);
+    if (g->tired && g->stamina >= 30.0f) g->tired = 0;
     if (mag > 0.12f) {
         V3 d = v3add(v3scale(f, my), v3scale(r, mx));
         p->h = approach_angle(p->h, atan2f(d.x, d.z), 11.0f * dt);
-        p->speed = approachf(p->speed, mag * 6.2f, 22.0f * dt);
+        p->speed = approachf(p->speed, mag * (g->running ? 7.4f : (g->tired ? 3.2f : 4.3f)), 22.0f * dt);
     } else {
         p->speed = approachf(p->speed, 0, 25.0f * dt);
     }
@@ -965,6 +1093,7 @@ static void update_player_foot(Game *g, const Input *in, float dt) {
     if (p->y <= ground) { p->y = ground; p->vy = 0; p->onGround = 1; }
     else if (p->y > ground + 0.05f) p->onGround = 0;
     world_push_circle(g->w, &p->x, &p->z, 0.35f, p->y, &nx, &nz);
+    if (!g->nl) home_push(g->homeLvl, g->garLvl, &p->x, &p->z, 0.35f);
     for (i = 0; i < g->nveh; i++) {
         Vehicle *v = &g->veh[i];
         float dx, dz, d2, rr;
@@ -998,6 +1127,8 @@ static void update_camera(Game *g, const Input *in, float dt) {
     int mode = game_mode(g);
     V3 target;
     float wantDist = mode == MODE_CAR ? 8.0f : (mode == MODE_BIKE ? 5.8f : 4.6f);
+    int indoors = !g->nl && game_home_inside(g);
+    if (indoors) wantDist = mode == MODE_CAR ? 6.0f : 3.3f;
     float lx = in->lx, ly = in->ly;
     if (mode == MODE_FOOT) target = v3(g->p.x, g->p.y + 1.55f, g->p.z);
     else {
@@ -1028,6 +1159,13 @@ static void update_camera(Game *g, const Input *in, float dt) {
         }
         gy = world_ground_y(g->w, want.x, want.z) + 0.35f;
         if (want.y < gy) want.y = gy;
+        if (indoors) {
+            float x0, z0, x1, z1;
+            home_room_at(g->homeLvl, g->garLvl, target.x, target.z, &x0, &z0, &x1, &z1);
+            want.x = clampf(want.x, x0 + 0.3f, x1 - 0.3f);
+            want.z = clampf(want.z, z0 + 0.3f, z1 - 0.3f);
+            want.y = fminf(want.y, 2.75f);
+        }
         g->camPos = want;
         g->camTarget = target;
     }
@@ -1379,7 +1517,7 @@ float car_top_speed(const Vehicle *v) {
     return CARS[v->model % DEALER_MODELS].maxF * (1.0f + 0.08f * v->eng);
 }
 
-static void place_owned(Game *g, int slot) {
+static void place_owned(Game *g, int slot, int atDealer) {
     Vehicle *v = &g->veh[g->firstOwned + slot];
     GarageCar *c = &g->garage[slot];
     memset(v, 0, sizeof(*v));
@@ -1388,13 +1526,18 @@ static void place_owned(Game *g, int slot) {
     v->model = c->model; v->paint = c->paint; v->eng = c->eng; v->hand = c->hand; v->neon = c->neon; v->spoiler = c->spoiler;
     v->garageSlot = slot;
     v->x = g->w->dealerSpot[slot].x; v->z = g->w->dealerSpot[slot].z; v->h = g->w->dealerSpotH;
+    if (!atDealer && !g->nl) {   /* plekken in de ondergrondse garage van je huis */
+        int k, idx = 0;
+        for (k = 0; k < slot; k++) if (g->garage[k].exists) idx++;
+        if (idx <= g->garLvl) home_garage_spot(g->garLvl, idx, &v->x, &v->z, &v->h);
+    }
     v->y = world_ground_y(g->w, v->x, v->z);
 }
 
 void game_spawn_owned(Game *g) {
     int i;
     if (g->nl) return;
-    for (i = 0; i < MAX_OWNED; i++) place_owned(g, i);
+    for (i = 0; i < MAX_OWNED; i++) if (g->p.veh != g->firstOwned + i) place_owned(g, i, 0);
 }
 
 /* 1 = gekocht (speler zit erin), 0 = te weinig geld, -1 = garage vol */
@@ -1409,7 +1552,7 @@ int game_buy_car(Game *g, int model) {
     g->garage[slot].model = model;
     g->garage[slot].paint = model_default_paint(model);
     g->garage[slot].eng = g->garage[slot].hand = g->garage[slot].neon = g->garage[slot].spoiler = 0;
-    place_owned(g, slot);
+    place_owned(g, slot, 1);
     if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; }
     g->p.veh = g->firstOwned + slot;
     g->p.x = g->veh[g->p.veh].x; g->p.z = g->veh[g->p.veh].z; g->p.h = g->veh[g->p.veh].h;
@@ -1755,6 +1898,7 @@ void game_update(Game *g, const Input *in, float dt) {
             g->p.x = clampf(g->p.x, lo, hi); g->p.z = clampf(g->p.z, lo, hi); game_message(g, "Edge of the map", 1.5f);
         }
     }
+    home_tick(g, dt);
     player_pos(g, &px, &pz);
 
     /* verkeer: pooling rond de speler */

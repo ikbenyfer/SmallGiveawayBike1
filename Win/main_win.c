@@ -553,7 +553,7 @@ int main(int argc, char **argv) {
             keys.my = (float)((k[SDL_SCANCODE_W] || k[SDL_SCANCODE_UP]) - (k[SDL_SCANCODE_S] || k[SDL_SCANCODE_DOWN]));
             keys.gas = k[SDL_SCANCODE_W] || k[SDL_SCANCODE_UP];
             keys.brake = k[SDL_SCANCODE_S] || k[SDL_SCANCODE_DOWN];
-            if (k[SDL_SCANCODE_LSHIFT]) keys.my *= 0.5f;   /* rustig lopen */
+            keys.run = k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT];   /* rennen */
             keys.fire = rel && (mb & SDL_BUTTON_LMASK);
             keys.jumpPressed = edgeJump; keys.actionPressed = edgeAction; keys.switchPressed = edgeSwitch;
             edgeJump = edgeAction = edgeSwitch = 0;

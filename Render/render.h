@@ -33,6 +33,7 @@ typedef struct {
     GMesh cash, gift, cp, arrow, shadow, marker, siren, gun, tracer, spoiler, weapon[4];
     GMesh carBody[CAR_MODELS], carDetail[CAR_MODELS], moto[MOTO_MODELS];
     GMesh carBodyLo[CAR_MODELS], carDetailLo[CAR_MODELS], motoLo[MOTO_MODELS];
+    GMesh homeExt[3], homeInt[3], homeGar[4];   /* eigen huis: buiten, binnen, ondergrondse garage */
     struct RWorld {
         GMesh ground;
         GMesh chunk[RW_SLOTS];
@@ -82,7 +83,7 @@ void ui_circle(Renderer *r, float x, float y, float rad, float cr, float cg, flo
 void ui_ring(Renderer *r, float x, float y, float rad, float thick, float cr, float cg, float cb, float ca);
 float ui_text_w(Renderer *r, const char *s, float size);
 /* kaart-icoontje: 0 wapenwinkel, 1 bank, 2 dealer, 3 customs, 4 missie, 5 missie gehaald */
-enum { ICON_GUN = 0, ICON_BANK, ICON_CAR, ICON_CUSTOMS, ICON_MISSION, ICON_DONE, ICON_COUNT };
+enum { ICON_GUN = 0, ICON_BANK, ICON_CAR, ICON_CUSTOMS, ICON_MISSION, ICON_DONE, ICON_HOME, ICON_COUNT };
 void ui_icon(Renderer *r, int idx, float cx, float cy, float size, float alpha);
 /* align: 0 links, 1 midden, 2 rechts */
 void ui_text(Renderer *r, const char *s, float x, float y, float size, float cr, float cg, float cb, float ca, int align);

@@ -1,5 +1,5 @@
 """Tekent de kaart-icoontjes (eigen pictogrammen) naar Resources/icons.png.
-Volgorde (64 x 64 elk, naast elkaar): 0 wapenwinkel, 1 bank, 2 autodealer, 3 customs, 4 missie, 5 missie gehaald.
+Volgorde (64 x 64 elk, naast elkaar): 0 wapenwinkel, 1 bank, 2 autodealer, 3 customs, 4 missie, 5 missie gehaald, 6 eigen huis.
 Gebruik: py -3.12 tools/make_icons.py
 """
 import os
@@ -67,6 +67,14 @@ icons.append(im)
 # 5: missie gehaald (vinkje)
 im, d = badge((90, 200, 90, 255))
 d.line(P((18, 33), (28, 43), (47, 21)), fill=W, width=7 * S, joint="curve")
+icons.append(im)
+
+# 6: eigen huis (dak + huisje + deur)
+im, d = badge((150, 70, 210, 255))
+d.polygon(P((32, 12), (52, 30), (12, 30)), fill=W)
+d.rectangle(P((17, 29), (47, 50)), fill=W)
+d.rectangle(P((28, 36), (36, 50)), fill=(150, 70, 210, 255))
+d.rectangle(P((40, 15), (45, 24)), fill=W)
 icons.append(im)
 
 atlas = Image.new("RGBA", (64 * len(icons), 64), (0, 0, 0, 0))

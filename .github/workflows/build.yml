@@ -201,6 +201,7 @@ jobs:
             Muis                  rondkijken (in het spel wordt de muis gevangen; Esc geeft hem terug)
             Linkermuisknop        schieten (met een wapen)
             Spatie                springen
+            Shift                 rennen (kost uithoudingsvermogen)
             E of F                in- en uitstappen
             Q                     ander wapen
             M of Tab              grote kaart (slepen = schuiven, scrollwiel = zoomen)
@@ -255,12 +256,14 @@ jobs:
           (Fedora: sudo dnf install SDL2 SDL2_mixer libcurl)
 
           Starten:  ./SmallGiveawayBike1   (de map data moet ernaast blijven staan)
+          Je huis staat aan de oostrand van de stad (paars huisje op de kaart).
 
           Besturing
             W A S D / pijltjes   lopen, of in een voertuig: W gas, S rem/achteruit, A/D sturen
             Muis                  rondkijken (Esc geeft de muis terug)
             Linkermuisknop        schieten (met een wapen)
             Spatie                springen
+            Shift                 rennen (kost uithoudingsvermogen)
             E of F                in- en uitstappen
             Q                     ander wapen
             M of Tab              grote kaart

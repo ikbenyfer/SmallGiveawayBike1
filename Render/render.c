@@ -1,4 +1,5 @@
 #include "render.h"
+#include "../Game/home.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -275,6 +276,8 @@ void r_build_models(Renderer *r) {
                  r->car[0].count, r->carBody[3].count + r->carDetail[3].count, r->moto[1].count, r->bike[0].count, tv);
     }
     BUILD(r->tracer, model_tracer(&m));
+    for (i = 0; i < 3; i++) { BUILD(r->homeExt[i], home_build_exterior(&m, i)); BUILD(r->homeInt[i], home_build_interior(&m, i)); }
+    for (i = 0; i < 4; i++) BUILD(r->homeGar[i], home_build_garage(&m, i));
 #undef BUILD
     mb_free(&m);
 }
@@ -389,7 +392,7 @@ static CPose pose_lerp(CPose a, CPose b, float t) {
 /* lopen/rennen (speed in m/s), of stilstaan met ademhaling */
 static CPose pose_walk(float w, float speed, int idSeed) {
     CPose p;
-    float run = clampf((speed - 2.6f) / 3.0f, 0, 1), mv = clampf(speed / 1.2f, 0, 1);
+    float run = clampf((speed - 4.6f) / 2.4f, 0, 1), mv = clampf(speed / 1.2f, 0, 1);
     float A = lerpf(0.5f, 0.92f, run) * mv, K = lerpf(0.6f, 1.4f, run) * mv;
     int i;
     memset(&p, 0, sizeof(p));
@@ -705,6 +708,17 @@ void r_draw_scene(Renderer *r, Game *g) {
             nsh++;
         }
     }
+    /* eigen huis: buitenkant in de stad; interieur en garage liggen ver weg (alleen als je daar bent) */
+    if (!g->nl) {
+        M4 id = m4_identity();
+        int hl = g->homeLvl < 0 ? 0 : (g->homeLvl > 2 ? 2 : g->homeLvl), gl = g->garLvl < 0 ? 0 : (g->garLvl > 3 ? 3 : g->garLvl);
+        if (sphere_visible(r, (HOME_PLOT_X0 + HOME_PLOT_X1) * 0.5f, 3, (HOME_PLOT_Z0 + HOME_PLOT_Z1) * 0.5f, 30, fogEnd))
+            draw_mesh(r, &r->homeExt[hl], &id);
+        if (r->cam.x < HOME_ZONE_X) {
+            draw_mesh(r, &r->homeInt[hl], &id);
+            draw_mesh(r, &r->homeGar[gl], &id);
+        }
+    }
     /* voetgangers */
     for (i = 0; i < MAX_PED; i++) {
         Ped *p = &g->ped[i];
@@ -846,6 +860,21 @@ void r_draw_scene(Renderer *r, Game *g) {
                 M4 m = m4_mul(m4_trs_y(pp.x, world_ground_y(g->w, pp.x, pp.z) + 0.06f, pp.z, t), m4_scale(rs, 1, rs));
                 if (!sphere_visible(r, pp.x, 1, pp.z, 4, fogEnd)) continue;
                 tint(r, mc[q][0] * pulse, mc[q][1] * pulse, mc[q][2] * pulse);
+                draw_mesh(r, &r->marker, &m);
+            }
+        }
+        if (!g->nl) {
+            static const float hc[9][3] = {{0, 0, 0}, {0.75f, 0.35f, 1.0f}, {0.75f, 0.35f, 1.0f}, {0.3f, 1.0f, 0.4f}, {0.2f, 0.6f, 1.0f},
+                                           {1.0f, 0.85f, 0.3f}, {1.0f, 0.75f, 0.1f}, {0.3f, 1.0f, 0.4f}, {1.0f, 0.75f, 0.1f}};
+            V3 hp[12];
+            int hk[12], q, nhm;
+            float hr[12];
+            nhm = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
+            for (q = 0; q < nhm; q++) {
+                float pulse = 0.75f + 0.25f * sinf(t * 4.0f + q), rs = hr[q] * 0.9f;
+                M4 m = m4_mul(m4_trs_y(hp[q].x, 0.06f, hp[q].z, t), m4_scale(rs, 1, rs));
+                if (!sphere_visible(r, hp[q].x, 1, hp[q].z, 3, fogEnd)) continue;
+                tint(r, hc[hk[q]][0] * pulse, hc[hk[q]][1] * pulse, hc[hk[q]][2] * pulse);
                 draw_mesh(r, &r->marker, &m);
             }
         }

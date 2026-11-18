@@ -38,6 +38,7 @@ typedef struct {
     int jump, action, gas, brake;
     int jumpPressed, actionPressed;
     int fire, switchPressed;
+    int run;               /* RUN-knop / Shift ingedrukt */
 } Input;
 
 typedef struct {
@@ -136,6 +137,12 @@ typedef struct {
 
     /* statistiek voor test/rapport */
     int statMissionsPassed, statCash, statEnter, statJumps;
+
+    /* rennen */
+    float stamina, staminaCool; int tired, running;
+    /* eigen huis (alleen in de stad) */
+    int homeLvl, garLvl, homeMarker, homeMenuOpen;
+    float homeCool;
 } Game;
 
 void game_init(Game *g, World *w);
@@ -162,6 +169,8 @@ extern const CarDef CARS[];   /* DEALER_MODELS: eerst auto's, dan motoren (IS_MO
 extern const int ENGINE_PRICE[3], HANDLING_PRICE[3];
 float car_top_speed(const Vehicle *v);
 void game_spawn_owned(Game *g);
+int game_home_upgrade(Game *g, int house);   /* 1 gelukt, 0 te weinig geld, -1 al het grootst */
+int game_home_inside(const Game *g);         /* 0 buiten, 1 in huis, 2 in de garage */
 int game_buy_car(Game *g, int model);
 void game_sell_car(Game *g, int slot);
 int game_custom_price(const Game *g, int item);   /* 0 lak, 1 motor, 2 handling, 3 neon, 4 spoiler */

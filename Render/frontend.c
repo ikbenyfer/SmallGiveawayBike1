@@ -9,6 +9,7 @@
 
 #include "nlstream.h"
 #include "mp.h"
+#include "../Game/home.h"
 #define NL_MAX_AREAS 64
 #define NL_DL_R 2
 
@@ -28,8 +29,8 @@ typedef struct { char pc[8]; char name[96]; long kb; double rx, ry; } NLArea;
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP };
-enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME };
+enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH, CTL_RUN };
 
 #define NTOUCH 10
 #define STICK_R 78.0f
@@ -57,6 +58,7 @@ static struct {
     int jumpEdge, actionEdge, switchEdge;
     char shopMsg[96];
     float atMaxSpeed;
+    int atShot2;
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
     int lOn, rOn;
@@ -185,6 +187,8 @@ static void save_all(void) {
         plat_save_int("guns", F.G.owned[1] | (F.G.owned[2] << 1) | (F.G.owned[3] << 2));
         plat_save_int("ammo1", F.G.ammo[1]); plat_save_int("ammo2", F.G.ammo[2]); plat_save_int("ammo3", F.G.ammo[3]);
         plat_save_int("armor", (int)F.G.armor);
+        plat_save_int("home", F.G.homeLvl);
+        plat_save_int("garage", F.G.garLvl);
         {
             int c;
             for (c = 0; c < MAX_OWNED; c++) {
@@ -272,6 +276,10 @@ static void load_step(void) {
                 F.G.owned[1] = guns & 1; F.G.owned[2] = (guns >> 1) & 1; F.G.owned[3] = (guns >> 2) & 1;
                 F.G.ammo[1] = plat_load_int("ammo1", 0); F.G.ammo[2] = plat_load_int("ammo2", 0); F.G.ammo[3] = plat_load_int("ammo3", 0);
                 F.G.armor = (float)plat_load_int("armor", 0);
+                F.G.homeLvl = plat_load_int("home", 0);
+                F.G.garLvl = plat_load_int("garage", 0);
+                if (F.G.homeLvl < 0 || F.G.homeLvl >= HOME_LEVELS) F.G.homeLvl = 0;
+                if (F.G.garLvl < 0 || F.G.garLvl >= GARAGE_LEVELS) F.G.garLvl = 0;
             }
             {
                 int c;
@@ -545,20 +553,21 @@ static void draw_minimap(void) {
         }
     }
     if (!g->nl) {
-        V3 pts[4];
+        V3 pts[5];
         int q;
         static const float bc[4][3] = {{0.95f, 0.15f, 0.15f}, {0.2f, 0.75f, 0.3f}, {1.0f, 0.55f, 0.1f}, {0.2f, 0.45f, 1.0f}};
         pts[0] = g->w->poi[POI_GUNSHOP];
         pts[1] = g->w->poi[POI_BANK];
         pts[2] = g->w->poi[POI_DEALER];
         pts[3] = g->w->poi[POI_CUSTOMS];
-        for (q = 0; q < 4; q++) {
+        home_door(g->homeLvl, &pts[4].x, &pts[4].z);
+        for (q = 0; q < 5; q++) {
             float rx = pts[q].x - px, rz = pts[q].z - pz;
             float sx = (rx * rt.x + rz * rt.z) / rad, sy = -(rx * f.x + rz * f.z) / rad;
             float m = fmaxf(fabsf(sx), fabsf(sy));
             if (m > 0.9f) { sx = sx / m * 0.9f; sy = sy / m * 0.9f; }
             (void)bc;
-            ui_icon(R, q == 0 ? ICON_GUN : (q == 1 ? ICON_BANK : (q == 2 ? ICON_CAR : ICON_CUSTOMS)), cx + sx * half, cy + sy * half, 24, 1);
+            ui_icon(R, q == 0 ? ICON_GUN : (q == 1 ? ICON_BANK : (q == 2 ? ICON_CAR : (q == 3 ? ICON_CUSTOMS : ICON_HOME))), cx + sx * half, cy + sy * half, 24, 1);
         }
     }
     /* speler-pijl */
@@ -602,6 +611,7 @@ static void btn_pos(int ctl, float *x, float *y, float *r) {
         int armed = F.loadDone && game_has_weapon(&F.G);
         if (ctl == CTL_JUMP) { *x = W - 74; *y = H - 300; *r = 52; }
         if (ctl == CTL_ACTION) { *x = W - 196; *y = H - 330; *r = 48; }
+        if (ctl == CTL_RUN) { *x = W - 316; *y = H - 300; *r = 44; }
         if (ctl == CTL_FIRE && armed) { *x = W - 74; *y = H - 430; *r = 54; }
         if (ctl == CTL_WSWITCH && armed) { *x = W - 200; *y = H - 455; *r = 36; }
     } else {
@@ -642,6 +652,12 @@ static void draw_hud(void) {
     if (g->armor > 0.5f) {
         float hw = 210.0f, hx = W - 86 - hw;
         ui_rect(R, hx, 85, hw * clampf(g->armor / 100.0f, 0, 1), 5, 0.35f, 0.65f, 1.0f, 0.95f);
+    }
+    if (g->stamina < 99.5f || g->running) {   /* uithoudingsvermogen (rennen) */
+        float hw = 210.0f, hx = W - 86 - hw, st = clampf(g->stamina / 100.0f, 0, 1);
+        float bl = g->tired ? 0.5f + 0.5f * sinf(F.t * 9.0f) : 1.0f;
+        ui_rect(R, hx - 3, 93, hw + 6, 11, 0, 0, 0, 0.6f);
+        ui_rect(R, hx, 95, hw * st, 7, g->tired ? 1.0f : 0.95f, g->tired ? 0.35f : 0.8f, 0.15f, bl);
     }
     if (g->weapon != WP_NONE && game_mode(g) == MODE_FOOT) {
         snprintf(b, sizeof(b), "%s  %d", WEAPONS[g->weapon].name, g->ammo[g->weapon]);
@@ -764,6 +780,7 @@ static void draw_hud(void) {
         const char *lab = "ENTER";
         if (near >= 0) lab = g->veh[near].type == VEH_BIKE ? "RIDE" : "DRIVE";
         btn_pos(CTL_JUMP, &x, &y, &r); draw_button(x, y, r, "JUMP", ctl_down(CTL_JUMP), 1, 24);
+        btn_pos(CTL_RUN, &x, &y, &r); draw_button(x, y, r, "RUN", ctl_down(CTL_RUN), !g->tired, 22);
         if (game_has_weapon(g)) {
             btn_pos(CTL_FIRE, &x, &y, &r);
             ui_circle(R, x, y, r, ctl_down(CTL_FIRE) ? 0.95f : 0.6f, 0.08f, 0.08f, 0.55f);
@@ -1235,7 +1252,7 @@ static void draw_bigmap(void) {
         }
     } else {
         const World *w = F.G.w;
-        static const char *names[4] = {"BLOCK ARMS", "GIVEAWAY BANK", "GIVEAWAY MOTORS", "BLOCK CUSTOMS"};
+        static const char *names[5] = {"BLOCK ARMS", "GIVEAWAY BANK", "GIVEAWAY MOTORS", "BLOCK CUSTOMS", "YOUR HOME"};
         static const int pois[4] = {POI_GUNSHOP, POI_BANK, POI_DEALER, POI_CUSTOMS};
         static const int icons[4] = {ICON_GUN, ICON_BANK, ICON_CAR, ICON_CUSTOMS};
         int q;
@@ -1249,9 +1266,12 @@ static void draw_bigmap(void) {
                 ui_icon(R, ICON_MISSION, sx, sy, 30, 1);
             }
         }
-        for (q = 0; q < 4; q++) {
-            bm_w2s(w->poi[pois[q]].x, w->poi[pois[q]].z, &sx, &sy);
-            ui_icon(R, icons[q], sx, sy, 40, 1);
+        for (q = 0; q < 5; q++) {
+            float px2, pz2;
+            if (q < 4) { px2 = w->poi[pois[q]].x; pz2 = w->poi[pois[q]].z; }
+            else home_door(F.G.homeLvl, &px2, &pz2);
+            bm_w2s(px2, pz2, &sx, &sy);
+            ui_icon(R, q < 4 ? icons[q] : ICON_HOME, sx, sy, 40, 1);
             ui_text(R, names[q], sx, sy + 20, 17, 1, 1, 1, 1, 1);
         }
     }
@@ -1860,6 +1880,78 @@ static const char *CUSTOM_ITEMS[5] = {"PAINT", "ENGINE", "HANDLING", "NEON", "SP
 static const char *PAINT_NAMES[NPAINTS] = {"RED", "BLUE", "YELLOW", "WHITE", "GREEN", "BLACK", "ORANGE", "PURPLE", "CYAN", "SILVER"};
 static const char *NEON_NAMES[NNEONS] = {"OFF", "RED", "BLUE", "GREEN", "PINK", "WHITE"};
 
+
+/* ------------------------------------------------------------------ eigen huis: laptop-scherm */
+
+static const char *HOME_NAMES[HOME_LEVELS] = {"SMALL HOUSE", "FAMILY HOUSE", "VILLA"};
+
+static void draw_home(void) {
+    Renderer *R = &F.R;
+    Game *g = &F.G;
+    char b[128];
+    int k, hp = home_upgrade_price(1, g->homeLvl), gp = home_upgrade_price(0, g->garLvl), owned = 0;
+    for (k = 0; k < MAX_OWNED; k++) owned += g->garage[k].exists;
+    r_draw_scene(R, g);
+    ui_begin(R);
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.65f);
+    ui_rect(R, 132, 60, 760, 600, 0.07f, 0.07f, 0.09f, 0.96f);
+    ui_rect(R, 132, 60, 760, 70, 0.55f, 0.25f, 0.8f, 1);
+    ui_text(R, "YOUR HOME", 512, 70, 50, 1, 1, 1, 1, 1);
+    fmt_money(b, sizeof(b), g->money);
+    ui_text(R, b, 872, 142, 30, 0.55f, 1.0f, 0.55f, 1, 2);
+    /* huis */
+    ui_rect(R, 160, 190, 704, 170, 0.12f, 0.12f, 0.15f, 0.95f);
+    snprintf(b, sizeof(b), "HOUSE: %s", HOME_NAMES[g->homeLvl < 0 ? 0 : g->homeLvl % HOME_LEVELS]);
+    ui_text(R, b, 184, 200, 32, 1, 1, 1, 1, 0);
+    for (k = 0; k < HOME_LEVELS; k++) ui_rect(R, 184 + k * 64.0f, 248, 56, 12, k <= g->homeLvl ? 0.6f : 0.25f, k <= g->homeLvl ? 0.35f : 0.25f, k <= g->homeLvl ? 0.9f : 0.3f, 1);
+    ui_text(R, g->homeLvl == 0 ? "Next: FAMILY HOUSE - two floors, kitchen and a porch." : (g->homeLvl == 1 ? "Next: VILLA - big glass front, balcony, dining room, library." : "This is the biggest house. Enjoy the villa life!"),
+            184, 276, 17, 0.85f, 0.85f, 0.85f, 1, 0);
+    if (hp >= 0) {
+        int af = g->money >= hp;
+        ui_rect(R, 624, 296, 220, 52, F.pressed == 801 ? 0.9f : (af ? 0.2f : 0.25f), F.pressed == 801 ? 0.2f : (af ? 0.55f : 0.25f), 0.25f, 1);
+        fmt_money(b, sizeof(b), hp);
+        ui_text(R, "UPGRADE", 734, 300, 20, 1, 1, 1, 1, 1);
+        ui_text(R, b, 734, 322, 22, 1, 1, 1, 1, 1);
+    }
+    /* garage */
+    ui_rect(R, 160, 380, 704, 170, 0.12f, 0.12f, 0.15f, 0.95f);
+    snprintf(b, sizeof(b), "UNDERGROUND GARAGE: %d SPOT%s", g->garLvl + 1, g->garLvl ? "S" : "");
+    ui_text(R, b, 184, 390, 32, 1, 1, 1, 1, 0);
+    for (k = 0; k < GARAGE_LEVELS; k++) ui_rect(R, 184 + k * 64.0f, 438, 56, 12, k <= g->garLvl ? 0.6f : 0.25f, k <= g->garLvl ? 0.35f : 0.25f, k <= g->garLvl ? 0.9f : 0.3f, 1);
+    snprintf(b, sizeof(b), "You own %d vehicle%s. Bought cars park here; the rest wait at GIVEAWAY MOTORS.", owned, owned == 1 ? "" : "s");
+    ui_text(R, b, 184, 466, 17, 0.85f, 0.85f, 0.85f, 1, 0);
+    if (gp >= 0) {
+        int af = g->money >= gp;
+        ui_rect(R, 624, 486, 220, 52, F.pressed == 802 ? 0.9f : (af ? 0.2f : 0.25f), F.pressed == 802 ? 0.2f : (af ? 0.55f : 0.25f), 0.25f, 1);
+        fmt_money(b, sizeof(b), gp);
+        ui_text(R, "+1 SPOT", 734, 490, 20, 1, 1, 1, 1, 1);
+        ui_text(R, b, 734, 512, 22, 1, 1, 1, 1, 1);
+    }
+    if (F.shopMsg[0]) ui_text(R, F.shopMsg, 512, 566, 20, 1, 0.85f, 0.4f, 1, 1);
+    ui_text(R, "Tip: sleep in the bed to restore your health. The garage door is next to the TV.", 512, 600, 15, 0.75f, 0.75f, 0.75f, 1, 1);
+    big_button("LEAVE", 512, 724, 40, F.pressed == 890, 1);
+    ui_flush(R);
+}
+
+static void home_tap(float x, float y, int phase) {
+    int hit = 0;
+    if (x > 624 && x < 844 && y > 296 && y < 348) hit = 801;
+    if (x > 624 && x < 844 && y > 486 && y < 538) hit = 802;
+    if (hit_text(x, y, "LEAVE", 512, 746, 40)) hit = 890;
+    if (phase != TOUCH_END) { F.pressed = hit; return; }
+    F.pressed = 0;
+    if (hit == 890) { set_state(ST_GAME); return; }
+    if (hit == 801 || hit == 802) {
+        int r = game_home_upgrade(&F.G, hit == 801);
+        if (r > 0) {
+            if (F.sfxOn) plat_sfx(SFX_BUY, 0.8f);
+            snprintf(F.shopMsg, sizeof(F.shopMsg), hit == 801 ? "Your house is bigger now!" : "Your garage has an extra spot!");
+            F.G.moneyShown = F.G.money;
+            save_all();
+        } else snprintf(F.shopMsg, sizeof(F.shopMsg), r < 0 ? "Already the biggest." : "Not enough money.");
+    }
+}
+
 static void draw_dealer(void) {
     Renderer *R = &F.R;
     char b[96];
@@ -2027,11 +2119,11 @@ static void stick_value(float bx, float by, float kx, float ky, float *ox, float
 static void game_touch(TSlot *s, int phase) {
     Renderer *R = &F.R;
     if (phase == TOUCH_BEGIN) {
-        static const int order[7] = {CTL_PAUSE, CTL_GAS, CTL_BRAKE, CTL_JUMP, CTL_ACTION, CTL_FIRE, CTL_WSWITCH};
+        static const int order[8] = {CTL_PAUSE, CTL_GAS, CTL_BRAKE, CTL_JUMP, CTL_ACTION, CTL_FIRE, CTL_WSWITCH, CTL_RUN};
         int k;
         s->ctl = CTL_NONE;
         if (s->x < 224 && s->y < 236) { s->ctl = CTL_UI; bm_open(); return; }
-        for (k = 0; k < 7; k++) {
+        for (k = 0; k < 8; k++) {
             float x, y, r;
             btn_pos(order[k], &x, &y, &r);
             if (r <= 0) continue;
@@ -2092,6 +2184,7 @@ static void menu_tap(float x, float y, int phase) {
     if (F.state == ST_SHOP) { shop_tap(x, y, phase); return; }
     if (F.state == ST_MP) { mp_screen_tap(x, y, phase); return; }
     if (F.state == ST_DEALER) { dealer_tap(x, y, phase); return; }
+    if (F.state == ST_HOME) { home_tap(x, y, phase); return; }
     if (F.state == ST_CUSTOMS) { customs_tap(x, y, phase); return; }
     if (F.state == ST_NLLOAD) {
         if (F.job.err && phase == TOUCH_END) {
@@ -2224,6 +2317,7 @@ static void build_input(void) {
     in->actionPressed = F.actionEdge;
     in->fire = ctl_down(CTL_FIRE);
     in->switchPressed = F.switchEdge;
+    in->run = ctl_down(CTL_RUN);
     F.jumpEdge = F.actionEdge = F.switchEdge = 0;
     if (g_desktop) {
         in->mx = clampf(in->mx + g_dk.mx, -1, 1);
@@ -2231,6 +2325,7 @@ static void build_input(void) {
         in->gas |= g_dk.gas && F.G.p.veh >= 0;
         in->brake |= g_dk.brake && F.G.p.veh >= 0;
         in->fire |= g_dk.fire;
+        in->run |= g_dk.run;
         in->jumpPressed |= g_dk.jumpPressed;
         in->actionPressed |= g_dk.actionPressed;
         in->switchPressed |= g_dk.switchPressed;
@@ -2627,7 +2722,94 @@ static void autotest_tick(float dt) {
             return;
         }
         else if (F.atStep == 89 && F.state == ST_GAME) {
-            F.atStep = 90;
+            F.atStep = 100;
+        }
+        else if (F.atStep == 100) {   /* eigen huis: voor de deur */
+            float dx, dz;
+            if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; g->p.veh = -1; }
+            g->wanted = 0;
+            g->money += 200000;
+            home_door(g->homeLvl, &dx, &dz);
+            game_teleport(g, dx - 6.0f, dz + 3.0f, PI_F * 0.5f);
+            g->camYaw = PI_F * 0.42f;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 101 && t > F.atT3 + 1.2f) {
+            float dx, dz;
+            at_shot("33_home_outside");
+            home_door(g->homeLvl, &dx, &dz);
+            game_teleport(g, dx, dz, PI_F * 0.5f);
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 102 && t > F.atT3 + 1.2f) {
+            rep("Huis: binnen=%d (1 verwacht), huis %d, garage %d", game_home_inside(g), g->homeLvl, g->garLvl);
+            at_shot("34_home_inside");
+            {   /* naar de laptop */
+                V3 hp[12]; int hk[12], q, n2; float hr[12];
+                n2 = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
+                for (q = 0; q < n2; q++) if (hk[q] == HM_LAPTOP) game_teleport(g, hp[q].x, hp[q].z, PI_F * 0.5f);
+            }
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 103 && F.state == ST_GAME && t > F.atT3 + 0.5f) {
+            int a = game_home_upgrade(g, 1), b = game_home_upgrade(g, 1), c = game_home_upgrade(g, 0) + game_home_upgrade(g, 0) + game_home_upgrade(g, 0);
+            rep("Upgrades: huis %d+%d -> niveau %d, garage +%d -> %d plekken, geld $%ld", a, b, g->homeLvl, c, g->garLvl + 1, g->money);
+            g->camYaw = PI_F * 0.5f;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 104 && t > F.atT3 + 1.2f) {
+            at_shot("36_villa_inside");
+            {
+                V3 hp[12]; int hk[12], q, n2; float hr[12];
+                n2 = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
+                for (q = 0; q < n2; q++) if (hk[q] == HM_TOGARAGE) game_teleport(g, hp[q].x, hp[q].z, PI_F);
+            }
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 105 && t > F.atT3 + 1.5f) {
+            int k, inGar = 0;
+            for (k = 0; k < MAX_OWNED; k++) if (g->garage[k].exists && g->veh[g->firstOwned + k].x < HOME_ZONE_X) inGar++;
+            rep("Garage: binnen=%d (2 verwacht), %d eigen auto('s) in de garage", game_home_inside(g), inGar);
+            g->camYaw = 0.0f;
+            at_shot("37_garage");
+            {
+                V3 hp[12]; int hk[12], q, n2; float hr[12];
+                n2 = home_markers(g->homeLvl, g->garLvl, hp, hk, hr, 12);
+                for (q = 0; q < n2; q++) if (hk[q] == HM_GAR_EXIT) game_teleport(g, hp[q].x, hp[q].z, -PI_F * 0.5f);
+            }
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 106 && t > F.atT3 + 1.0f) {
+            float dx, dz;
+            rep("Uit de garage: buiten=%d, op (%.0f, %.0f)", !game_home_inside(g), g->p.x, g->p.z);
+            home_door(g->homeLvl, &dx, &dz);
+            game_teleport(g, dx - 9.0f, dz + 5.0f, PI_F * 0.5f);
+            g->camYaw = PI_F * 0.45f;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 107 && t > F.atT3 + 1.2f) {
+            at_shot("38_villa_outside");
+            game_teleport(g, road_c(2), road_c(1) + 6.0f, 0);
+            g->stamina = 100; g->tired = 0;
+            F.atMaxSpeed = 0;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 108) {   /* rennen tot je buiten adem bent */
+            in->my = 1.0f; in->run = 1;
+            if (t > F.atT3 + 2.0f && F.atMaxSpeed < g->p.speed) F.atMaxSpeed = g->p.speed;
+            if (t > F.atT3 + 2.5f && F.atStep == 108 && !F.atShot2) { at_shot("39_running"); F.atShot2 = 1; }
+            if (t > F.atT3 + 7.0f) {
+                rep("Rennen: topsnelheid %.1f m/s, uithoudingsvermogen %.0f, uitgeput=%d", F.atMaxSpeed, g->stamina, g->tired);
+                F.atStep = 90;
+            }
         }
         else if (F.atStep == 90) {
             int i;
@@ -2793,6 +2975,14 @@ void fe_frame(double now) {
             set_state(ST_GAME);
         }
         break;
+    case ST_HOME:
+        draw_home();
+        if (F.at && F.st > 1.0f) {
+            at_shot("35_home_laptop");
+            rep("Huis-menu: huis %d, garage %d, geld $%ld", F.G.homeLvl, F.G.garLvl, F.G.money);
+            set_state(ST_GAME);
+        }
+        break;
     case ST_DEALER:
         draw_dealer();
         if (F.at && F.st > 1.0f) {
@@ -2837,6 +3027,7 @@ void fe_frame(double now) {
             if (F.G.shopOpen) { F.G.shopOpen = 0; F.shopMsg[0] = 0; set_state(ST_SHOP); }
             if (F.G.dealerOpen) { F.G.dealerOpen = 0; F.shopMsg[0] = 0; set_state(ST_DEALER); }
             if (F.G.customsOpen) { F.G.customsOpen = 0; F.shopMsg[0] = 0; set_state(ST_CUSTOMS); }
+            if (F.G.homeMenuOpen) { F.G.homeMenuOpen = 0; F.shopMsg[0] = 0; set_state(ST_HOME); }
             if (!F.at && F.mode == 0) {
                 int i, done = 0;
                 for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;
@@ -2954,7 +3145,7 @@ void fe_key_command(int cmd) {
     }
     switch (F.state) {
     case ST_GAME: set_state(ST_PAUSE); save_all(); break;
-    case ST_PAUSE: case ST_BIGMAP: case ST_SHOP: case ST_DEALER: set_state(ST_GAME); break;
+    case ST_PAUSE: case ST_BIGMAP: case ST_SHOP: case ST_DEALER: case ST_HOME: set_state(ST_GAME); break;
     case ST_CUSTOMS: set_state(ST_GAME); save_all(); break;
     case ST_SETTINGS: set_state(F.prevState == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
     case ST_MISSIONS: set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
