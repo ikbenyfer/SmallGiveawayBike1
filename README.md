@@ -193,8 +193,9 @@ Verder doorloopt de autotest:
 6. Speel daarna zelf, om de touch-besturing te testen.
 
 ## Opnieuw bouwen
-Push naar `main` in de private repo. GitHub Actions bouwt dan twee artifacts:
+Push naar `main`. GitHub Actions bouwt dan de iOS-app, de Windows-versie en de Linux-test:
 - `SmallGiveawayBike1`: de `.ipa` en `.deb`
+- `SmallGiveawayBike1-Windows`: de Windows-zip
 - `preview`: Linux-screenshots en het rapport
 
 Ophalen gaat met:
