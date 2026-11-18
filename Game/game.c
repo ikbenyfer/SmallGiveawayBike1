@@ -7,6 +7,7 @@ static const int DIRX[4] = {1, 0, -1, 0};
 static const int DIRZ[4] = {0, 1, 0, -1};
 
 static float dir_heading(int d) { return atan2f((float)DIRX[d], (float)DIRZ[d]); }
+static void player_pos(const Game *g, float *x, float *z);
 
 void game_message(Game *g, const char *txt, float t) {
     snprintf(g->msg, sizeof(g->msg), "%s", txt);
@@ -91,6 +92,73 @@ static void setup_missions(Game *g) {
     m->ncp = 6;
     m->anyOrder = 5;
     m->gifts = 1;
+
+    m = &g->mdef[5];
+    m->title = "PARK RUN";
+    m->brief = "No wheels allowed! Run the park course on foot.";
+    m->giver = v3(block_x0(3) + 22, 0, block_x0(0) + 27);
+    m->reward = 200;
+    m->time = 80;
+    {
+        static const float pts[7][2] = {{190, 20}, {214, 20}, {214, 48}, {202, 62}, {214, 80}, {190, 104}, {190, 76}};
+        for (i = 0; i < 7; i++) cp_set(&m->cp[i], pts[i][0], pts[i][1], 2.6f, NEED_FOOT, "Run to the next checkpoint");
+        m->ncp = 7;
+    }
+
+    m = &g->mdef[6];
+    m->title = "TAXI RUSH";
+    m->brief = "Be a taxi driver for a day. Pick up and drop off passengers.";
+    m->giver = v3(block_x0(1) + 22, 0, block_x0(2) + 22);
+    m->reward = 350;
+    m->time = 160;
+    m->startVeh = 2;
+    cp_set(&m->cp[0], road_c(2), road_c(5), 4.0f, NEED_CAR, "Pick up the passenger");
+    cp_set(&m->cp[1], road_c(6), road_c(6), 4.0f, NEED_CAR, "Drop off on the east side");
+    cp_set(&m->cp[2], road_c(5), road_c(1), 4.0f, NEED_CAR, "Next fare: to the suburb");
+    cp_set(&m->cp[3], road_c(1), road_c(1), 4.0f, NEED_CAR, "Last fare: north-west corner");
+    m->ncp = 4;
+
+    m = &g->mdef[7];
+    m->title = "ALLEY SHORTCUT";
+    m->brief = "Deliver a secret package through the back alleys on your bike.";
+    m->giver = v3(14.5f, 0, block_x0(3) + 22);
+    m->reward = 350;
+    m->time = 150;
+    m->startVeh = 1;
+    {
+        static const float pts[10][2] = {{22, 190}, {50, 190}, {130, 246}, {162, 246}, {298, 190},
+                                         {330, 190}, {354, 246}, {386, 246}, {274, 302}, {242, 302}};
+        for (i = 0; i < 10; i++) cp_set(&m->cp[i], pts[i][0], pts[i][1], 3.0f, NEED_BIKE, "Ride through the alley");
+        m->ncp = 10;
+    }
+
+    m = &g->mdef[8];
+    m->title = "COP DODGE";
+    m->brief = "The police think you stole this car. Lose them!";
+    m->giver = v3(block_x0(3) + 22, 0, block_x0(6) + 22);
+    m->reward = 400;
+    m->escape = 1;
+    m->startVeh = 2;
+    m->ncp = 0;
+
+    m = &g->mdef[9];
+    m->title = "GRAND TOUR";
+    m->brief = "Drive the full ring road around the city before time runs out.";
+    m->giver = v3(block_x0(0) + 22, 0, block_x0(5) + 22);
+    m->reward = 500;
+    m->time = 130;
+    m->startVeh = 2;
+    {
+        static const int pts[8][2] = {{0, 7}, {3, 7}, {7, 7}, {7, 4}, {7, 0}, {3, 0}, {0, 0}, {0, 4}};
+        for (i = 0; i < 8; i++) cp_set(&m->cp[i], road_c(pts[i][0]), road_c(pts[i][1]), 5.0f, NEED_CAR, "Ring road: next checkpoint");
+        m->ncp = 8;
+    }
+
+    g->mdef[2].startVeh = 1;
+    for (i = 0; i < NMISSIONS; i++) {
+        int need = g->mdef[i].ncp > 0 ? g->mdef[i].cp[g->mdef[i].ncp - 1].need : NEED_CAR;
+        g->mdef[i].tag = need == NEED_BIKE ? "BIKE" : (need == NEED_CAR ? "CAR" : (need == NEED_FOOT ? "ON FOOT" : "ANY"));
+    }
 }
 
 void game_start_mission(Game *g, int m) {
@@ -101,6 +169,7 @@ void game_start_mission(Game *g, int m) {
     g->mclock = 0;
     g->mtime = g->mdef[m].time;
     banner(g, g->mdef[m].title, g->mdef[m].brief, 1, 4.5f);
+    if (g->mdef[m].escape) { g->crimeCool = 0; game_add_wanted(g, 2); }
 }
 
 static void mission_end(Game *g, int ok) {
@@ -126,6 +195,7 @@ static int need_ok(const Game *g, int need) {
     int mode = game_mode(g);
     if (need == NEED_BIKE) return mode == MODE_BIKE;
     if (need == NEED_CAR) return mode == MODE_CAR;
+    if (need == NEED_FOOT) return mode == MODE_FOOT;
     return 1;
 }
 
@@ -150,6 +220,10 @@ static void update_missions(Game *g, float dt) {
     {
         MissionDef *m = &g->mdef[g->mission];
         g->mclock += dt;
+        if (m->escape) {
+            if (g->wanted == 0 && g->mclock > 2.0f) mission_end(g, 1);
+            return;
+        }
         if (m->time > 0) {
             g->mtime -= dt;
             if (g->mtime <= 0) { mission_end(g, 0); return; }
@@ -160,7 +234,7 @@ static void update_missions(Game *g, float dt) {
                 float dx = px - c->x, dz = pz - c->z;
                 if (g->mmask & (1u << i)) continue;
                 if (dx * dx + dz * dz < c->r * c->r) {
-                    if (!need_ok(g, c->need)) { if (g->msgT <= 0) game_message(g, c->need == NEED_BIKE ? "You need a bike for this!" : "You need a car for this!", 2.0f); continue; }
+                    if (!need_ok(g, c->need)) { if (g->msgT <= 0) game_message(g, c->need == NEED_BIKE ? "You need a bike for this!" : (c->need == NEED_FOOT ? "Get off your vehicle!" : "You need a car for this!"), 2.0f); continue; }
                     g->mmask |= 1u << i;
                     g->mstep++;
                     {
@@ -175,7 +249,7 @@ static void update_missions(Game *g, float dt) {
             float dx = px - c->x, dz = pz - c->z;
             if (dx * dx + dz * dz < c->r * c->r) {
                 if (!need_ok(g, c->need)) {
-                    if (g->msgT <= 0) game_message(g, c->need == NEED_BIKE ? "Get on a bike first!" : "Get in a car first!", 2.0f);
+                    if (g->msgT <= 0) game_message(g, c->need == NEED_BIKE ? "Get on a bike first!" : (c->need == NEED_FOOT ? "On foot only - get off!" : "Get in a car first!"), 2.0f);
                 } else {
                     g->mstep++;
                     if (g->mstep >= m->ncp) mission_end(g, 1);
@@ -223,7 +297,7 @@ int game_near_vehicle(const Game *g) {
     for (i = 0; i < g->nveh; i++) {
         const Vehicle *v = &g->veh[i];
         float dx, dz, d2, lim;
-        if (!v->active) continue;
+        if (!v->active || v->police) continue;
         if (v->traffic && fabsf(v->speed) > 5.0f) continue;
         dx = v->x - g->p.x; dz = v->z - g->p.z; d2 = dx * dx + dz * dz;
         lim = v->type == VEH_BIKE ? 2.0f : 3.2f;
@@ -249,6 +323,8 @@ static void enter_vehicle(Game *g, int idx) {
         }
         v->traffic = 0;
         v->speed *= 0.3f;
+        game_add_wanted(g, 1);
+        game_message(g, "Car stolen! The police are coming...", 2.5f);
     }
     g->p.veh = idx;
     g->p.speed = 0;
@@ -288,6 +364,11 @@ static void collide_vehicles(Game *g, Vehicle *a) {
             a->x += dx * push * wa; a->z += dz * push * wa;
             b->x -= dx * push * (1 - wa); b->z -= dz * push * (1 - wa);
             if (a->hitcool <= 0) { a->speed *= 0.55f; a->hitcool = 0.4f; }
+            if (g->p.veh >= 0 && g->ramCool <= 0 &&
+                ((a == &g->veh[g->p.veh] && b->police) || (b == &g->veh[g->p.veh] && a->police))) {
+                game_damage(g, 6.0f);
+                g->ramCool = 0.8f;
+            }
             if (b->traffic) b->speed *= 0.3f;
         }
     }
@@ -313,6 +394,10 @@ static void vehicle_world_collide(Game *g, Vehicle *v) {
     if (hit) {
         V3 f = fwd_of(v->h);
         float d = f.x * nx + f.z * nz;
+        if (v->hitcool <= 0 && g->p.veh >= 0 && v == &g->veh[g->p.veh]) {
+            float imp = fabsf(v->speed) * fabsf(d);
+            if (imp > 7.0f) game_damage(g, (imp - 7.0f) * 2.5f);
+        }
         if (v->hitcool <= 0) {
             if ((d < -0.6f && v->speed > 0) || (d > 0.6f && v->speed < 0)) v->speed = -v->speed * 0.25f;
             else v->speed *= 0.75f;
@@ -384,7 +469,7 @@ static void traffic_spawn(Game *g, Vehicle *v, float px, float pz, int nearOk) {
         if (nearOk && dist > 140.0f) continue;
         if (nearOk && dist < 12.0f) continue;
         v->active = 1; v->type = VEH_CAR; v->traffic = 1;
-        v->variant = 1 + rng_int(&g->rng, CAR_VARIANTS - 1);
+        v->variant = 1 + rng_int(&g->rng, 5);
         v->x = p.x; v->z = p.z; v->y = 0; v->h = dir_heading(d);
         v->speed = 6.0f; v->steer = 0; v->stuck = 0; v->ghost = 0;
         v->ti = ni; v->tj = nj; v->dir = d;
@@ -411,7 +496,7 @@ static int blocked_ahead(Game *g, Vehicle *v, float *dist) {
     }
     for (i = g->firstTraffic; i < g->nveh; i++) {
         Vehicle *o = &g->veh[i];
-        if (o == v || !o->active || !o->traffic) continue;
+        if (o == v || !o->active || (!o->traffic && !o->police)) continue;
         CHECK(o->x, o->z, 1.8f);
     }
     for (i = 0; i < MAX_PED; i++) {
@@ -540,7 +625,10 @@ static void update_ped(Game *g, Ped *p, float dt) {
         if (v->speed < 0) al = -al;
         if (al > -1.0f && al < 1.6f + (v->type == VEH_CAR ? 2.0f : 0.6f) && fabsf(la) < (v->type == VEH_CAR ? 1.2f : 0.7f) && sp > 4.0f) {
             p->state = PED_DOWN; p->timer = 2.8f; p->h = v->h;
-            if (i == g->p.veh) game_message(g, "Watch out for pedestrians!", 1.5f);
+            if (i == g->p.veh) {
+                game_message(g, "You hit someone! The police are after you!", 2.0f);
+                game_add_wanted(g, 1);
+            }
             return;
         }
         if (al > 0 && al < 9.0f && fabsf(la) < 2.5f && p->state != PED_DODGE) {
@@ -628,7 +716,7 @@ void game_init(Game *g, World *w) {
     g->camPitch = 0.32f;
     g->camDist = 5.0f;
     g->camSens = 1.0f;
-    for (i = 0; i < w->npark && g->nveh < MAX_VEH - MAX_TRAFFIC; i++) {
+    for (i = 0; i < w->npark && g->nveh < MAX_VEH - MAX_TRAFFIC - MAX_POLICE; i++) {
         Vehicle *v;
         int k = i;
         /* de Giveaway Bike (fiets, variant 0) altijd als eerste */
@@ -649,6 +737,9 @@ void game_init(Game *g, World *w) {
     }
     g->firstTraffic = g->nveh;
     for (i = 0; i < MAX_TRAFFIC; i++) { memset(&g->veh[g->nveh], 0, sizeof(Vehicle)); g->nveh++; }
+    g->firstPolice = g->nveh;
+    for (i = 0; i < MAX_POLICE; i++) { memset(&g->veh[g->nveh], 0, sizeof(Vehicle)); g->nveh++; }
+    g->health = 100.0f;
     setup_missions(g);
     game_set_quality(g, 1);
     g->camPos = v3(g->p.x, 3, g->p.z + 5);
@@ -760,6 +851,203 @@ static void update_camera(Game *g, const Input *in, float dt) {
     }
 }
 
+/* ------------------------------------------------------------------ politie en gezondheid */
+
+void game_add_wanted(Game *g, int n) {
+    if (g->crimeCool > 0 && n < 2) return;
+    g->wanted += n;
+    if (g->wanted > 3) g->wanted = 3;
+    g->evadeT = 0;
+    g->crimeCool = 2.0f;
+}
+
+void game_damage(Game *g, float amount) {
+    if (g->health <= 0) return;
+    g->health -= amount;
+    if (g->health < 0) g->health = 0;
+    g->hurtT = 0;
+    g->hurtFlash = 0.6f;
+}
+
+static void respawn(Game *g, const char *title, const char *sub) {
+    int i;
+    if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; g->p.veh = -1; }
+    g->mission = -1;
+    g->wanted = 0; g->bustT = 0; g->evadeT = 0;
+    for (i = 0; i < MAX_POLICE; i++) g->veh[g->firstPolice + i].active = 0;
+    g->health = 100.0f;
+    g->p.vy = 0; g->p.speed = 0;
+    game_teleport(g, g->w->poi[POI_SPAWN].x, g->w->poi[POI_SPAWN].z, g->w->spawn_heading);
+    banner(g, title, sub, 0, 4.5f);
+    g->p.cool = 3.0f;
+}
+
+static void police_spawn(Game *g, Vehicle *v, float px, float pz) {
+    int tries;
+    for (tries = 0; tries < 40; tries++) {
+        int i = rng_int(&g->rng, NB + 1), j = rng_int(&g->rng, NB + 1);
+        V3 n = node_pos(i, j);
+        float dx = n.x - px, dz = n.z - pz, d = sqrtf(dx * dx + dz * dz);
+        if (d < 40.0f || d > 100.0f) continue;
+        memset(v, 0, sizeof(*v));
+        v->active = 1; v->type = VEH_CAR; v->variant = POLICE_VARIANT; v->police = 1;
+        v->x = n.x; v->z = n.z; v->y = 0;
+        v->h = atan2f(px - n.x, pz - n.z);
+        v->speed = 5.0f;
+        return;
+    }
+}
+
+static void update_police(Game *g, Vehicle *v, float dt) {
+    float px, pz, dx, dz, d, diff, thr = 1.0f, brk = 0.0f, steer;
+    player_pos(g, &px, &pz);
+    dx = px - v->x; dz = pz - v->z; d = sqrtf(dx * dx + dz * dz);
+    if (g->wanted <= 0) {
+        v->ghost += dt;
+        drive_vehicle(g, v, 0, 1, 0, dt);
+        if (v->ghost > 5.0f || d > 45.0f) v->active = 0;
+        return;
+    }
+    diff = wrap_angle(atan2f(dx, dz) - v->h);
+    steer = clampf(-diff * 1.8f, -1, 1);
+    if (v->tz > 0) {             /* even achteruit na vastzitten */
+        v->tz -= dt;
+        drive_vehicle(g, v, 0, 1, -steer, dt);
+        return;
+    }
+    if (d < 6.0f) { thr = 0; brk = fabsf(v->speed) > 1.5f ? 1.0f : 0.0f; }
+    else if (fabsf(diff) > 1.7f && d < 14.0f) { thr = 0; brk = 1; }
+    if (v->speed > 17.0f) thr = 0;
+    drive_vehicle(g, v, thr, brk, steer, dt);
+    if (thr > 0 && fabsf(v->speed) < 1.0f) {
+        v->stuck += dt;
+        if (v->stuck > 1.2f) { v->tz = 1.3f; v->stuck = 0; }
+    } else v->stuck = 0;
+}
+
+static float player_speed(const Game *g) {
+    if (g->p.veh >= 0) return fabsf(g->veh[g->p.veh].speed);
+    return fabsf(g->p.speed);
+}
+
+static void update_police_and_health(Game *g, float dt) {
+    float px, pz;
+    int k, near = 0, close = 0;
+    player_pos(g, &px, &pz);
+    if (g->crimeCool > 0) g->crimeCool -= dt;
+    if (g->ramCool > 0) g->ramCool -= dt;
+    if (g->hurtFlash > 0) g->hurtFlash -= dt;
+    if (g->p.hitCool > 0) g->p.hitCool -= dt;
+    for (k = 0; k < MAX_POLICE; k++) {
+        Vehicle *v = &g->veh[g->firstPolice + k];
+        if (!v->active && k < g->wanted) {
+            police_spawn(g, v, px, pz);
+            if (v->active && k == 0) game_message(g, "POLICE! Lose them or get busted.", 2.5f);
+        }
+        if (v->active) {
+            float dx, dz, d2;
+            update_police(g, v, dt);
+            dx = v->x - px; dz = v->z - pz; d2 = dx * dx + dz * dz;
+            if (d2 > 170.0f * 170.0f) v->active = 0;
+            if (v->active && d2 < 45.0f * 45.0f) near = 1;
+            if (v->active && d2 < 5.5f * 5.5f) close = 1;
+        }
+    }
+    if (g->wanted > 0) {
+        if (near) g->evadeT = 0;
+        else {
+            g->evadeT += dt;
+            if (g->evadeT > 10.0f) {
+                g->wanted--;
+                g->evadeT = 0;
+                if (g->wanted == 0) game_message(g, "You lost the police!", 2.5f);
+            }
+        }
+        if (close && player_speed(g) < 2.5f) g->bustT += dt;
+        else g->bustT = fmaxf(0, g->bustT - dt);
+        if (g->bustT > 2.5f) {
+            long fine = g->money / 10;
+            char b[96];
+            if (fine < 50) fine = 50;
+            if (fine > g->money) fine = g->money;
+            g->money -= fine;
+            snprintf(b, sizeof(b), "The police caught you. Fine: -$%ld", fine);
+            respawn(g, "BUSTED", b);
+            return;
+        }
+    } else g->bustT = 0;
+
+    /* aangereden worden als voetganger */
+    if (g->p.veh < 0 && g->p.hitCool <= 0) {
+        int i;
+        for (i = 0; i < g->nveh; i++) {
+            Vehicle *v = &g->veh[i];
+            float sp, best = 1e9f, bx = 0, bz = 0, rr;
+            int c, car;
+            if (!v->active) continue;
+            sp = fabsf(v->speed);
+            if (sp < 4.0f) continue;
+            car = v->type == VEH_CAR;
+            rr = car ? 1.35f : 0.95f;
+            for (c = -1; c <= 1; c++) {
+                V3 f = fwd_of(v->h);
+                float off = car ? 1.1f * c : 0.0f;
+                float cx = v->x + f.x * off, cz = v->z + f.z * off;
+                float dx = g->p.x - cx, dz = g->p.z - cz, d2 = dx * dx + dz * dz;
+                if (d2 < best) { best = d2; bx = dx; bz = dz; }
+            }
+            if (best < rr * rr && g->p.y < 1.0f + v->y) {
+                float d = sqrtf(best) + 1e-4f;
+                game_damage(g, (10.0f + sp * 1.5f) * (v->police ? 0.6f : 1.0f));
+                g->p.x += bx / d * 1.2f; g->p.z += bz / d * 1.2f;
+                g->p.vy = 4.0f; g->p.onGround = 0;
+                g->p.hitCool = 1.0f;
+                game_message(g, "Ouch!", 1.0f);
+                break;
+            }
+        }
+    }
+
+    g->hurtT += dt;
+    if (g->hurtT > 5.0f && g->health < 100.0f) g->health = fminf(100.0f, g->health + 4.0f * dt);
+    if (g->health <= 0) respawn(g, "KNOCKED OUT", "You got hurt too badly. Back to the plaza.");
+}
+
+void game_start_mission_at(Game *g, int m) {
+    MissionDef *md;
+    int k;
+    if (m < 0 || m >= NMISSIONS) return;
+    md = &g->mdef[m];
+    if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; g->p.veh = -1; }
+    g->wanted = 0; g->bustT = 0;
+    for (k = 0; k < MAX_POLICE; k++) g->veh[g->firstPolice + k].active = 0;
+    game_teleport(g, md->giver.x, md->giver.z, g->p.h);
+    g->p.speed = 0; g->p.vy = 0;
+    if (md->startVeh) {
+        int type = md->startVeh == 1 ? VEH_BIKE : VEH_CAR, i, best = -1;
+        float bd = 1e18f;
+        for (i = 0; i < g->firstTraffic; i++) {
+            Vehicle *v = &g->veh[i];
+            float dx, dz;
+            if (!v->active || v->type != type) continue;
+            if (v->variant == 0) continue;  /* Giveaway Bike en rode auto (Joyride) laten staan */
+            dx = v->x - md->giver.x; dz = v->z - md->giver.z;
+            if (dx * dx + dz * dz < bd) { bd = dx * dx + dz * dz; best = i; }
+        }
+        if (best >= 0) {
+            Vehicle *v = &g->veh[best];
+            float nx, nz;
+            v->x = md->giver.x; v->z = md->giver.z; v->speed = 0;
+            v->y = world_ground_y(g->w, v->x, v->z);
+            world_push_circle(g->w, &v->x, &v->z, type == VEH_BIKE ? 0.6f : 1.6f, v->y + 0.2f, &nx, &nz);
+            g->p.veh = best;
+            g->p.x = v->x; g->p.z = v->z; g->p.h = v->h;
+            g->camYaw = v->h;
+        }
+    }
+    game_start_mission(g, m);
+}
+
 void game_update(Game *g, const Input *in, float dt) {
     int i;
     float px, pz;
@@ -844,6 +1132,7 @@ void game_update(Game *g, const Input *in, float dt) {
         }
     }
 
+    update_police_and_health(g, dt);
     update_missions(g, dt);
     update_camera(g, in, dt);
 

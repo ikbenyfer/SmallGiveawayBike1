@@ -220,6 +220,7 @@ void r_build_models(Renderer *r) {
     BUILD(r->arrow, model_arrow(&m));
     BUILD(r->shadow, model_shadow(&m));
     BUILD(r->marker, model_marker(&m));
+    BUILD(r->siren, model_siren(&m));
 #undef BUILD
     mb_free(&m);
 }
@@ -454,6 +455,19 @@ void r_draw_scene(Renderer *r, Game *g) {
             if (i == g->p.veh) draw_char(r, 0, m, g->p.anim * 2.0f, 1, 0);
         } else {
             draw_mesh(r, &r->car[v->variant % CAR_VARIANTS], &m);
+            if (v->police) {
+                /* zwaailicht: links rood, rechts blauw, om en om */
+                int ph = ((int)(g->time * 6.0f)) & 1;
+                M4 s1 = m4_mul(m, m4_translate(0, 1.62f, -0.2f));
+                M4 s2 = m4_mul(m, m4_translate(0.26f, 1.62f, -0.2f));
+                glUniform1f(r->wUnlit, 1.0f);
+                tint(r, ph ? 1.0f : 0.35f, 0.05f, 0.05f);
+                draw_mesh(r, &r->siren, &s1);
+                tint(r, 0.05f, 0.15f, ph ? 0.35f : 1.0f);
+                draw_mesh(r, &r->siren, &s2);
+                tint(r, 1, 1, 1);
+                glUniform1f(r->wUnlit, 0.0f);
+            }
         }
         if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
             shadows[nsh] = v3(v->x, v->y, v->z);
@@ -497,8 +511,8 @@ void r_draw_scene(Renderer *r, Game *g) {
     }
     /* missie-dingen */
     {
-        V3 tg[8];
-        int n = game_targets(g, tg, 8), k;
+        V3 tg[12];
+        int n = game_targets(g, tg, 12), k;
         if (g->mission >= 0 && g->mdef[g->mission].gifts && g->mstep < g->mdef[g->mission].anyOrder) {
             for (k = 0; k < n; k++) {
                 M4 m = m4_trs_y(tg[k].x, CURB + 0.2f + sinf(t * 2 + k) * 0.1f, tg[k].z, t + k);

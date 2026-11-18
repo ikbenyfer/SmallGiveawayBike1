@@ -17,7 +17,7 @@ import ipad_installer as ii  # noqa: E402
 BUNDLE = "nl.yf.smallgiveawaybike1"
 SHOTS = ["01_menu", "02_spawn", "03_walk", "04_jump", "05_bike", "06_car", "07_mission_start",
          "08_mission_cp", "09_mission_passed", "10_quality_low", "11_quality_medium",
-         "12_quality_high", "13_night"]
+         "12_quality_high", "13_night", "14_police", "15_missions", "16_mission_select_start"]
 
 
 def main():

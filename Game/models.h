@@ -6,7 +6,8 @@
 
 #define CHAR_VARIANTS 8
 #define BIKE_VARIANTS 4
-#define CAR_VARIANTS 6
+#define CAR_VARIANTS 7
+#define POLICE_VARIANT 6
 
 /* Personage-onderdelen. body: voeten op y=0. leg: heup op 0 (hangt naar -y). arm: schouder op 0. */
 #define HIP_Y 0.92f
@@ -28,6 +29,7 @@ void model_gift(MeshB *m);
 void model_checkpoint(MeshB *m);   /* open cilinder r=1, h=1 (wordt geschaald) */
 void model_arrow(MeshB *m);
 void model_shadow(MeshB *m);       /* schijf r=1 */
-void model_marker(MeshB *m);       /* missie-start: ring + ster */
+void model_marker(MeshB *m);
+void model_siren(MeshB *m);       /* missie-start: ring + ster */
 
 #endif

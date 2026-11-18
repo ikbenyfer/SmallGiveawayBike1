@@ -4,13 +4,14 @@
 
 #include "world.h"
 
-#define MAX_VEH 48
+#define MAX_VEH 52
+#define MAX_POLICE 3
 #define MAX_PED 16
 #define MAX_TRAFFIC 10
-#define NMISSIONS 5
+#define NMISSIONS 10
 #define MAX_CP 10
 
-enum { NEED_ANY = 0, NEED_BIKE = 1, NEED_CAR = 2 };
+enum { NEED_ANY = 0, NEED_BIKE = 1, NEED_CAR = 2, NEED_FOOT = 3 };
 enum { MODE_FOOT = 0, MODE_BIKE = 1, MODE_CAR = 2 };
 enum { PED_WALK = 0, PED_DODGE, PED_DOWN, PED_IDLE, PED_FLEE };
 
@@ -24,7 +25,7 @@ typedef struct {
 typedef struct {
     int active, type, variant;
     float x, z, y, h, speed, steer, lean, wheel;
-    int traffic;
+    int traffic, police;
     int ti, tj, dir, phase;   /* verkeer: doel-kruispunt en richting */
     float tx, tz, stuck, ghost, hitcool;
 } Vehicle;
@@ -39,7 +40,7 @@ typedef struct {
 typedef struct {
     float x, z, y, vy, h, anim, speed;
     int onGround, veh;
-    float cool;
+    float cool, hitCool;
 } Player;
 
 typedef struct { float x, z, r; int need; const char *text; } Checkpoint;
@@ -51,13 +52,16 @@ typedef struct {
     float time;
     Checkpoint cp[MAX_CP];
     int gifts;  /* toon cadeautjes op de any-order punten */
+    int escape; /* missie: politie afschudden */
+    int startVeh; /* bij starten via missiekeuze: 0 niets, 1 fiets, 2 auto */
+    const char *tag;
 } MissionDef;
 
 typedef struct {
     World *w;
     Player p;
     Vehicle veh[MAX_VEH];
-    int nveh, firstTraffic;
+    int nveh, firstTraffic, firstPolice;
     Ped ped[MAX_PED];
     int wantTraffic, wantPeds;
 
@@ -77,6 +81,10 @@ typedef struct {
 
     long money; float moneyFlash; long moneyShown;
     float cashTimer[24];
+
+    float health, hurtT, hurtFlash;
+    int wanted;
+    float evadeT, bustT, crimeCool, ramCool;
 
     float time;
     Rng rng;
@@ -98,5 +106,9 @@ int game_targets(const Game *g, V3 *out, int max);
 void game_teleport(Game *g, float x, float z, float h);
 void game_start_mission(Game *g, int m);
 void game_message(Game *g, const char *txt, float t);
+void game_add_wanted(Game *g, int n);
+void game_damage(Game *g, float amount);
+/* missie starten vanuit het keuzescherm: speler naar het startpunt (evt. met voertuig) */
+void game_start_mission_at(Game *g, int m);
 
 #endif

@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS };
 enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI };
 
 #define NTOUCH 10
@@ -43,7 +43,7 @@ static struct {
     float fpsAcc, fps, worst, worstShown;
     int fpsFrames;
     float perfT;
-    int lastDC, skipStat;
+    int lastDC, skipStat, missionsFrom;
     long savedMoney; int savedDone;
     /* stof */
     float dust[40][4];
@@ -283,7 +283,8 @@ static void draw_logo_and_load(void) {
     }
 }
 
-static const char *MENU_ITEMS[3] = {"PLAY", "SETTINGS", "CREDITS"};
+static const char *MENU_ITEMS[4] = {"PLAY", "MISSIONS", "SETTINGS", "CREDITS"};
+#define MENU_X(i) (R->W * 0.5f + ((i) - 1.5f) * 235.0f)
 
 static void draw_menu(void) {
     Renderer *R = &F.R;
@@ -293,10 +294,10 @@ static void draw_menu(void) {
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
     draw_backdrop(1, 1, F.t);
     bottom_band(1);
-    for (i = 0; i < 3; i++) {
-        float cx = R->W * 0.5f + (i - 1) * 290.0f;
+    for (i = 0; i < 4; i++) {
+        float cx = MENU_X(i);
         float pulse = (i == 0) ? 0.04f * sinf(F.t * 3.0f) : 0;
-        big_button(MENU_ITEMS[i], cx, R->H - 74.0f, 52.0f * (1.0f + pulse), F.pressed == i + 1, a);
+        big_button(MENU_ITEMS[i], cx, R->H - 74.0f, 46.0f * (1.0f + pulse), F.pressed == i + 1, a);
     }
     for (i = 0; i < NMISSIONS; i++) done += F.G.completed[i];
     snprintf(line, sizeof(line), "$%ld   -   %d/%d MISSIONS", F.G.money, done, NMISSIONS);
@@ -389,12 +390,17 @@ static void draw_minimap(void) {
         rx = v->x - px; rz = v->z - pz;
         sx = (rx * rt.x + rz * rt.z) / rad; sy = -(rx * f.x + rz * f.z) / rad;
         if (fabsf(sx) > 0.95f || fabsf(sy) > 0.95f) continue;
+        if (v->police) {
+            int ph = ((int)(F.t * 6.0f)) & 1;
+            ui_circle(R, cx + sx * half, cy + sy * half, 6, ph ? 1.0f : 0.2f, 0.15f, ph ? 0.2f : 1.0f, 1);
+            continue;
+        }
         if (v->type == VEH_BIKE) ui_circle(R, cx + sx * half, cy + sy * half, 3.5f, 0.3f, 0.85f, 1.0f, 1);
         else if (!v->traffic) ui_rect(R, cx + sx * half - 2.5f, cy + sy * half - 2.5f, 5, 5, 0.9f, 0.9f, 0.9f, 0.7f);
     }
     {
-        V3 tg[8];
-        int n = game_targets(g, tg, 8);
+        V3 tg[12];
+        int n = game_targets(g, tg, 12);
         for (k = 0; k < n; k++) {
             float rx = tg[k].x - px, rz = tg[k].z - pz;
             float sx = (rx * rt.x + rz * rt.z) / rad, sy = -(rx * f.x + rz * f.z) / rad;
@@ -471,6 +477,34 @@ static void draw_hud(void) {
         float sz = 44.0f * (1.0f + 0.15f * clampf(g->moneyFlash, 0, 1));
         ui_text(R, b, W - 86, 16, sz, 0.55f, 1.0f, 0.55f, 1, 2);
     }
+    /* gezondheid */
+    {
+        float hw = 210.0f, hx = W - 86 - hw, hy = 70.0f, hp = clampf(g->health / 100.0f, 0, 1);
+        float low = hp < 0.3f ? 0.5f + 0.5f * sinf(F.t * 10.0f) : 1.0f;
+        ui_rect(R, hx - 3, hy - 3, hw + 6, 18, 0, 0, 0, 0.7f);
+        ui_rect(R, hx, hy, hw, 12, 0.25f, 0.05f, 0.05f, 0.9f);
+        ui_rect(R, hx, hy, hw * hp, 12, (1.0f - hp) * 0.9f + 0.1f, 0.25f + hp * 0.65f, 0.2f, low);
+        ui_text(R, "+", hx - 8, hy - 9, 26, 1, 0.35f, 0.35f, 1, 2);
+    }
+    /* gezocht-sterren */
+    if (g->wanted > 0) {
+        int k;
+        float blink = g->evadeT > 0.5f ? 0.45f + 0.55f * (0.5f + 0.5f * sinf(F.t * 8.0f)) : 1.0f;
+        for (k = 0; k < 3; k++) {
+            float sx = W - 100 - (2 - k) * 36.0f, sy = 108.0f;
+            ui_star(sx, sy, 17, 0, 0, 0, 0.7f);
+            if (k < g->wanted) ui_star(sx, sy, 14, 1.0f, 0.82f, 0.15f, blink);
+            else ui_star(sx, sy, 14, 0.3f, 0.3f, 0.3f, 0.6f);
+        }
+        if (g->bustT > 0.2f) ui_text(R, "GETTING BUSTED!", W * 0.5f, H * 0.62f, 34, 1.0f, 0.3f, 0.3f, 0.6f + 0.4f * sinf(F.t * 12.0f), 1);
+    }
+    if (g->hurtFlash > 0) {
+        float a = clampf(g->hurtFlash, 0, 0.6f) * 0.6f;
+        ui_rect(R, 0, 0, W, 24, 0.9f, 0, 0, a);
+        ui_rect(R, 0, H - 24, W, 24, 0.9f, 0, 0, a);
+        ui_rect(R, 0, 24, 24, H - 48, 0.9f, 0, 0, a);
+        ui_rect(R, W - 24, 24, 24, H - 48, 0.9f, 0, 0, a);
+    }
     /* pauzeknop */
     btn_pos(CTL_PAUSE, &x, &y, &r);
     ui_circle(R, x, y, r, 0, 0, 0, 0.45f);
@@ -482,9 +516,10 @@ static void draw_hud(void) {
         const MissionDef *m = &g->mdef[g->mission];
         const char *obj = "";
         float dist = -1;
-        V3 tg[8];
-        int n = game_targets(g, tg, 8), k;
-        if (g->mstep < m->anyOrder) obj = m->cp[0].text;
+        V3 tg[12];
+        int n = game_targets(g, tg, 12), k;
+        if (m->escape) obj = "Lose the police! Stay far away from them.";
+        else if (g->mstep < m->anyOrder) obj = m->cp[0].text;
         else if (g->mstep < m->ncp) obj = m->cp[g->mstep].text;
         for (k = 0; k < n; k++) {
             float d = sqrtf((tg[k].x - g->p.x) * (tg[k].x - g->p.x) + (tg[k].z - g->p.z) * (tg[k].z - g->p.z));
@@ -498,7 +533,8 @@ static void draw_hud(void) {
             snprintf(b, sizeof(b), "%d:%02d   %.0f m", s / 60, s % 60, dist);
             ui_text(R, b, W * 0.5f, 72, 26, g->mtime < 15 ? 1.0f : 0.9f, g->mtime < 15 ? 0.3f : 0.9f, g->mtime < 15 ? 0.3f : 0.9f, 1, 1);
         } else {
-            snprintf(b, sizeof(b), "%.0f m", dist);
+            if (dist >= 0) snprintf(b, sizeof(b), "%.0f m", dist);
+            else b[0] = 0;
             ui_text(R, b, W * 0.5f + 230, 14, 18, 0.9f, 0.9f, 0.9f, 1, 2);
         }
     }
@@ -549,13 +585,65 @@ static void draw_hud(void) {
     }
 }
 
+static void draw_missions(void) {
+    Renderer *R = &F.R;
+    int i;
+    char b[32];
+    if (F.missionsFrom == ST_PAUSE) {
+        r_draw_scene(R, &F.G);
+        ui_begin(R);
+        ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.75f);
+    } else {
+        ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
+        draw_backdrop(0.35f, 0.0f, F.t);
+        ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.5f);
+    }
+    ui_text(R, "MISSIONS", R->W * 0.5f, 26, 56, 1, 1, 1, 1, 1);
+    for (i = 0; i < NMISSIONS; i++) {
+        const MissionDef *m = &F.G.mdef[i];
+        float x = (i & 1) ? 522.0f : 62.0f, y = 112.0f + (i / 2) * 104.0f;
+        int pr = F.pressed == i + 1, done = F.G.completed[i];
+        ui_rect(R, x, y, 440, 94, pr ? 0.55f : 0.06f, pr ? 0.08f : 0.05f, pr ? 0.08f : 0.06f, 0.78f);
+        ui_rect(R, x, y, 6, 94, done ? 0.35f : 0.95f, done ? 0.9f : 0.75f, done ? 0.4f : 0.15f, 1);
+        snprintf(b, sizeof(b), "%d. %s", i + 1, m->title);
+        ui_text(R, b, x + 18, y + 6, 30, 1, 1, 1, 1, 0);
+        ui_text(R, m->brief, x + 18, y + 44, 15, 0.82f, 0.82f, 0.82f, 1, 0);
+        snprintf(b, sizeof(b), "$%d", done ? m->reward / 2 : m->reward);
+        ui_text(R, b, x + 426, y + 8, 26, 0.55f, 1.0f, 0.55f, 1, 2);
+        ui_text(R, m->tag ? m->tag : "", x + 426, y + 66, 17, 1.0f, 0.8f, 0.3f, 1, 2);
+        if (done) ui_text(R, "DONE", x + 18, y + 66, 17, 0.4f, 1.0f, 0.45f, 1, 0);
+        else if (m->time > 0) {
+            snprintf(b, sizeof(b), "TIME %d:%02d", (int)m->time / 60, (int)m->time % 60);
+            ui_text(R, b, x + 18, y + 66, 17, 0.9f, 0.9f, 0.9f, 1, 0);
+        }
+    }
+    big_button("BACK", R->W * 0.5f, R->H - 60.0f, 44, F.pressed == 100, 1);
+}
+
+static void ui_star(float cx, float cy, float rad, float cr, float cg, float cb, float ca) {
+    Renderer *R = &F.R;
+    float uv[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+    int k;
+    for (k = 0; k < 5; k++) {
+        float a0 = -PI_F * 0.5f + k * (2 * PI_F / 5);
+        float a1 = a0 + PI_F / 5, am = a0 - PI_F / 5;
+        float ri = rad * 0.45f;
+        float xy[8];
+        xy[0] = cx; xy[1] = cy;
+        xy[2] = cx + cosf(am) * ri; xy[3] = cy + sinf(am) * ri;
+        xy[4] = cx + cosf(a0) * rad; xy[5] = cy + sinf(a0) * rad;
+        xy[6] = cx + cosf(a1) * ri; xy[7] = cy + sinf(a1) * ri;
+        ui_quad4(R, &R->white, xy, uv, cr, cg, cb, ca);
+    }
+}
+
 static void draw_pause(void) {
     Renderer *R = &F.R;
     int i;
-    static const char *items[3] = {"RESUME", "SETTINGS", "MAIN MENU"};
+    static const char *items[4] = {"RESUME", "MISSIONS", "SETTINGS", "MAIN MENU"};
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.6f);
     ui_text(R, "PAUSED", R->W * 0.5f, 130, 70, 1, 1, 1, 1, 1);
-    for (i = 0; i < 3; i++) big_button(items[i], R->W * 0.5f, 330.0f + i * 110.0f, 50, F.pressed == i + 1, 1);
+    for (i = 0; i < 4; i++) big_button(items[i], R->W * 0.5f, 290.0f + i * 100.0f, 48, F.pressed == i + 1, 1);
 }
 
 /* ------------------------------------------------------------------ invoer */
@@ -617,13 +705,30 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_MENU) {
-        for (i = 0; i < 3; i++)
-            if (hit_text(x, y, MENU_ITEMS[i], R->W * 0.5f + (i - 1) * 290.0f, R->H - 74.0f + 26, 52)) hit = i + 1;
+        for (i = 0; i < 4; i++)
+            if (hit_text(x, y, MENU_ITEMS[i], MENU_X(i), R->H - 74.0f + 24, 46)) hit = i + 1;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
         if (hit == 1) start_game();
-        else if (hit == 2) set_state(ST_SETTINGS);
-        else if (hit == 3) set_state(ST_CREDITS);
+        else if (hit == 2) { set_state(ST_MISSIONS); F.missionsFrom = ST_MENU; }
+        else if (hit == 3) set_state(ST_SETTINGS);
+        else if (hit == 4) set_state(ST_CREDITS);
+        return;
+    }
+    if (F.state == ST_MISSIONS) {
+        for (i = 0; i < NMISSIONS; i++) {
+            float cxl = (i & 1) ? 522.0f : 62.0f, cyl = 112.0f + (i / 2) * 104.0f;
+            if (x > cxl && x < cxl + 440 && y > cyl && y < cyl + 94) hit = i + 1;
+        }
+        if (hit_text(x, y, "BACK", R->W * 0.5f, R->H - 60.0f + 22, 44)) hit = 100;
+        if (phase != TOUCH_END) { F.pressed = hit; return; }
+        F.pressed = 0;
+        if (hit == 100) set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU);
+        else if (hit >= 1 && hit <= NMISSIONS) {
+            if (F.missionsFrom == ST_PAUSE) set_state(ST_GAME);
+            else start_game();
+            game_start_mission_at(&F.G, hit - 1);
+        }
         return;
     }
     if (F.state == ST_SETTINGS) {
@@ -664,13 +769,15 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_PAUSE) {
-        for (i = 0; i < 3; i++)
-            if (hit_text(x, y, i == 0 ? "RESUME" : (i == 1 ? "SETTINGS" : "MAIN MENU"), R->W * 0.5f, 330.0f + i * 110.0f + 26, 50)) hit = i + 1;
+        static const char *pi[4] = {"RESUME", "MISSIONS", "SETTINGS", "MAIN MENU"};
+        for (i = 0; i < 4; i++)
+            if (hit_text(x, y, pi[i], R->W * 0.5f, 290.0f + i * 100.0f + 24, 48)) hit = i + 1;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
         if (hit == 1) set_state(ST_GAME);
-        else if (hit == 2) { set_state(ST_SETTINGS); F.prevState = ST_PAUSE; }
-        else if (hit == 3) { save_all(); set_state(ST_MENU); }
+        else if (hit == 2) { set_state(ST_MISSIONS); F.missionsFrom = ST_PAUSE; }
+        else if (hit == 3) { set_state(ST_SETTINGS); F.prevState = ST_PAUSE; }
+        else if (hit == 4) { save_all(); set_state(ST_MENU); }
     }
 }
 
@@ -765,6 +872,7 @@ static void autotest_tick(float dt) {
         seg_add("kwaliteit-midden", 42.0f, 47.0f);
         seg_add("kwaliteit-hoog", 48.0f, 53.0f);
         seg_add("nacht-hoog", 54.0f, 58.0f);
+        seg_add("politie", 59.0f, 66.0f);
         F.atMoney0 = g->money;
         g->p.cool = 24.5f;   /* geen missie starten tijdens het rondrijden */
         rep("start spel, geld=%ld, voertuigen=%d", g->money, g->nveh);
@@ -851,6 +959,37 @@ static void autotest_tick(float dt) {
         else if (F.atStep == 34 && t > 53.5f) { F.tod = 1; apply_settings(); F.atStep++; }
         else if (F.atStep == 35 && t > 56.0f) { at_shot("13_night"); F.atStep++; }
         else if (F.atStep == 36 && t > 58.5f) {
+            F.tod = 0; apply_settings();
+            F.quality = 1; apply_settings();
+            game_add_wanted(g, 2);
+            rep("misdaad gesimuleerd: sterren=%d", g->wanted);
+            F.atStep++;
+        }
+        else if (F.atStep == 37 && t > 62.5f) {
+            int k, np = 0;
+            for (k = 0; k < MAX_POLICE; k++) np += g->veh[g->firstPolice + k].active;
+            at_shot("14_police");
+            rep("politie: %d auto's actief, sterren=%d, bust-timer=%.1f, gezondheid=%.0f", np, g->wanted, g->bustT, g->health);
+            F.atStep++;
+        }
+        else if (F.atStep == 38 && t > 66.0f) {
+            float h0 = g->health;
+            game_damage(g, 30.0f);
+            rep("gezondheid na schade: %.0f -> %.0f, sterren=%d (banner '%s')", h0, g->health, g->wanted, g->banner);
+            F.atStep++;
+        }
+        else if (F.atStep == 39 && t > 67.0f) {
+            F.missionsFrom = ST_MENU;
+            set_state(ST_MISSIONS);
+            F.atStep++;
+        }
+        else if (F.atStep == 40 && t > 70.0f) {
+            game_start_mission_at(g, 9);
+            rep("missiekeuze -> GRAND TOUR: missie=%d, modus=%d (2=auto)", g->mission, game_mode(g));
+            F.atStep++;
+        }
+        else if (F.atStep == 41 && t > 72.0f) { at_shot("16_mission_select_start"); F.atStep++; }
+        else if (F.atStep == 42 && t > 74.5f) {
             int i;
             rep("---- FPS per onderdeel (echte tijd; frames met screenshot niet meegeteld) ----");
             for (i = 0; i < F.nseg; i++) {
@@ -961,6 +1100,12 @@ void fe_frame(double now) {
         break;
     case ST_CREDITS:
         ui_begin(R); draw_credits(); ui_flush(R);
+        break;
+    case ST_MISSIONS:
+        if (F.missionsFrom != ST_PAUSE) ui_begin(R);
+        draw_missions();
+        ui_flush(R);
+        if (F.at && F.st > 1.0f) { at_shot("15_missions"); set_state(ST_GAME); }
         break;
     case ST_GAME:
     case ST_PAUSE:

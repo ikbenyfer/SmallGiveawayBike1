@@ -27,7 +27,7 @@ typedef struct {
 
     GMesh body[CHAR_VARIANTS], leg[CHAR_VARIANTS], arm[CHAR_VARIANTS];
     GMesh bike[BIKE_VARIANTS], car[CAR_VARIANTS];
-    GMesh cash, gift, cp, arrow, shadow, marker;
+    GMesh cash, gift, cp, arrow, shadow, marker, siren;
     GMesh ground;
     GMesh chunk[CHN * CHN];
     float chb[CHN * CHN][6];

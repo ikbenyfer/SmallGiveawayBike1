@@ -121,7 +121,7 @@ void model_bike(MeshB *m, int v) {
 }
 
 Col car_color(int v) {
-    static const int cc[CAR_VARIANTS][3] = {{200, 30, 34}, {40, 80, 170}, {240, 190, 30}, {225, 225, 225}, {50, 130, 80}, {40, 40, 46}};
+    static const int cc[CAR_VARIANTS][3] = {{200, 30, 34}, {40, 80, 170}, {240, 190, 30}, {225, 225, 225}, {50, 130, 80}, {40, 40, 46}, {238, 238, 242}};
     v = ((v % CAR_VARIANTS) + CAR_VARIANTS) % CAR_VARIANTS;
     return col(cc[v][0], cc[v][1], cc[v][2]);
 }
@@ -154,6 +154,11 @@ void model_car(MeshB *m, int v) {
             for (b = 0; b < 2; b++) {
                 mb_cyl(m, v3(wx[a], 0.34f, wz[b]), 0.34f, 0.26f, 8, 0, dark, metal, 1);
             }
+    }
+    if (v == POLICE_VARIANT) { /* politie: blauwe streep, donkere motorkap, voet lichtbalk */
+        mb_box(m, v3(-0.915f, 0.55f, -1.7f), v3(0.915f, 0.78f, 1.7f), col(30, 50, 140), 0);
+        mb_box(m, v3(-0.88f, 0.95f, 1.05f), v3(0.88f, 0.97f, 1.98f), col(25, 25, 30), 0);
+        mb_box(m, v3(-0.6f, 1.55f, -0.35f), v3(0.6f, 1.62f, -0.05f), col(30, 30, 34), 0);
     }
     if (v == 2) { /* taxi-bordje */
         mb_box(m, v3(-0.25f, 1.55f, -0.3f), v3(0.25f, 1.72f, 0.0f), col_e(255, 230, 120, 160), 0);
@@ -192,6 +197,10 @@ void model_arrow(MeshB *m) {
         }
         mb_quad(m, p[0], p[1], p[2], p[3], v3(0, 1, 0), c);
     }
+}
+
+void model_siren(MeshB *m) {
+    mb_box(m, v3(-0.26f, 0.0f, -0.13f), v3(0.0f, 0.16f, 0.13f), col_e(255, 255, 255, 255), 0);
 }
 
 void model_shadow(MeshB *m) { mb_disc(m, v3(0, 0, 0), 1.0f, 12, col(0, 0, 0)); }
