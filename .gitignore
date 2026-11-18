@@ -11,3 +11,5 @@ tools/cache/
 device_results/
 device_log_console.txt
 tools/*.log
+windows/
+build-win/

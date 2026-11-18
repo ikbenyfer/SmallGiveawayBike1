@@ -7,6 +7,37 @@ De game is geschreven in C en Objective-C met **OpenGL ES 2.0** (GLKit). Hij wer
 > - **Versie 1** (stad, fiets, auto, 5 missies, menu) is op de echte iPad 2 getest met de automatische test. Resultaat: **stabiel 30 FPS** op laag, midden en hoog, laden in 0,3 s, 21-31 MB geheugen, geen crash. Zie de tabel onderaan.
 > - **Versie 2** voegt politie, sterren, een health bar, 10 missies en een missiekeuzescherm toe. Hij voegt ook de **REAL NL-modus** toe: je typt een postcode en rijdt dan door de echte straten met de echte gebouwen. Deze versie is gebouwd en slaagt voor de Linux-test, maar is **nog niet op de iPad getest**. Vooral of het downloaden op iOS 9 lukt, moet de iPad nog laten zien.
 
+## Windows-versie
+Er is ook een **Windows-versie** (64-bit), met dezelfde game en alle onderdelen: de stad, de missies, de politie, wapens, auto's, REAL NL met Heemskerk + Beverwijk, streaming en downloads, muziek en geluid.
+
+**Installeren:** download `SmallGiveawayBike1-Windows.zip` (zie Releases), pak de zip uit en start `SmallGiveawayBike1.exe`. De map `data` en de twee `.dll`-bestanden moeten naast de exe blijven staan.
+
+**Besturing:**
+
+| Toets | Wat |
+|---|---|
+| W A S D of pijltjes | lopen; in een voertuig: W gas, S rem/achteruit, A/D sturen |
+| Muis | rondkijken (in het spel wordt de muis vastgehouden; Esc geeft hem terug) |
+| Linkermuisknop | schieten |
+| Spatie | springen |
+| E of F | in- en uitstappen |
+| Q | ander wapen |
+| M of Tab | grote kaart (slepen = schuiven, scrollwiel = zoomen) |
+| Esc | pauze / terug |
+| F11 | volledig scherm |
+
+Menu's bedien je met de muis. Een postcode typ je op het toetsenbord.
+
+**Opslag:** voortgang, instellingen en downloads staan in `%APPDATA%\SmallGiveawayBike1`. Daar staat ook `log.txt`, handig als er iets misgaat.
+
+**Hoe hij gebouwd is:** de Windows-versie gebruikt dezelfde C-code, met SDL2 (venster, invoer), SDL2_mixer (geluid), desktop-OpenGL 2.1 en WinHTTP (kaartdata). Hij wordt gebouwd in GitHub Actions met MinGW (`Win/`, job "Windows-versie").
+
+**Getest op een Windows 11-pc (AMD Radeon):** de volledige automatische test liep goed:
+- de stad, de missies, de politie en de overval
+- de autodealer en BLOCK CUSTOMS
+- REAL NL: ingebouwd, online via internet, downloaden en offline spelen
+- gemiddeld 60 FPS
+
 ## Bestanden
 | Wat | Waar |
 |---|---|
@@ -19,7 +50,8 @@ De game is geschreven in C en Objective-C met **OpenGL ES 2.0** (GLKit). Hij wer
 | Linux-testopstelling | `Tests/preview_linux.c`, `tools/linux_assets.py` |
 | iPad-test | `tools/ipad_test.py` |
 | Techniekonderzoek (fase 1) | `docs/TECHNIEK.md` |
-| Bouwen | `.github/workflows/build.yml` (private repo `ikbenyfer/SmallGiveawayBike1`) |
+| Bouwen | `.github/workflows/build.yml` (iOS-app, Windows-versie en Linux-test) |
+| Windows-versie | `Win/` (SDL2, toetsenbord/muis, WinHTTP) |
 
 ## Installeren
 ```
@@ -134,7 +166,7 @@ In de Linux-test tekent een frame **ongeveer 50-90 draw calls en 11-26 duizend d
 | Nacht (hoog) | 28,9 fps* | - |
 
 \* Bij het gemiddelde telt het frame mee waarin de test een PNG-screenshot opsloeg. Dat ene frame duurde ongeveer 200 ms. Vanaf versie 2 telt de test die frames niet meer mee. De systeemlog, waarin geen screenshots vallen, laat steeds 30 FPS zien.
-Verder: laden 0,3 s, geheugen ongeveer 21-31 MB, geen crash. In-, uitstappen en springen werkten. Screenshots staan in `device_results/`.
+Verder: laden 0,3 s, geheugen ongeveer 21-31 MB, geen crash. In-, uitstappen en springen werkten. (De testbeelden van het apparaat zelf staan bewust niet in deze publieke repo.)
 Wat er na de iPad-test is aangepast: muren aan de schaduwkant waren bijna zwart, dus er is meer omgevingslicht. **De touch-besturing met je vingers is nog niet door een mens getest.**
 
 **Linux-CI (Mesa, geen iPad), versie 2:** alles compileert zonder waarschuwingen en AddressSanitizer vindt niets. De autotest gaf voor REAL NL:
@@ -157,7 +189,7 @@ Verder doorloopt de autotest:
 3. `py -3.12 tools/ipad_test.py arm`. Dit zet de automatische test klaar.
 4. Open **Giveaway Bike** op de iPad en laat hem ongeveer 90 seconden met rust. Hij speelt dan zelf: lopen, springen, fiets, auto, een missie, laag/midden/hoog en nacht. Daarna gaat hij terug naar het menu.
    Wil je ook de log zien, start dan tegelijk `py -3.12 tools/ipad_test.py log 90`.
-5. `py -3.12 tools/ipad_test.py fetch`. Dit haalt `device_results/autotest_report.txt` (echte FPS per onderdeel, laadtijd, geheugen) en 16 screenshots op.
+5. `py -3.12 tools/ipad_test.py fetch`. Dit haalt het rapport (echte FPS per onderdeel, laadtijd, geheugen) en de screenshots op naar `device_results/`. Die map staat in `.gitignore` en komt dus niet in de repo.
 6. Speel daarna zelf, om de touch-besturing te testen.
 
 ## Opnieuw bouwen
