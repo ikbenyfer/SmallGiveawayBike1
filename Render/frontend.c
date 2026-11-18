@@ -82,6 +82,7 @@ static void rep(const char *fmt, ...) {
     }
 }
 
+static void ui_star(float cx, float cy, float rad, float cr, float cg, float cb, float ca);
 static void set_state(int s) { F.prevState = F.state; F.state = s; F.st = 0; F.pressed = 0; }
 
 static void apply_settings(void) {
