@@ -265,6 +265,16 @@ static void gen_shops(float ix0, float iz0, float ix1, float iz1, Rng *r, int bi
             float x0 = ix0 + s * w + 0.4f, x1 = ix0 + (s + 1) * w - 0.4f;
             float z0 = side ? iz1 - 13.0f : iz0, z1 = side ? iz1 : iz0 + 13.0f;
             building(x0, z0, x1, z1, 2 + rng_int(r, 2), wall_col(r), side ? 2 : 0, 1, r);
+            if (bi == 2 && bj == 2 && side == 0 && s == 1) {
+                /* BLOCK ARMS: donkere gevel, rood bord met een geweer-silhouet */
+                W->poi[POI_GUNSHOP] = v3((x0 + x1) * 0.5f, 0, iz0 - SIDEWALK * 0.5f - 0.3f);
+                mb_box(cur, v3(x0 + 0.5f, CURB + 4.1f, z0 - 0.45f), v3(x1 - 0.5f, CURB + 5.3f, z0 - 0.1f), col_e(170, 20, 24, 230), 0);
+                mb_box(cur, v3((x0 + x1) * 0.5f - 1.6f, CURB + 4.55f, z0 - 0.5f), v3((x0 + x1) * 0.5f + 1.4f, CURB + 4.8f, z0 - 0.45f), col_e(240, 240, 240, 255), 0);
+                mb_box(cur, v3((x0 + x1) * 0.5f + 0.6f, CURB + 4.3f, z0 - 0.5f), v3((x0 + x1) * 0.5f + 1.0f, CURB + 4.6f, z0 - 0.45f), col_e(240, 240, 240, 255), 0);
+                mb_box(cur, v3(x0 + 0.3f, CURB, z0 - 0.06f), v3(x1 - 0.3f, CURB + 3.0f, z0 - 0.02f), col(28, 28, 32), 0);
+                mb_quad(cur, v3((x0 + x1) * 0.5f - 1.0f, CURB, z0 - 0.08f), v3((x0 + x1) * 0.5f + 1.0f, CURB, z0 - 0.08f),
+                        v3((x0 + x1) * 0.5f + 1.0f, CURB + 2.5f, z0 - 0.08f), v3((x0 + x1) * 0.5f - 1.0f, CURB + 2.5f, z0 - 0.08f), v3(0, 0, -1), col_e(200, 60, 50, 120));
+            }
             if (bi == 2 && bj == 3 && side == 0 && s == 1) {
                 /* pizzeria: rood-wit, voor de deur */
                 W->poi[POI_PIZZA] = v3((x0 + x1) * 0.5f, 0, iz0 - SIDEWALK * 0.5f - 0.3f);
@@ -476,6 +486,50 @@ static void gen_garage(float ix0, float iz0, float ix1, float iz1, Rng *r) {
     add_park(ix0 + 6, cz + 6, PI_F * 0.5f, VEH_CAR, 2);
 }
 
+/* De Giveaway Bank: klassieke gevel met zuilen naar het plein, kluisdeur aan de achterkant */
+static void gen_bank(float ix0, float iz0, float ix1, float iz1, Rng *r) {
+    float bx0 = ix0 + 7.0f, bx1 = ix1 - 2.0f, bz0 = iz0 + 3.0f, bz1 = iz1 - 12.0f;
+    float h = CURB + 11.0f, cz = (bz0 + bz1) * 0.5f;
+    Col stone = col(212, 204, 186), dark = col(150, 144, 130);
+    int k;
+    (void)r;
+    mb_flat(cur, ix0, iz0, ix1, iz1, CURB + 0.02f, col(178, 172, 160));
+    cur->ao = 0.3f;
+    mb_box2(cur, v3(bx0, CURB, bz0), v3(bx1, h, bz1), col(120, 116, 110), stone, BOX_NOBOTTOM);
+    cur->ao = 0;
+    mb_box(cur, v3(bx0 - 0.3f, h, bz0 - 0.3f), v3(bx1 + 0.3f, h + 0.8f, bz1 + 0.3f), dark, BOX_NOBOTTOM);
+    /* portiek met trappen, zuilen en fronton */
+    for (k = 0; k < 3; k++) mb_box(cur, v3(bx0 - 6.0f + k * 0.6f, CURB, cz - 9.0f), v3(bx0, CURB + 0.25f * (k + 1), cz + 9.0f), col(190, 184, 170), BOX_NOBOTTOM);
+    for (k = 0; k < 6; k++) {
+        float zc = cz - 7.5f + k * 3.0f;
+        mb_cyl(cur, v3(bx0 - 3.2f, CURB + 0.75f, zc), 0.55f, 7.6f, 10, 1, stone, stone, 1);
+        add_box(bx0 - 3.8f, zc - 0.6f, bx0 - 2.6f, zc + 0.6f, h, BOX_PROP);
+    }
+    mb_box(cur, v3(bx0 - 4.2f, CURB + 8.35f, cz - 9.0f), v3(bx0, CURB + 9.2f, cz + 9.0f), dark, 0);
+    mb_roof(cur, bx0 - 4.2f, cz - 9.0f, bx0, cz + 9.0f, CURB + 9.2f, 2.6f, 0, stone, stone);
+    mb_box(cur, v3(bx0 - 4.3f, CURB + 9.6f, cz - 2.8f), v3(bx0 - 4.2f, CURB + 10.6f, cz + 2.8f), col_e(255, 205, 80, 255), 0);   /* BANK-bord */
+    mb_quad(cur, v3(bx0 - 0.04f, CURB, cz - 1.6f), v3(bx0 - 0.04f, CURB, cz + 1.6f), v3(bx0 - 0.04f, CURB + 4.0f, cz + 1.6f), v3(bx0 - 0.04f, CURB + 4.0f, cz - 1.6f), v3(-1, 0, 0), col(70, 50, 30));
+    for (k = 0; k < 4; k++) {
+        float zc = bz0 + 4.0f + k * ((bz1 - bz0 - 8.0f) / 3.0f);
+        if (fabsf(zc - cz) < 3.0f) continue;
+        mb_quad(cur, v3(bx0 - 0.04f, CURB + 5.0f, zc - 1.0f), v3(bx0 - 0.04f, CURB + 5.0f, zc + 1.0f), v3(bx0 - 0.04f, CURB + 7.5f, zc + 1.0f), v3(bx0 - 0.04f, CURB + 7.5f, zc - 1.0f), v3(-1, 0, 0), col_e(255, 220, 150, 200));
+    }
+    add_box(bx0, bz0, bx1, bz1, h + 0.8f, BOX_BUILDING);
+    /* kluisdeur aan de zuidkant (binnenplaats) */
+    {
+        float vx = (bx0 + bx1) * 0.5f;
+        mb_cyl(cur, v3(vx, CURB + 1.6f, bz1 + 0.08f), 1.5f, 0.16f, 16, 2, col(150, 152, 160), col(120, 122, 130), 1);
+        mb_cyl(cur, v3(vx, CURB + 1.6f, bz1 + 0.2f), 0.5f, 0.12f, 8, 2, col(200, 170, 60), col(200, 170, 60), 1);
+        mb_box(cur, v3(vx - 0.9f, CURB + 1.55f, bz1 + 0.24f), v3(vx + 0.9f, CURB + 1.65f, bz1 + 0.3f), col(90, 90, 96), 0);
+        mb_box(cur, v3(vx - 0.05f, CURB + 0.7f, bz1 + 0.24f), v3(vx + 0.05f, CURB + 2.5f, bz1 + 0.3f), col(90, 90, 96), 0);
+        mb_box(cur, v3(vx + 2.0f, CURB + 2.6f, bz1), v3(vx + 2.4f, CURB + 2.9f, bz1 + 0.25f), col_e(255, 40, 40, 255), 0);  /* alarmlamp */
+        W->poi[POI_VAULT] = v3(vx, 0, bz1 + 2.2f);
+    }
+    W->poi[POI_BANK] = v3(ix0 + 1.6f, 0, cz);
+    dumpster(ix1 - 4.0f, iz1 - 3.0f);
+    add_park(ix0 + 8.0f, iz1 - 5.0f, PI_F * 0.5f, VEH_CAR, 5);
+}
+
 static void gen_block(int i, int j) {
     char t = W->type[j][i];
     float bx0 = block_x0(i), bz0 = block_x0(j), bx1 = bx0 + BLOCKW, bz1 = bz0 + BLOCKW;
@@ -495,7 +549,10 @@ static void gen_block(int i, int j) {
         lamp(bx1 - 0.5f, bz0 + t2, 1, 0);
     }
     switch (t) {
-    case 'D': gen_downtown(ix0, iz0, ix1, iz1, &r); break;
+    case 'D':
+        if (i == 4 && j == 3) gen_bank(ix0, iz0, ix1, iz1, &r);
+        else gen_downtown(ix0, iz0, ix1, iz1, &r);
+        break;
     case 'S': gen_shops(ix0, iz0, ix1, iz1, &r, i, j); break;
     case 'A': gen_alley(ix0, iz0, ix1, iz1, &r); break;
     case 'H': gen_houses(ix0, iz0, ix1, iz1, &r, i, j); break;

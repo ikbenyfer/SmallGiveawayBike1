@@ -4,7 +4,8 @@
 
 #include "mesh.h"
 
-#define CHAR_VARIANTS 8
+#define CHAR_VARIANTS 9
+#define COP_VARIANT 8
 #define BIKE_VARIANTS 4
 #define CAR_VARIANTS 7
 #define POLICE_VARIANT 6
@@ -30,6 +31,8 @@ void model_checkpoint(MeshB *m);   /* open cilinder r=1, h=1 (wordt geschaald) *
 void model_arrow(MeshB *m);
 void model_shadow(MeshB *m);       /* schijf r=1 */
 void model_marker(MeshB *m);
-void model_siren(MeshB *m);       /* missie-start: ring + ster */
+void model_siren(MeshB *m);
+void model_gun(MeshB *m);       /* in de hand, loop langs -y (armrichting) */
+void model_tracer(MeshB *m);    /* lijntje van z=0 tot z=1 */       /* missie-start: ring + ster */
 
 #endif

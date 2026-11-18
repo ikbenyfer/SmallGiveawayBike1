@@ -34,7 +34,7 @@ typedef struct { float x, z, h; int type, variant; } ParkSpot;
 
 enum {
     POI_SPAWN = 0, POI_PLAZA, POI_PIZZA, POI_GARAGE, POI_STAGE, POI_BIKESHOP,
-    POI_REDCAR, POI_GIVEAWAY_BIKE, POI_COUNT
+    POI_REDCAR, POI_GIVEAWAY_BIKE, POI_BANK, POI_VAULT, POI_GUNSHOP, POI_COUNT
 };
 
 typedef struct {

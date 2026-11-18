@@ -24,8 +24,8 @@ typedef struct { char pc[8]; char name[96]; long kb; double rx, ry; } NLArea;
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP };
-enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP };
+enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH };
 
 #define NTOUCH 10
 #define STICK_R 78.0f
@@ -50,7 +50,8 @@ static struct {
     /* invoer */
     TSlot ts[NTOUCH];
     Input in;
-    int jumpEdge, actionEdge;
+    int jumpEdge, actionEdge, switchEdge;
+    char shopMsg[96];
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
     int lOn, rOn;
     /* instellingen */
@@ -75,7 +76,7 @@ static struct {
     char queue[8][8]; int nQueue, dlPhase;
     double dlT0, nlT0;
     char dlLast[128], nlLabel[128];
-    float nlTx, nlTz, nlLoadSecs, streetT, atNlT, atNlT2;
+    float nlTx, nlTz, nlLoadSecs, streetT, atNlT, atNlT2, atT3;
     char street[96];
     int atDlPhase;
     /* grote kaart */
@@ -145,6 +146,9 @@ static void save_all(void) {
         for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;
         plat_save_int("money", (int)F.G.money);
         plat_save_int("done", done);
+        plat_save_int("guns", F.G.owned[1] | (F.G.owned[2] << 1) | (F.G.owned[3] << 2));
+        plat_save_int("ammo1", F.G.ammo[1]); plat_save_int("ammo2", F.G.ammo[2]); plat_save_int("ammo3", F.G.ammo[3]);
+        plat_save_int("armor", (int)F.G.armor);
         F.savedMoney = F.G.money; F.savedDone = done;
     }
     plat_save_flush();
@@ -202,6 +206,12 @@ static void load_step(void) {
             F.G.moneyShown = F.G.money;
             done = plat_load_int("done", 0);
             for (i = 0; i < NMISSIONS; i++) F.G.completed[i] = (done >> i) & 1;
+            {
+                int guns = plat_load_int("guns", 0);
+                F.G.owned[1] = guns & 1; F.G.owned[2] = (guns >> 1) & 1; F.G.owned[3] = (guns >> 2) & 1;
+                F.G.ammo[1] = plat_load_int("ammo1", 0); F.G.ammo[2] = plat_load_int("ammo2", 0); F.G.ammo[3] = plat_load_int("ammo3", 0);
+                F.G.armor = (float)plat_load_int("armor", 0);
+            }
         }
         F.loadDone = 1;
         apply_settings();
@@ -451,6 +461,20 @@ static void draw_minimap(void) {
             ui_circle(R, cx + sx * half, cy + sy * half, 6, done ? 0.4f : 1.0f, done ? 1.0f : 0.82f, 0.15f, 1);
         }
     }
+    if (!g->nl) {
+        V3 pts[2];
+        int q;
+        pts[0] = g->w->poi[POI_GUNSHOP];
+        pts[1] = g->w->poi[POI_BANK];
+        for (q = 0; q < 2; q++) {
+            float rx = pts[q].x - px, rz = pts[q].z - pz;
+            float sx = (rx * rt.x + rz * rt.z) / rad, sy = -(rx * f.x + rz * f.z) / rad;
+            float m = fmaxf(fabsf(sx), fabsf(sy));
+            if (m > 0.9f) { sx = sx / m * 0.9f; sy = sy / m * 0.9f; }
+            ui_rect(R, cx + sx * half - 7, cy + sy * half - 7, 14, 14, 0, 0, 0, 0.85f);
+            ui_rect(R, cx + sx * half - 5, cy + sy * half - 5, 10, 10, q ? 0.2f : 0.95f, q ? 0.75f : 0.15f, q ? 0.3f : 0.15f, 1);
+        }
+    }
     /* speler-pijl */
     {
         float a = -(g->p.h - g->camYaw);
@@ -489,8 +513,11 @@ static void btn_pos(int ctl, float *x, float *y, float *r) {
     *x = 0; *y = 0; *r = 0;
     if (ctl == CTL_PAUSE) { *x = W - 42; *y = 40; *r = 28; return; }
     if (mode == MODE_FOOT) {
+        int armed = F.loadDone && game_has_weapon(&F.G);
         if (ctl == CTL_JUMP) { *x = W - 74; *y = H - 300; *r = 52; }
         if (ctl == CTL_ACTION) { *x = W - 196; *y = H - 330; *r = 48; }
+        if (ctl == CTL_FIRE && armed) { *x = W - 74; *y = H - 430; *r = 54; }
+        if (ctl == CTL_WSWITCH && armed) { *x = W - 200; *y = H - 455; *r = 36; }
     } else {
         if (ctl == CTL_GAS) { *x = W - 74; *y = H - 300; *r = 60; }
         if (ctl == CTL_BRAKE) { *x = W - 200; *y = H - 318; *r = 48; }
@@ -525,6 +552,20 @@ static void draw_hud(void) {
         ui_rect(R, hx, hy, hw, 12, 0.25f, 0.05f, 0.05f, 0.9f);
         ui_rect(R, hx, hy, hw * hp, 12, (1.0f - hp) * 0.9f + 0.1f, 0.25f + hp * 0.65f, 0.2f, low);
         ui_text(R, "+", hx - 8, hy - 9, 26, 1, 0.35f, 0.35f, 1, 2);
+    }
+    if (g->armor > 0.5f) {
+        float hw = 210.0f, hx = W - 86 - hw;
+        ui_rect(R, hx, 85, hw * clampf(g->armor / 100.0f, 0, 1), 5, 0.35f, 0.65f, 1.0f, 0.95f);
+    }
+    if (g->weapon != WP_NONE && game_mode(g) == MODE_FOOT) {
+        snprintf(b, sizeof(b), "%s  %d", WEAPONS[g->weapon].name, g->ammo[g->weapon]);
+        ui_text(R, b, W - 86, 128, 24, g->ammo[g->weapon] > 0 ? 1.0f : 1.0f, g->ammo[g->weapon] > 0 ? 1.0f : 0.4f, g->ammo[g->weapon] > 0 ? 1.0f : 0.4f, 1, 2);
+    }
+    if (g->mission >= 0 && g->mdef[g->mission].cp[g->mstep < g->mdef[g->mission].ncp ? g->mstep : 0].hold > 0 && g->holdT > 0) {
+        const Checkpoint *c = &g->mdef[g->mission].cp[g->mstep];
+        ui_rect(R, W * 0.5f - 200, 124, 400, 22, 0, 0, 0, 0.7f);
+        ui_rect(R, W * 0.5f - 197, 127, 394.0f * clampf(g->holdT / c->hold, 0, 1), 16, 1.0f, 0.75f, 0.2f, 1);
+        ui_text(R, "DRILLING THE VAULT", W * 0.5f, 150, 20, 1, 0.85f, 0.4f, 1, 1);
     }
     /* gezocht-sterren */
     if (g->wanted > 0) {
@@ -622,6 +663,14 @@ static void draw_hud(void) {
         const char *lab = "ENTER";
         if (near >= 0) lab = g->veh[near].type == VEH_BIKE ? "RIDE" : "DRIVE";
         btn_pos(CTL_JUMP, &x, &y, &r); draw_button(x, y, r, "JUMP", ctl_down(CTL_JUMP), 1, 24);
+        if (game_has_weapon(g)) {
+            btn_pos(CTL_FIRE, &x, &y, &r);
+            ui_circle(R, x, y, r, ctl_down(CTL_FIRE) ? 0.95f : 0.6f, 0.08f, 0.08f, 0.55f);
+            ui_ring(R, x, y, r, 3.0f, 1, 1, 1, 0.8f);
+            ui_text(R, "FIRE", x, y - 15, 26, 1, 1, 1, 1, 1);
+            btn_pos(CTL_WSWITCH, &x, &y, &r);
+            draw_button(x, y, r, "GUN", ctl_down(CTL_WSWITCH), 1, 18);
+        }
         btn_pos(CTL_ACTION, &x, &y, &r);
         if (near >= 0) {
             float p = 0.5f + 0.5f * sinf(F.t * 6.0f);
@@ -655,13 +704,13 @@ static void draw_missions(void) {
         draw_backdrop(0.35f, 0.0f, F.t);
         ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.5f);
     }
-    ui_text(R, "MISSIONS", R->W * 0.5f, 26, 56, 1, 1, 1, 1, 1);
+    ui_text(R, "MISSIONS", R->W * 0.5f, 18, 52, 1, 1, 1, 1, 1);
     for (i = 0; i < NMISSIONS; i++) {
         const MissionDef *m = &F.G.mdef[i];
-        float x = (i & 1) ? 522.0f : 62.0f, y = 112.0f + (i / 2) * 104.0f;
+        float x = (i & 1) ? 522.0f : 62.0f, y = 96.0f + (i / 2) * 98.0f;
         int pr = F.pressed == i + 1, done = F.G.completed[i];
-        ui_rect(R, x, y, 440, 94, pr ? 0.55f : 0.06f, pr ? 0.08f : 0.05f, pr ? 0.08f : 0.06f, 0.78f);
-        ui_rect(R, x, y, 6, 94, done ? 0.35f : 0.95f, done ? 0.9f : 0.75f, done ? 0.4f : 0.15f, 1);
+        ui_rect(R, x, y, 440, 90, pr ? 0.55f : 0.06f, pr ? 0.08f : 0.05f, pr ? 0.08f : 0.06f, 0.78f);
+        ui_rect(R, x, y, 6, 90, done ? 0.35f : 0.95f, done ? 0.9f : 0.75f, done ? 0.4f : 0.15f, 1);
         snprintf(b, sizeof(b), "%d. %s", i + 1, m->title);
         ui_text(R, b, x + 18, y + 6, 30, 1, 1, 1, 1, 0);
         {
@@ -1377,6 +1426,79 @@ static void open_nl_input(int from) {
     set_state(ST_NLINPUT);
 }
 
+static const char *SHOP_DESC[5] = {"Reliable sidearm", "Fast, light, lots of bullets", "Huge damage up close", "Refill all your guns", "Absorbs most damage"};
+
+static void shop_item(int i, char *name, size_t n, int *price, char *info, size_t ni) {
+    Game *g = &F.G;
+    if (i <= 2) {
+        int w = i + 1;
+        snprintf(name, n, "%s", WEAPONS[w].name);
+        *price = g->owned[w] ? WEAPONS[w].ammoPrice : WEAPONS[w].price;
+        if (g->owned[w]) snprintf(info, ni, "OWNED - %d bullets (+%d)", g->ammo[w], WEAPONS[w].ammoPack);
+        else snprintf(info, ni, "%s", SHOP_DESC[i]);
+    } else if (i == 3) {
+        int w;
+        *price = 0;
+        for (w = 1; w < WP_COUNT; w++) if (g->owned[w]) *price += WEAPONS[w].ammoPrice;
+        snprintf(name, n, "AMMO (ALL GUNS)");
+        snprintf(info, ni, "%s", *price ? SHOP_DESC[3] : "Buy a gun first");
+    } else {
+        snprintf(name, n, "BODY ARMOR");
+        *price = 300;
+        snprintf(info, ni, "%s (now %d%%)", SHOP_DESC[4], (int)g->armor);
+    }
+}
+
+static void draw_shop(void) {
+    Renderer *R = &F.R;
+    char name[48], info[80], b[48];
+    int i, price;
+    r_draw_scene(R, &F.G);
+    ui_begin(R);
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.72f);
+    ui_rect(R, 152, 40, 720, 640, 0.07f, 0.06f, 0.07f, 0.95f);
+    ui_rect(R, 152, 40, 720, 70, 0.6f, 0.06f, 0.06f, 1);
+    ui_text(R, "BLOCK ARMS", 512, 50, 52, 1, 1, 1, 1, 1);
+    fmt_money(b, sizeof(b), F.G.money);
+    ui_text(R, b, 852, 128, 34, 0.55f, 1.0f, 0.55f, 1, 2);
+    ui_text(R, "Licensed dealer - no refunds", 176, 136, 18, 0.8f, 0.8f, 0.8f, 1, 0);
+    for (i = 0; i < 5; i++) {
+        float y = 180.0f + i * 88.0f;
+        int pr = F.pressed == 600 + i;
+        shop_item(i, name, sizeof(name), &price, info, sizeof(info));
+        ui_rect(R, 172, y, 680, 78, 0.12f, 0.12f, 0.14f, 0.95f);
+        ui_text(R, name, 192, y + 6, 32, 1, 1, 1, 1, 0);
+        ui_text(R, info, 192, y + 46, 17, 0.8f, 0.8f, 0.8f, 1, 0);
+        ui_rect(R, 712, y + 12, 124, 54, pr ? 0.9f : (F.G.money >= price && price > 0 ? 0.2f : 0.25f), pr ? 0.2f : (F.G.money >= price && price > 0 ? 0.55f : 0.25f), pr ? 0.2f : 0.25f, 1);
+        snprintf(b, sizeof(b), "$%d", price);
+        ui_text(R, b, 774, y + 20, 30, 1, 1, 1, 1, 1);
+    }
+    if (F.shopMsg[0]) ui_text(R, F.shopMsg, 512, 626, 20, 1, 0.85f, 0.4f, 1, 1);
+    big_button("LEAVE", 512, 724, 40, F.pressed == 690, 1);
+    ui_flush(R);
+}
+
+static void shop_tap(float x, float y, int phase) {
+    int i, hit = 0;
+    for (i = 0; i < 5; i++) {
+        float yy = 180.0f + i * 88.0f;
+        if (x > 712 && x < 836 && y > yy + 12 && y < yy + 66) hit = 600 + i;
+    }
+    if (hit_text(x, y, "LEAVE", 512, 724 + 22, 40)) hit = 690;
+    if (phase != TOUCH_END) { F.pressed = hit; return; }
+    F.pressed = 0;
+    if (hit == 690) { set_state(ST_GAME); save_all(); return; }
+    if (hit >= 600 && hit < 605) {
+        char name[48], info[80];
+        int price;
+        shop_item(hit - 600, name, sizeof(name), &price, info, sizeof(info));
+        if (game_buy(&F.G, hit - 600)) snprintf(F.shopMsg, sizeof(F.shopMsg), "Bought: %s", name);
+        else snprintf(F.shopMsg, sizeof(F.shopMsg), price > 0 ? "Not enough money (or you already have it)." : "Buy a gun first.");
+        F.G.moneyShown = F.G.money;
+        save_all();
+    }
+}
+
 static void draw_pause(void) {
     Renderer *R = &F.R;
     int i;
@@ -1400,11 +1522,11 @@ static void stick_value(float bx, float by, float kx, float ky, float *ox, float
 static void game_touch(TSlot *s, int phase) {
     Renderer *R = &F.R;
     if (phase == TOUCH_BEGIN) {
-        static const int order[5] = {CTL_PAUSE, CTL_GAS, CTL_BRAKE, CTL_JUMP, CTL_ACTION};
+        static const int order[7] = {CTL_PAUSE, CTL_GAS, CTL_BRAKE, CTL_JUMP, CTL_ACTION, CTL_FIRE, CTL_WSWITCH};
         int k;
         s->ctl = CTL_NONE;
         if (s->x < 224 && s->y < 236) { s->ctl = CTL_UI; bm_open(); return; }
-        for (k = 0; k < 5; k++) {
+        for (k = 0; k < 7; k++) {
             float x, y, r;
             btn_pos(order[k], &x, &y, &r);
             if (r <= 0) continue;
@@ -1412,6 +1534,7 @@ static void game_touch(TSlot *s, int phase) {
                 s->ctl = order[k];
                 if (order[k] == CTL_JUMP) F.jumpEdge = 1;
                 if (order[k] == CTL_ACTION) F.actionEdge = 1;
+                if (order[k] == CTL_WSWITCH) F.switchEdge = 1;
                 if (order[k] == CTL_PAUSE) { set_state(ST_PAUSE); save_all(); }
                 return;
             }
@@ -1460,6 +1583,7 @@ static void menu_tap(float x, float y, int phase) {
     }
     if (F.state == ST_NLINPUT) { nl_input_tap(x, y, phase); return; }
     if (F.state == ST_BIGMAP) { bigmap_touch(x, y, phase); return; }
+    if (F.state == ST_SHOP) { shop_tap(x, y, phase); return; }
     if (F.state == ST_NLLOAD) {
         if (F.job.err && phase == TOUCH_END) {
             if (F.mode != 0) nl_exit_to_city();
@@ -1469,13 +1593,19 @@ static void menu_tap(float x, float y, int phase) {
     }
     if (F.state == ST_MISSIONS) {
         for (i = 0; i < NMISSIONS; i++) {
-            float cxl = (i & 1) ? 522.0f : 62.0f, cyl = 112.0f + (i / 2) * 104.0f;
-            if (x > cxl && x < cxl + 440 && y > cyl && y < cyl + 94) hit = i + 1;
+            float cxl = (i & 1) ? 522.0f : 62.0f, cyl = 96.0f + (i / 2) * 98.0f;
+            if (x > cxl && x < cxl + 440 && y > cyl && y < cyl + 90) hit = i + 1;
         }
         if (hit_text(x, y, "BACK", R->W * 0.5f, R->H - 60.0f + 22, 44)) hit = 100;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
         if (hit == 100) set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU);
+        else if (hit >= 1 && hit <= NMISSIONS && F.G.mdef[hit - 1].requireWeapon && !game_has_weapon(&F.G)) {
+            /* geen wapen: start in de stad bij BLOCK ARMS */
+            if (F.missionsFrom == ST_PAUSE) set_state(ST_GAME); else start_game();
+            game_teleport(&F.G, F.G.w->poi[POI_GUNSHOP].x + 3.0f, F.G.w->poi[POI_GUNSHOP].z - 4.0f, 0);
+            game_message(&F.G, "You need a gun for the heist. Walk into BLOCK ARMS (red marker).", 4.0f);
+        }
         else if (hit >= 1 && hit <= NMISSIONS) {
             if (F.missionsFrom == ST_PAUSE) set_state(ST_GAME);
             else start_game();
@@ -1569,7 +1699,9 @@ static void build_input(void) {
     in->brake = ctl_down(CTL_BRAKE);
     in->jumpPressed = F.jumpEdge;
     in->actionPressed = F.actionEdge;
-    F.jumpEdge = F.actionEdge = 0;
+    in->fire = ctl_down(CTL_FIRE);
+    in->switchPressed = F.switchEdge;
+    F.jumpEdge = F.actionEdge = F.switchEdge = 0;
 }
 
 /* ------------------------------------------------------------------ automatische test */
@@ -1844,6 +1976,71 @@ static void autotest_tick(float dt) {
             F.atStep = 70;
         }
         else if (F.atStep == 70) {
+            g->money += 3000;
+            g->wanted = 0;
+            rep("Wapenwinkel: naar BLOCK ARMS");
+            game_teleport(g, g->w->poi[POI_GUNSHOP].x, g->w->poi[POI_GUNSHOP].z + 3.0f, PI_F);
+            F.atStep++;
+        }
+        else if (F.atStep == 71) {
+            game_teleport(g, g->w->poi[POI_GUNSHOP].x, g->w->poi[POI_GUNSHOP].z, PI_F);
+            F.atStep++;
+        }
+        else if (F.atStep == 72 && g->owned[1]) {
+            /* schieten: naar de dichtstbijzijnde voetganger */
+            int i, best = -1;
+            float bd = 1e9f;
+            for (i = 0; i < MAX_PED - MAX_COPS; i++) {
+                float dx = g->ped[i].x - g->p.x, dz = g->ped[i].z - g->p.z;
+                if (g->ped[i].active && g->ped[i].state != PED_DOWN && dx * dx + dz * dz < bd) { bd = dx * dx + dz * dz; best = i; }
+            }
+            if (best >= 0) {
+                Ped *p = &g->ped[best];
+                game_teleport(g, p->x - 6.0f, p->z, PI_F * 0.5f);
+                g->camYaw = PI_F * 0.5f;
+            }
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 73 && t > F.atT3 + 0.8f) { at_shot("24_shooting"); F.atStep++; }
+        else if (F.atStep == 74 && t > F.atT3 + 2.0f) {
+            rep("Schieten: %d schoten, %d raak, sterren=%d, kogels over %d", g->statShots, g->statHits, g->wanted, g->ammo[1]);
+            g->wanted = 0;
+            {
+                int k;
+                for (k = 0; k < MAX_POLICE; k++) g->veh[g->firstPolice + k].active = 0;
+                for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) g->ped[k].active = 0;
+            }
+            game_start_mission_at(g, 10);
+            rep("Overval gestart: missie=%d", g->mission);
+            game_teleport(g, g->w->poi[POI_VAULT].x, g->w->poi[POI_VAULT].z, PI_F);
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 75 && t > F.atT3 + 6.0f) {
+            at_shot("25_heist_alarm");
+            rep("Overval: alarm, sterren=%d, kluis %.0f%%", g->wanted, 100.0f * g->holdT / 15.0f);
+            F.atStep++;
+        }
+        else if (F.atStep == 76 && (g->mstep >= 1 || t > F.atT3 + 30.0f)) {
+            int k, cops = 0;
+            for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) cops += g->ped[k].active;
+            rep("Kluis open=%d na %.1f s, agenten te voet=%d, agentschoten=%d, gezondheid=%.0f, vest=%.0f", g->mstep >= 1, t - F.atT3, cops, g->copShots, g->health, g->armor);
+            at_shot("26_heist_cops");
+            g->wanted = 0;
+            for (k = 0; k < MAX_POLICE; k++) g->veh[g->firstPolice + k].active = 0;
+            for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) g->ped[k].active = 0;
+            g->health = 100;
+            game_teleport(g, g->w->poi[POI_GARAGE].x, g->w->poi[POI_GARAGE].z, 0);
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 77 && t > F.atT3 + 1.5f) {
+            rep("Overval klaar=%d, banner='%s', geld $%ld", g->completed[10], g->banner, g->money);
+            at_shot("27_heist_passed");
+            F.atStep = 90;
+        }
+        else if (F.atStep == 90) {
             int i;
             rep("---- FPS per onderdeel (echte tijd; frames met screenshot niet meegeteld) ----");
             for (i = 0; i < F.nseg; i++) {
@@ -1883,6 +2080,7 @@ static void autotest_tick(float dt) {
     if (t > 16.0f && t < 22.5f) { in->gas = 1; in->mx = 0.4f * sinf(t * 0.7f); }
     if (t > 22.5f && t < 24.2f) in->brake = 1;
     if (t > 36.0f && t < 58.0f) { in->lx = 0.35f; in->my = 0.0f; }
+    if (F.atStep >= 73 && F.atStep <= 74) in->fire = 1;
     if (F.mode == 1 && F.atStep >= 45 && F.atStep <= 47 && t > F.atNlT + 2.6f && t < F.atNlT + 7.4f) { in->gas = 1; in->mx = 0.1f; }
     s = seg_cur();
     if (F.skipStat > 0) { F.skipStat--; s = NULL; }  /* frames rond een screenshot niet meetellen */
@@ -1981,6 +2179,16 @@ void fe_frame(double now) {
             }
         }
         break;
+    case ST_SHOP:
+        draw_shop();
+        if (F.at && F.st > 1.0f) {
+            at_shot("23_gunshop");
+            game_buy(&F.G, 0);
+            game_buy(&F.G, 4);
+            rep("Winkel: pistool=%d (%d kogels), vest=%.0f, geld over $%ld", F.G.owned[1], F.G.ammo[1], F.G.armor, F.G.money);
+            set_state(ST_GAME);
+        }
+        break;
     case ST_BIGMAP:
         ui_begin(R); draw_bigmap(); ui_flush(R);
         if (F.at && F.st > 1.0f) {
@@ -2001,6 +2209,7 @@ void fe_frame(double now) {
             if (F.at) autotest_tick(dt);
             else build_input();
             if (F.state == ST_GAME || F.at) game_update(&F.G, &F.in, dt);
+            if (F.G.shopOpen) { F.G.shopOpen = 0; F.shopMsg[0] = 0; set_state(ST_SHOP); }
             if (!F.at && F.mode == 0) {
                 int i, done = 0;
                 for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;

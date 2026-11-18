@@ -6,9 +6,11 @@
 
 #define MAX_VEH 52
 #define MAX_POLICE 3
-#define MAX_PED 16
+#define MAX_PED 20
+#define MAX_COPS 4      /* laatste 4 voetganger-plekken: agenten */
+#define MAX_TRACERS 12
 #define MAX_TRAFFIC 10
-#define NMISSIONS 10
+#define NMISSIONS 11
 #define MAX_CP 10
 
 enum { NEED_ANY = 0, NEED_BIKE = 1, NEED_CAR = 2, NEED_FOOT = 3 };
@@ -20,12 +22,14 @@ typedef struct {
     float lx, ly;          /* rechter stick (camera) */
     int jump, action, gas, brake;
     int jumpPressed, actionPressed;
+    int fire, switchPressed;
 } Input;
 
 typedef struct {
     int active, type, variant;
     float x, z, y, h, speed, steer, lean, wheel;
-    int traffic, police;
+    int traffic, police, wrecked, copsOut;
+    float hp;
     int ti, tj, dir, phase;   /* verkeer: doel-kruispunt en richting */
     float tx, tz, stuck, ghost, hitcool;
 } Vehicle;
@@ -35,6 +39,8 @@ typedef struct {
     float x, z, y, h, speed, anim, timer;
     int bi, bj, corner, dsign;
     float lay;  /* 0..1 omgevallen */
+    int cop, shot;
+    float hp, shootCool;
 } Ped;
 
 typedef struct {
@@ -43,7 +49,7 @@ typedef struct {
     float cool, hitCool;
 } Player;
 
-typedef struct { float x, z, r; int need; const char *text; } Checkpoint;
+typedef struct { float x, z, r; int need; const char *text; float hold; int alarm, clean; } Checkpoint;
 
 typedef struct {
     const char *title, *brief;
@@ -53,6 +59,7 @@ typedef struct {
     Checkpoint cp[MAX_CP];
     int gifts;  /* toon cadeautjes op de any-order punten */
     int escape; /* missie: politie afschudden */
+    int requireWeapon;
     int startVeh; /* bij starten via missiekeuze: 0 niets, 1 fiets, 2 auto */
     const char *tag;
 } MissionDef;
@@ -82,7 +89,14 @@ typedef struct {
     long money; float moneyFlash; long moneyShown;
     float cashTimer[24];
 
-    float health, hurtT, hurtFlash;
+    float health, hurtT, hurtFlash, armor;
+    int owned[4], ammo[4], weapon;
+    float fireCool, muzzleT;
+    struct { V3 a, b; float t; } tracer[MAX_TRACERS];
+    int trNext;
+    float holdT; int alarmDone;
+    int shopOpen, inShop;
+    int statShots, statHits, copShots;
     int wanted;
     float evadeT, bustT, crimeCool, ramCool;
 
@@ -108,6 +122,11 @@ void game_teleport(Game *g, float x, float z, float h);
 void game_start_mission(Game *g, int m);
 void game_message(Game *g, const char *txt, float t);
 void game_add_wanted(Game *g, int n);
+enum { WP_NONE = 0, WP_PISTOL, WP_SMG, WP_SHOTGUN, WP_COUNT };
+typedef struct { const char *name; int price, ammoPrice, ammoPack; float damage, delay, range, spread; int pellets; } WeaponDef;
+extern const WeaponDef WEAPONS[WP_COUNT];
+int game_has_weapon(const Game *g);
+int game_buy(Game *g, int item);   /* 0 pistool, 1 SMG, 2 shotgun, 3 kogels, 4 vest */
 void game_damage(Game *g, float amount);
 /* missie starten vanuit het keuzescherm: speler naar het startpunt (evt. met voertuig) */
 void game_start_mission_at(Game *g, int m);

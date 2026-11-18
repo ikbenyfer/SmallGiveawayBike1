@@ -8,6 +8,7 @@ static const int DIRZ[4] = {0, 1, 0, -1};
 
 static float dir_heading(int d) { return atan2f((float)DIRX[d], (float)DIRZ[d]); }
 static void player_pos(const Game *g, float *x, float *z);
+static void update_cop(Game *g, Ped *p, float dt);
 
 void game_message(Game *g, const char *txt, float t) {
     snprintf(g->msg, sizeof(g->msg), "%s", txt);
@@ -154,10 +155,24 @@ static void setup_missions(Game *g) {
         m->ncp = 8;
     }
 
+    m = &g->mdef[10];
+    m->title = "THE BIG HEIST";
+    m->brief = "Crack the Giveaway Bank vault, lose the cops and bring the cash to the hideout.";
+    m->giver = w->poi[POI_BANK];
+    m->reward = 5000;
+    m->requireWeapon = 1;
+    cp_set(&m->cp[0], w->poi[POI_VAULT].x, w->poi[POI_VAULT].z, 2.8f, NEED_FOOT, "Crack the vault - stay close!");
+    m->cp[0].hold = 15.0f;
+    m->cp[0].alarm = 3;
+    cp_set(&m->cp[1], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_ANY, "Lose the police, then bring the cash to the garage");
+    m->cp[1].clean = 1;
+    m->ncp = 2;
+
     g->mdef[2].startVeh = 1;
     for (i = 0; i < NMISSIONS; i++) {
         int need = g->mdef[i].ncp > 0 ? g->mdef[i].cp[g->mdef[i].ncp - 1].need : NEED_CAR;
         g->mdef[i].tag = need == NEED_BIKE ? "BIKE" : (need == NEED_CAR ? "CAR" : (need == NEED_FOOT ? "ON FOOT" : "ANY"));
+        if (g->mdef[i].requireWeapon) g->mdef[i].tag = "NEEDS A GUN";
     }
 }
 
@@ -167,6 +182,8 @@ void game_start_mission(Game *g, int m) {
     g->mstep = 0;
     g->mmask = 0;
     g->mclock = 0;
+    g->holdT = 0;
+    g->alarmDone = 0;
     g->mtime = g->mdef[m].time;
     banner(g, g->mdef[m].title, g->mdef[m].brief, 1, 4.5f);
     if (g->mdef[m].escape) { g->crimeCool = 0; game_add_wanted(g, 2); }
@@ -213,7 +230,14 @@ static void update_missions(Game *g, float dt) {
         for (i = 0; i < NMISSIONS; i++) {
             MissionDef *m = &g->mdef[i];
             float dx = px - m->giver.x, dz = pz - m->giver.z;
-            if (dx * dx + dz * dz < 2.4f * 2.4f) { game_start_mission(g, i); break; }
+            if (dx * dx + dz * dz < 2.4f * 2.4f) {
+                if (m->requireWeapon && !game_has_weapon(g)) {
+                    if (g->msgT <= 0) game_message(g, "You need a gun for this. Visit BLOCK ARMS (red marker).", 2.5f);
+                    continue;
+                }
+                game_start_mission(g, i);
+                break;
+            }
         }
         return;
     }
@@ -247,7 +271,29 @@ static void update_missions(Game *g, float dt) {
         } else if (g->mstep < m->ncp) {
             Checkpoint *c = &m->cp[g->mstep];
             float dx = px - c->x, dz = pz - c->z;
-            if (dx * dx + dz * dz < c->r * c->r) {
+            int inside = dx * dx + dz * dz < c->r * c->r;
+            if (!inside && c->hold > 0 && g->holdT > 0) {
+                g->holdT = fmaxf(0, g->holdT - dt * 0.5f);
+                if (g->msgT <= 0) game_message(g, "Get back to the vault!", 1.5f);
+            }
+            if (inside && c->alarm && !g->alarmDone && need_ok(g, c->need)) {
+                g->alarmDone = 1;
+                g->crimeCool = 0;
+                g->wanted = 0;
+                game_add_wanted(g, c->alarm);
+                game_message(g, "ALARM! The police are on their way!", 3.0f);
+            }
+            if (inside && c->clean && g->wanted > 0) {
+                if (g->msgT <= 0) game_message(g, "Lose the police first!", 2.0f);
+            } else if (inside && c->hold > 0 && need_ok(g, c->need)) {
+                g->holdT += dt;
+                if (g->holdT >= c->hold) {
+                    g->holdT = 0;
+                    g->mstep++;
+                    game_message(g, "Vault open - you got the cash!", 2.5f);
+                    if (g->mstep >= m->ncp) mission_end(g, 1);
+                }
+            } else if (inside) {
                 if (!need_ok(g, c->need)) {
                     if (g->msgT <= 0) game_message(g, c->need == NEED_BIKE ? "Get on a bike first!" : (c->need == NEED_FOOT ? "On foot only - get off!" : "Get in a car first!"), 2.0f);
                 } else {
@@ -584,6 +630,7 @@ static void spawn_ped_at(Game *g, Ped *p, float x, float z, int flee) {
     p->state = flee ? PED_FLEE : PED_WALK;
     p->timer = flee ? 3.0f : 0;
     p->h = 0; p->anim = 0; p->lay = 0;
+    p->cop = 0; p->shot = 0; p->hp = 60; p->shootCool = 0;
 }
 
 static void ped_respawn(Game *g, Ped *p, float px, float pz, int nearOk) {
@@ -609,9 +656,13 @@ static void update_ped(Game *g, Ped *p, float dt) {
     if (p->state == PED_DOWN) {
         p->timer -= dt;
         p->lay = approachf(p->lay, p->timer > 0.6f ? 1.0f : 0.0f, dt * 3.0f);
-        if (p->timer <= 0) { p->state = PED_FLEE; p->timer = 2.5f; p->lay = 0; }
+        if (p->timer <= 0) {
+            if (p->shot) { p->active = 0; return; }   /* verdwijnt; elders komt een nieuwe */
+            p->state = PED_FLEE; p->timer = 2.5f; p->lay = 0;
+        }
         return;
     }
+    if (p->cop) { update_cop(g, p, dt); return; }
     /* gevaar: voertuigen die eraan komen */
     for (i = 0; i < g->nveh; i++) {
         Vehicle *v = &g->veh[i];
@@ -695,7 +746,7 @@ void game_set_quality(Game *g, int q) {
     g->wantTraffic = traf[q];
     g->drawDist = dd[q];
     if (g->nl) { g->wantPeds = 0; g->wantTraffic = 0; g->drawDist = dd[q] + 40.0f; }
-    for (i = g->wantPeds; i < MAX_PED; i++) g->ped[i].active = 0;
+    for (i = g->wantPeds; i < MAX_PED - MAX_COPS; i++) g->ped[i].active = 0;
     for (i = 0; i < MAX_TRAFFIC; i++) {
         Vehicle *v = &g->veh[g->firstTraffic + i];
         if (i >= g->wantTraffic && v->traffic && (g->firstTraffic + i) != g->p.veh) v->active = 0;
@@ -854,6 +905,242 @@ static void update_camera(Game *g, const Input *in, float dt) {
     }
 }
 
+/* ------------------------------------------------------------------ wapens, schieten, agenten te voet */
+
+const WeaponDef WEAPONS[WP_COUNT] = {
+    {"FISTS", 0, 0, 0, 0, 0.5f, 0, 0, 0},
+    {"PISTOL", 250, 40, 48, 34, 0.32f, 38, 0.10f, 1},
+    {"SMG", 900, 80, 120, 18, 0.09f, 34, 0.16f, 1},
+    {"SHOTGUN", 700, 60, 24, 22, 0.85f, 18, 0.22f, 6},
+};
+
+int game_has_weapon(const Game *g) {
+    int i;
+    for (i = 1; i < WP_COUNT; i++) if (g->owned[i]) return 1;
+    return 0;
+}
+
+/* winkel: 0..2 wapen, 3 kogels voor alle wapens, 4 kogelwerend vest */
+int game_buy(Game *g, int item) {
+    int price;
+    if (item >= 0 && item <= 2) {
+        int w = item + 1;
+        price = g->owned[w] ? WEAPONS[w].ammoPrice : WEAPONS[w].price;
+        if (g->money < price) return 0;
+        g->money -= price;
+        g->owned[w] = 1;
+        g->ammo[w] += WEAPONS[w].ammoPack;
+        g->weapon = w;
+        return 1;
+    }
+    if (item == 3) {
+        int w, any = 0;
+        price = 0;
+        for (w = 1; w < WP_COUNT; w++) if (g->owned[w]) { price += WEAPONS[w].ammoPrice; any = 1; }
+        if (!any || g->money < price) return 0;
+        g->money -= price;
+        for (w = 1; w < WP_COUNT; w++) if (g->owned[w]) g->ammo[w] += WEAPONS[w].ammoPack;
+        return 1;
+    }
+    if (item == 4) {
+        if (g->armor >= 99.0f || g->money < 300) return 0;
+        g->money -= 300;
+        g->armor = 100.0f;
+        return 1;
+    }
+    return 0;
+}
+
+static void add_tracer(Game *g, V3 a, V3 b) {
+    int k = g->trNext;
+    g->tracer[k].a = a; g->tracer[k].b = b; g->tracer[k].t = 0.08f;
+    g->trNext = (k + 1) % MAX_TRACERS;
+}
+
+static void peds_panic(Game *g, float x, float z) {
+    int i;
+    for (i = 0; i < MAX_PED - MAX_COPS; i++) {
+        Ped *p = &g->ped[i];
+        float dx, dz;
+        if (!p->active || p->state == PED_DOWN) continue;
+        dx = p->x - x; dz = p->z - z;
+        if (dx * dx + dz * dz < 28.0f * 28.0f) { p->state = PED_FLEE; p->timer = 5.0f; p->h = atan2f(dx, dz); }
+    }
+}
+
+static void ped_hit(Game *g, Ped *p, float dmg) {
+    p->hp -= dmg;
+    if (p->hp > 0) return;
+    p->state = PED_DOWN;
+    p->shot = 1;
+    p->timer = p->cop ? 15.0f : 25.0f;
+    g->statHits++;
+    if (g->crimeCool > 0) g->crimeCool = 0;
+    game_add_wanted(g, 1);
+}
+
+static void spawn_cops(Game *g) {
+    int k, n = 0;
+    for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) if (g->ped[k].active) n++;
+    if (g->wanted < 2 || n >= MAX_COPS) return;
+    for (k = 0; k < MAX_POLICE && n < MAX_COPS; k++) {
+        Vehicle *v = &g->veh[g->firstPolice + k];
+        float dx, dz;
+        int c, s;
+        if (!v->active || v->copsOut || v->wrecked) continue;
+        dx = v->x - g->p.x; dz = v->z - g->p.z;
+        if (dx * dx + dz * dz > 32.0f * 32.0f || fabsf(v->speed) > 3.0f) continue;
+        v->copsOut = 1;
+        for (c = 0; c < 2 && n < MAX_COPS; c++) {
+            V3 r = right_of(v->h);
+            for (s = MAX_PED - MAX_COPS; s < MAX_PED && g->ped[s].active; s++) {}
+            if (s >= MAX_PED) break;
+            {
+                Ped *p = &g->ped[s];
+                float side = c ? 1.8f : -1.8f;
+                memset(p, 0, sizeof(*p));
+                p->active = 1; p->cop = 1; p->variant = COP_VARIANT;
+                p->x = v->x + r.x * side; p->z = v->z + r.z * side;
+                p->y = world_ground_y(g->w, p->x, p->z);
+                p->hp = 70; p->speed = 4.0f; p->shootCool = 1.0f + c * 0.5f;
+                p->h = v->h;
+                n++;
+            }
+        }
+    }
+}
+
+static int line_of_sight(Game *g, V3 a, V3 b) { return world_raycast(g->w, a, b) >= 0.98f; }
+
+static void update_cop(Game *g, Ped *p, float dt) {
+    float px, pz, dx, dz, d;
+    V3 eye, tgt;
+    player_pos(g, &px, &pz);
+    dx = px - p->x; dz = pz - p->z; d = sqrtf(dx * dx + dz * dz);
+    if (g->wanted <= 0) {           /* weer weg */
+        p->timer += dt;
+        p->h = approach_angle(p->h, atan2f(-dx, -dz), 4.0f * dt);
+        p->x -= dx / (d + 0.01f) * 2.0f * dt; p->z -= dz / (d + 0.01f) * 2.0f * dt;
+        p->anim += 4.0f * dt;
+        if (p->timer > 6.0f || d > 80.0f) p->active = 0;
+        return;
+    }
+    if (d > 120.0f) { p->active = 0; return; }
+    eye = v3(p->x, p->y + 1.5f, p->z);
+    tgt = v3(px, g->p.y + 1.2f, pz);
+    p->h = approach_angle(p->h, atan2f(dx, dz), 6.0f * dt);
+    if (d > 11.0f || !line_of_sight(g, eye, tgt)) {
+        float nx, nz;
+        p->x += dx / d * p->speed * dt; p->z += dz / d * p->speed * dt;
+        world_push_circle(g->w, &p->x, &p->z, 0.35f, p->y, &nx, &nz);
+        p->anim += p->speed * dt * 2.4f;
+        p->state = PED_WALK;
+    } else {
+        p->state = PED_IDLE;
+        p->shootCool -= dt;
+        if (p->shootCool <= 0) {
+            float chance = 0.36f;
+            p->shootCool = 1.1f + rng_f(&g->rng) * 0.7f;
+            if (g->p.veh >= 0 && fabsf(g->veh[g->p.veh].speed) > 6.0f) chance *= 0.5f;
+            if (rng_f(&g->rng) < chance) {
+                game_damage(g, 7.0f);
+                add_tracer(g, v3(p->x, p->y + 1.4f, p->z), tgt);
+            } else {
+                add_tracer(g, v3(p->x, p->y + 1.4f, p->z), v3(tgt.x + rng_range(&g->rng, -1.5f, 1.5f), tgt.y + rng_range(&g->rng, -0.8f, 1.0f), tgt.z + rng_range(&g->rng, -1.5f, 1.5f)));
+            }
+            g->copShots++;
+        }
+    }
+    p->y = world_ground_y(g->w, p->x, p->z);
+}
+
+static void update_weapons(Game *g, const Input *in, float dt) {
+    int k;
+    const WeaponDef *wd;
+    if (g->fireCool > 0) g->fireCool -= dt;
+    if (g->muzzleT > 0) g->muzzleT -= dt;
+    for (k = 0; k < MAX_TRACERS; k++) if (g->tracer[k].t > 0) g->tracer[k].t -= dt;
+    if (in->switchPressed) {
+        int w = g->weapon, tries;
+        for (tries = 0; tries < WP_COUNT; tries++) {
+            w = (w + 1) % WP_COUNT;
+            if (w == WP_NONE || g->owned[w]) break;
+        }
+        g->weapon = w;
+        game_message(g, WEAPONS[w].name, 1.0f);
+    }
+    if (g->p.veh >= 0 || g->weapon == WP_NONE || !in->fire || g->fireCool > 0) return;
+    wd = &WEAPONS[g->weapon];
+    if (g->ammo[g->weapon] <= 0) { game_message(g, "Out of ammo! Buy more at BLOCK ARMS.", 1.5f); g->fireCool = 0.6f; return; }
+    g->ammo[g->weapon]--;
+    g->fireCool = wd->delay;
+    g->muzzleT = 0.06f;
+    g->statShots++;
+    {
+        /* auto-richten: dichtstbijzijnde doel in de kijkrichting van de camera */
+        V3 cf = fwd_of(g->camYaw), muzzle = v3(g->p.x, g->p.y + 1.35f, g->p.z), aim = v3(0, 0, 0);
+        float best = 1e9f;
+        int bestPed = -1, bestVeh = -1, i, pel;
+        for (i = 0; i < MAX_PED; i++) {
+            Ped *p = &g->ped[i];
+            float dx, dz, d, ang;
+            if (!p->active || p->state == PED_DOWN) continue;
+            dx = p->x - g->p.x; dz = p->z - g->p.z; d = sqrtf(dx * dx + dz * dz);
+            if (d > wd->range || d < 0.3f) continue;
+            ang = acosf(clampf((dx * cf.x + dz * cf.z) / d, -1, 1));
+            if (ang > 0.55f) continue;
+            if (!line_of_sight(g, muzzle, v3(p->x, p->y + 1.2f, p->z))) continue;
+            if (ang * 10.0f + d * 0.1f + (p->cop ? -2.0f : 0.0f) < best) { best = ang * 10.0f + d * 0.1f + (p->cop ? -2.0f : 0.0f); bestPed = i; bestVeh = -1; }
+        }
+        for (i = 0; i < MAX_POLICE; i++) {
+            Vehicle *v = &g->veh[g->firstPolice + i];
+            float dx, dz, d, ang;
+            if (!v->active || v->wrecked) continue;
+            dx = v->x - g->p.x; dz = v->z - g->p.z; d = sqrtf(dx * dx + dz * dz);
+            if (d > wd->range || d < 0.5f) continue;
+            ang = acosf(clampf((dx * cf.x + dz * cf.z) / d, -1, 1));
+            if (ang > 0.45f) continue;
+            if (ang * 10.0f + d * 0.1f + 1.0f < best) { best = ang * 10.0f + d * 0.1f + 1.0f; bestVeh = g->firstPolice + i; bestPed = -1; }
+        }
+        if (bestPed >= 0) aim = v3(g->ped[bestPed].x, g->ped[bestPed].y + 1.2f, g->ped[bestPed].z);
+        else if (bestVeh >= 0) aim = v3(g->veh[bestVeh].x, 0.9f, g->veh[bestVeh].z);
+        else aim = v3add(muzzle, v3scale(cf, wd->range));
+        g->p.h = atan2f(aim.x - g->p.x, aim.z - g->p.z);
+        for (pel = 0; pel < wd->pellets; pel++) {
+            V3 d = v3norm(v3sub(aim, muzzle));
+            float dist = v3len(v3sub(aim, muzzle)), hitP = 1.0f - wd->spread * (dist / wd->range) * 2.5f;
+            V3 end;
+            int hit = (bestPed >= 0 || bestVeh >= 0) && rng_f(&g->rng) < hitP;
+            V3 sd = v3norm(v3add(d, v3(rng_range(&g->rng, -wd->spread, wd->spread), rng_range(&g->rng, -wd->spread, wd->spread) * 0.5f, rng_range(&g->rng, -wd->spread, wd->spread))));
+            if (hit) {
+                end = aim;
+                if (bestPed >= 0) ped_hit(g, &g->ped[bestPed], wd->damage);
+                else {
+                    Vehicle *v = &g->veh[bestVeh];
+                    v->hp -= wd->damage * 0.5f;
+                    if (v->hp <= 0 && !v->wrecked) { v->wrecked = 1; v->speed = 0; g->statHits++; }
+                    if (g->crimeCool <= 0) game_add_wanted(g, 1);
+                }
+            } else {
+                float t;
+                end = v3add(muzzle, v3scale(sd, wd->range));
+                t = world_raycast(g->w, muzzle, end);
+                end = v3lerp(muzzle, end, t);
+            }
+            add_tracer(g, v3add(muzzle, v3scale(fwd_of(g->p.h), 0.6f)), end);
+        }
+        peds_panic(g, g->p.x, g->p.z);
+        if (g->wanted == 0 && !g->nl) {
+            int i2, near = 0;
+            for (i2 = 0; i2 < MAX_PED; i2++) {
+                float dx = g->ped[i2].x - g->p.x, dz = g->ped[i2].z - g->p.z;
+                if (g->ped[i2].active && dx * dx + dz * dz < 30.0f * 30.0f) near = 1;
+            }
+            if (near) { game_add_wanted(g, 1); game_message(g, "Shots fired! The police are coming.", 2.0f); }
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ politie en gezondheid */
 
 void game_add_wanted(Game *g, int n) {
@@ -866,6 +1153,11 @@ void game_add_wanted(Game *g, int n) {
 
 void game_damage(Game *g, float amount) {
     if (g->health <= 0) return;
+    if (g->armor > 0) {
+        float a = fminf(g->armor, amount * 0.75f);
+        g->armor -= a;
+        amount -= a;
+    }
     g->health -= amount;
     if (g->health < 0) g->health = 0;
     g->hurtT = 0;
@@ -878,6 +1170,7 @@ static void respawn(Game *g, const char *title, const char *sub) {
     g->mission = -1;
     g->wanted = 0; g->bustT = 0; g->evadeT = 0;
     for (i = 0; i < MAX_POLICE; i++) g->veh[g->firstPolice + i].active = 0;
+    for (i = MAX_PED - MAX_COPS; i < MAX_PED; i++) g->ped[i].active = 0;
     g->health = 100.0f;
     g->p.vy = 0; g->p.speed = 0;
     game_teleport(g, g->w->poi[POI_SPAWN].x, g->w->poi[POI_SPAWN].z, g->w->spawn_heading);
@@ -897,6 +1190,7 @@ static void police_spawn(Game *g, Vehicle *v, float px, float pz) {
         v->x = n.x; v->z = n.z; v->y = 0;
         v->h = atan2f(px - n.x, pz - n.z);
         v->speed = 5.0f;
+        v->hp = 100.0f;
         return;
     }
 }
@@ -905,6 +1199,7 @@ static void update_police(Game *g, Vehicle *v, float dt) {
     float px, pz, dx, dz, d, diff, thr = 1.0f, brk = 0.0f, steer;
     player_pos(g, &px, &pz);
     dx = px - v->x; dz = pz - v->z; d = sqrtf(dx * dx + dz * dz);
+    if (v->wrecked) { v->speed = approachf(v->speed, 0, 10.0f * dt); if (g->wanted <= 0 && d > 40.0f) v->active = 0; return; }
     if (g->wanted <= 0) {
         v->ghost += dt;
         drive_vehicle(g, v, 0, 1, 0, dt);
@@ -952,9 +1247,18 @@ static void update_police_and_health(Game *g, float dt) {
             update_police(g, v, dt);
             dx = v->x - px; dz = v->z - pz; d2 = dx * dx + dz * dz;
             if (d2 > 170.0f * 170.0f) v->active = 0;
-            if (v->active && d2 < 45.0f * 45.0f) near = 1;
-            if (v->active && d2 < 5.5f * 5.5f) close = 1;
+            if (v->active && !v->wrecked && d2 < 45.0f * 45.0f) near = 1;
+            if (v->active && !v->wrecked && d2 < 5.5f * 5.5f) close = 1;
         }
+    }
+    spawn_cops(g);
+    for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) {
+        Ped *c = &g->ped[k];
+        float dx, dz;
+        if (!c->active || c->state == PED_DOWN) continue;
+        dx = c->x - px; dz = c->z - pz;
+        if (dx * dx + dz * dz < 40.0f * 40.0f) near = 1;
+        if (dx * dx + dz * dz < 3.5f * 3.5f) close = 1;
     }
     if (g->wanted > 0) {
         if (near) g->evadeT = 0;
@@ -1021,6 +1325,10 @@ void game_start_mission_at(Game *g, int m) {
     int k;
     if (m < 0 || m >= NMISSIONS) return;
     md = &g->mdef[m];
+    if (md->requireWeapon && !game_has_weapon(g)) {
+        banner(g, "NEED A GUN", "Buy one at BLOCK ARMS first (red marker on the map).", 0, 3.5f);
+        return;
+    }
     if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; g->p.veh = -1; }
     g->wanted = 0; g->bustT = 0;
     for (k = 0; k < MAX_POLICE; k++) g->veh[g->firstPolice + k].active = 0;
@@ -1116,7 +1424,8 @@ void game_update(Game *g, const Input *in, float dt) {
     }
 
     /* voetgangers */
-    for (i = 0; i < g->wantPeds && i < MAX_PED; i++) {
+    for (i = MAX_PED - MAX_COPS; i < MAX_PED; i++) if (g->ped[i].active) update_ped(g, &g->ped[i], dt);
+    for (i = 0; i < g->wantPeds && i < MAX_PED - MAX_COPS; i++) {
         Ped *p = &g->ped[i];
         if (!p->active) { ped_respawn(g, p, px, pz, g->time < 1.0f); continue; }
         {
@@ -1144,8 +1453,16 @@ void game_update(Game *g, const Input *in, float dt) {
         }
     }
 
+    update_weapons(g, in, dt);
     update_police_and_health(g, dt);
     if (!g->nl) update_missions(g, dt);
+    /* wapenwinkel: binnenlopen opent het winkelmenu */
+    if (!g->nl && g->p.veh < 0) {
+        float dx = g->p.x - g->w->poi[POI_GUNSHOP].x, dz = g->p.z - g->w->poi[POI_GUNSHOP].z;
+        int in2 = dx * dx + dz * dz < 2.2f * 2.2f;
+        if (in2 && !g->inShop) g->shopOpen = 1;
+        g->inShop = in2;
+    }
     update_camera(g, in, dt);
 
     /* geldteller loopt op */

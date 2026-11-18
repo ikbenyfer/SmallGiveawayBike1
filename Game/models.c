@@ -5,10 +5,10 @@ typedef struct { Col shirt, pants, skin, hair, shoe; int cap; } CharLook;
 static CharLook look(int v) {
     static const int shirts[CHAR_VARIANTS][3] = {
         {196, 36, 40}, {60, 110, 190}, {230, 200, 70}, {70, 150, 90},
-        {230, 230, 225}, {130, 70, 150}, {240, 130, 50}, {60, 60, 66}};
+        {230, 230, 225}, {130, 70, 150}, {240, 130, 50}, {60, 60, 66}, {38, 56, 112}};
     static const int pants[CHAR_VARIANTS][3] = {
         {34, 36, 44}, {70, 80, 110}, {60, 50, 40}, {40, 40, 45},
-        {90, 100, 130}, {50, 50, 60}, {120, 110, 90}, {150, 140, 120}};
+        {90, 100, 130}, {50, 50, 60}, {120, 110, 90}, {150, 140, 120}, {26, 30, 52}};
     static const int skins[4][3] = {{236, 192, 160}, {200, 150, 110}, {150, 100, 70}, {100, 68, 50}};
     static const int hairs[4][3] = {{40, 30, 25}, {120, 80, 40}, {220, 190, 120}, {20, 20, 20}};
     CharLook l;
@@ -18,7 +18,7 @@ static CharLook look(int v) {
     l.skin = col(skins[(v * 3 + 1) % 4][0], skins[(v * 3 + 1) % 4][1], skins[(v * 3 + 1) % 4][2]);
     l.hair = col(hairs[(v * 5 + 2) % 4][0], hairs[(v * 5 + 2) % 4][1], hairs[(v * 5 + 2) % 4][2]);
     l.shoe = col(30, 30, 32);
-    l.cap = (v == 0);
+    l.cap = (v == 0 || v == COP_VARIANT);
     if (v == 0) l.skin = col(220, 170, 130);
     return l;
 }
@@ -37,13 +37,16 @@ void model_char_body(MeshB *m, int v) {
     /* haar */
     mb_box(m, v3(-0.16f, 1.86f, -0.17f), v3(0.16f, 1.99f, 0.12f), l.hair, 0);
     if (l.cap) {
-        Col capc = col(30, 30, 34);
+        Col capc = v == COP_VARIANT ? col(24, 34, 74) : col(30, 30, 34);
         mb_box(m, v3(-0.17f, 1.90f, -0.17f), v3(0.17f, 2.02f, 0.15f), capc, 0);
         mb_box(m, v3(-0.13f, 1.92f, 0.15f), v3(0.13f, 1.95f, 0.30f), capc, 0);
     }
     /* ogen */
     mb_quad(m, v3(-0.10f, 1.80f, 0.162f), v3(-0.04f, 1.80f, 0.162f), v3(-0.04f, 1.85f, 0.162f), v3(-0.10f, 1.85f, 0.162f), v3(0, 0, 1), col(20, 20, 20));
     mb_quad(m, v3(0.04f, 1.80f, 0.162f), v3(0.10f, 1.80f, 0.162f), v3(0.10f, 1.85f, 0.162f), v3(0.04f, 1.85f, 0.162f), v3(0, 0, 1), col(20, 20, 20));
+    if (v == COP_VARIANT) {   /* shield badge */
+        mb_quad(m, v3(0.06f, 1.34f, 0.152f), v3(0.16f, 1.34f, 0.152f), v3(0.16f, 1.44f, 0.152f), v3(0.06f, 1.44f, 0.152f), v3(0, 0, 1), col_e(240, 200, 70, 120));
+    }
     if (v == 0) {
         /* speler: wit logo-vlak op de borst */
         mb_quad(m, v3(-0.12f, 1.22f, 0.152f), v3(0.12f, 1.22f, 0.152f), v3(0.12f, 1.40f, 0.152f), v3(-0.12f, 1.40f, 0.152f), v3(0, 0, 1), col(235, 235, 230));
@@ -201,6 +204,16 @@ void model_arrow(MeshB *m) {
 
 void model_siren(MeshB *m) {
     mb_box(m, v3(-0.26f, 0.0f, -0.13f), v3(0.0f, 0.16f, 0.13f), col_e(255, 255, 255, 255), 0);
+}
+
+void model_gun(MeshB *m) {
+    Col g = col(34, 34, 38);
+    mb_box(m, v3(-0.035f, -0.95f, -0.05f), v3(0.035f, -0.60f, 0.05f), g, 0);     /* loop */
+    mb_box(m, v3(-0.03f, -0.70f, 0.04f), v3(0.03f, -0.62f, 0.16f), g, 0);       /* greep */
+}
+
+void model_tracer(MeshB *m) {
+    mb_box(m, v3(-0.025f, -0.025f, 0.0f), v3(0.025f, 0.025f, 1.0f), col_e(255, 230, 140, 255), 0);
 }
 
 void model_shadow(MeshB *m) { mb_disc(m, v3(0, 0, 0), 1.0f, 12, col(0, 0, 0)); }

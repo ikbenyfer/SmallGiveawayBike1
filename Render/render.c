@@ -244,6 +244,8 @@ void r_build_models(Renderer *r) {
     BUILD(r->shadow, model_shadow(&m));
     BUILD(r->marker, model_marker(&m));
     BUILD(r->siren, model_siren(&m));
+    BUILD(r->gun, model_gun(&m));
+    BUILD(r->tracer, model_tracer(&m));
 #undef BUILD
     mb_free(&m);
 }
@@ -337,7 +339,7 @@ static int sphere_visible(Renderer *r, float x, float y, float z, float rad, flo
 }
 
 /* pose: 0 lopen/staan, 1 fiets, 2 sprong */
-static void draw_char(Renderer *r, int v, M4 base, float walk, int pose, float lay) {
+static void draw_char(Renderer *r, int v, M4 base, float walk, int pose, float lay, int armed) {
     M4 bodyM, m;
     float legA = sinf(walk) * 0.75f, armA = -sinf(walk) * 0.6f;
     int k;
@@ -361,8 +363,10 @@ static void draw_char(Renderer *r, int v, M4 base, float walk, int pose, float l
         if (pose == 1) a = -1.15f;
         else if (pose == 2) a = -2.6f;
         else a = armA * k;
+        if (armed && k < 0 && lay <= 0) a = -1.5f;   /* rechterarm naar voren: wapen richten */
         m = m4_mul(bodyM, m4_mul(m4_translate(SHOULDER_X * k, SHOULDER_Y, 0), m4_mul(m4_rot_z(k * 0.06f), m4_rot_x(a))));
         draw_mesh(r, &r->arm[v], &m);
+        if (armed && k < 0) draw_mesh(r, &r->gun, &m);
     }
 }
 
@@ -476,10 +480,12 @@ void r_draw_scene(Renderer *r, Game *g) {
         if (v->type == VEH_BIKE) {
             m = m4_mul(m, m4_rot_z(v->lean));
             draw_mesh(r, &r->bike[v->variant % BIKE_VARIANTS], &m);
-            if (i == g->p.veh) draw_char(r, 0, m, g->p.anim * 2.0f, 1, 0);
+            if (i == g->p.veh) draw_char(r, 0, m, g->p.anim * 2.0f, 1, 0, 0);
         } else {
+            if (v->wrecked) tint(r, 0.3f, 0.3f, 0.32f);
             draw_mesh(r, &r->car[v->variant % CAR_VARIANTS], &m);
-            if (v->police) {
+            if (v->wrecked) tint(r, 1, 1, 1);
+            if (v->police && !v->wrecked) {
                 /* zwaailicht: links rood, rechts blauw, om en om */
                 int ph = ((int)(g->time * 6.0f)) & 1;
                 M4 s1 = m4_mul(m, m4_translate(0, 1.62f, -0.2f));
@@ -508,7 +514,7 @@ void r_draw_scene(Renderer *r, Game *g) {
         if (!p->active) continue;
         if (!sphere_visible(r, p->x, p->y + 1.0f, p->z, 1.2f, fogEnd * 0.8f)) continue;
         m = m4_trs_y(p->x, p->y, p->z, p->h);
-        draw_char(r, p->variant, m, p->state == PED_IDLE ? 0 : p->anim, p->state == PED_DODGE ? 2 : 0, p->lay);
+        draw_char(r, p->variant, m, p->state == PED_IDLE ? 0 : p->anim, p->state == PED_DODGE ? 2 : 0, p->lay, p->cop);
         if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
             shadows[nsh] = v3(p->x, p->y, p->z); shs[nsh][0] = 0.45f; shs[nsh][1] = 0.45f; shs[nsh][2] = 0; nsh++;
         }
@@ -517,7 +523,7 @@ void r_draw_scene(Renderer *r, Game *g) {
     if (mode == MODE_FOOT) {
         M4 m = m4_trs_y(g->p.x, g->p.y, g->p.z, g->p.h);
         float ground = world_ground_y(g->w, g->p.x, g->p.z);
-        draw_char(r, 0, m, g->p.speed > 0.2f ? g->p.anim : 0, g->p.onGround ? 0 : 2, 0);
+        draw_char(r, 0, m, g->p.speed > 0.2f ? g->p.anim : 0, g->p.onGround ? 0 : 2, 0, g->weapon != WP_NONE);
         if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
             float s = clampf(0.5f - (g->p.y - ground) * 0.15f, 0.2f, 0.5f);
             shadows[nsh] = v3(g->p.x, ground, g->p.z); shs[nsh][0] = s; shs[nsh][1] = s; shs[nsh][2] = 0; nsh++;
@@ -567,6 +573,35 @@ void r_draw_scene(Renderer *r, Game *g) {
         glBlendFunc(GL_ONE, GL_ONE);
         glUniform1f(r->wAlpha, 1.0f);
         glDisable(GL_CULL_FACE);
+        for (k = 0; k < MAX_TRACERS; k++) {
+            V3 a = g->tracer[k].a, d = v3sub(g->tracer[k].b, a);
+            float len = v3len(d), yaw, pitch;
+            M4 m;
+            if (g->tracer[k].t <= 0 || len < 0.1f) continue;
+            yaw = atan2f(d.x, d.z);
+            pitch = asinf(clampf(d.y / len, -1, 1));
+            m = m4_mul(m4_translate(a.x, a.y, a.z), m4_mul(m4_rot_y(yaw), m4_mul(m4_rot_x(-pitch), m4_scale(1, 1, len))));
+            tint(r, g->tracer[k].t * 10.0f, g->tracer[k].t * 8.0f, g->tracer[k].t * 4.0f);
+            draw_mesh(r, &r->tracer, &m);
+        }
+        if (g->muzzleT > 0 && g->p.veh < 0) {
+            V3 f = fwd_of(g->p.h), rt = right_of(g->p.h);
+            M4 m = m4_mul(m4_trs_y(g->p.x + f.x * 0.95f + rt.x * 0.33f, g->p.y + 1.4f, g->p.z + f.z * 0.95f + rt.z * 0.33f, g->p.h + t * 20.0f), m4_scale(4, 4, 0.3f));
+            tint(r, 1.0f, 0.8f, 0.3f);
+            draw_mesh(r, &r->tracer, &m);
+        }
+        if (!g->nl && g->mission < 0) {
+            V3 gs = g->w->poi[POI_GUNSHOP];
+            float pulse = 0.75f + 0.25f * sinf(t * 4.0f);
+            M4 m = m4_mul(m4_trs_y(gs.x, world_ground_y(g->w, gs.x, gs.z) + 0.06f, gs.z, t), m4_scale(2.0f, 1, 2.0f));
+            if (sphere_visible(r, gs.x, 1, gs.z, 3, fogEnd)) {
+                tint(r, 1.0f * pulse, 0.12f * pulse, 0.1f * pulse);
+                draw_mesh(r, &r->marker, &m);
+                m = m4_mul(m4_trs_y(gs.x, 0, gs.z, 0), m4_scale(2.0f, 2.0f, 2.0f));
+                tint(r, 0.3f, 0.03f, 0.03f);
+                draw_mesh(r, &r->cp, &m);
+            }
+        }
         for (k = 0; k < n; k++) {
             float pulse = 0.75f + 0.25f * sinf(t * 4.0f);
             float rad = 2.4f;
