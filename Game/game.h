@@ -4,7 +4,7 @@
 
 #include "world.h"
 
-#define MAX_VEH 40
+#define MAX_VEH 48
 #define MAX_PED 16
 #define MAX_TRAFFIC 10
 #define NMISSIONS 5

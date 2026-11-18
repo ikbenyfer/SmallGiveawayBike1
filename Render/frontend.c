@@ -921,6 +921,7 @@ void fe_frame(double now) {
         F.fpsAcc = 0; F.fpsFrames = 0; F.worst = 0;
     }
 
+    R->drawCalls = 0;
     glViewport(0, 0, R->W, R->H);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

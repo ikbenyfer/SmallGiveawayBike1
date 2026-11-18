@@ -356,7 +356,7 @@ void r_draw_scene(Renderer *r, Game *g) {
     float shs[MAX_PED + MAX_VEH + 1][3];
     int nsh = 0;
 
-    r->drawCalls = 0; r->drawnChunks = 0; r->drawnTris = 0;
+    r->drawnChunks = 0; r->drawnTris = 0;
     r->cam = g->camPos;
     r->proj = m4_perspective(58.0f * PI_F / 180.0f, aspect, 0.3f, g->drawDist + 40.0f);
     r->view = m4_lookat(g->camPos, g->camTarget, v3(0, 1, 0));

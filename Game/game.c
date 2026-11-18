@@ -629,10 +629,22 @@ void game_init(Game *g, World *w) {
     g->camDist = 5.0f;
     g->camSens = 1.0f;
     for (i = 0; i < w->npark && g->nveh < MAX_VEH - MAX_TRAFFIC; i++) {
-        Vehicle *v = &g->veh[g->nveh++];
+        Vehicle *v;
+        int k = i;
+        /* de Giveaway Bike (fiets, variant 0) altijd als eerste */
+        if (i == 0) {
+            int j;
+            for (j = 0; j < w->npark; j++) if (w->park[j].type == VEH_BIKE && w->park[j].variant == 0) { k = j; break; }
+        } else {
+            k = i;
+            if (w->park[k].type == VEH_BIKE && w->park[k].variant == 0) k = 0;
+            if (k == 0 && w->park[0].type == VEH_BIKE && w->park[0].variant == 0) continue;
+        }
+        v = &g->veh[g->nveh++];
         memset(v, 0, sizeof(*v));
-        v->active = 1; v->type = w->park[i].type; v->variant = w->park[i].variant;
-        v->x = w->park[i].x; v->z = w->park[i].z; v->h = w->park[i].h;
+        v->active = 1;
+        v->type = w->park[k].type; v->variant = w->park[k].variant;
+        v->x = w->park[k].x; v->z = w->park[k].z; v->h = w->park[k].h;
         v->y = world_ground_y(w, v->x, v->z);
     }
     g->firstTraffic = g->nveh;

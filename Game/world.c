@@ -337,10 +337,7 @@ static void gen_houses(float ix0, float iz0, float ix1, float iz1, Rng *r, int b
             if (W->nhouses < 16 && ((a + b + bi + bj) % 2 == 0)) {
                 W->houses[W->nhouses++] = v3((hx0 + hx1) * 0.5f, 0, b ? iz1 + 1.0f : iz0 - 1.0f);
             }
-            if (rng_f(r) < 0.25f) {
-                float px = lx1 - 1.5f;
-                add_park(px, b ? lz1 - 3.5f : lz0 + 3.5f, b ? PI_F : 0.0f, VEH_CAR, 1 + rng_int(r, 5));
-            } else if (rng_f(r) < 0.15f) {
+            if (rng_f(r) < 0.18f) {
                 add_park(lx0 + 1.4f, b ? lz1 - 2.0f : lz0 + 2.5f, 0.3f, VEH_BIKE, 1 + rng_int(r, 3));
             }
         }
