@@ -232,17 +232,17 @@ void r_set_tod(Renderer *r, int tod) {
         set3(r->skyTop, 0.03f, 0.04f, 0.10f); set3(r->skyHor, 0.14f, 0.14f, 0.26f);
         set3(r->fogCol, 0.10f, 0.10f, 0.19f);
         set3(r->sun, 0.35f, 0.75f, -0.45f); set3(r->sunCol, 0.22f, 0.26f, 0.40f);
-        set3(r->amb, 0.26f, 0.28f, 0.42f); r->emis = 1.25f;
+        set3(r->amb, 0.36f, 0.38f, 0.56f); r->emis = 1.25f;
     } else if (tod == TOD_DAY) {
         set3(r->skyTop, 0.34f, 0.56f, 0.88f); set3(r->skyHor, 0.80f, 0.86f, 0.92f);
         set3(r->fogCol, 0.74f, 0.80f, 0.88f);
         set3(r->sun, -0.45f, 0.78f, 0.42f); set3(r->sunCol, 0.78f, 0.74f, 0.64f);
-        set3(r->amb, 0.50f, 0.54f, 0.62f); r->emis = 0.2f;
+        set3(r->amb, 0.62f, 0.66f, 0.74f); r->emis = 0.2f;
     } else {
         set3(r->skyTop, 0.14f, 0.16f, 0.36f); set3(r->skyHor, 0.95f, 0.58f, 0.42f);
         set3(r->fogCol, 0.66f, 0.47f, 0.47f);
         set3(r->sun, -0.62f, 0.38f, 0.68f); set3(r->sunCol, 0.95f, 0.66f, 0.45f);
-        set3(r->amb, 0.42f, 0.40f, 0.55f); r->emis = 0.75f;
+        set3(r->amb, 0.62f, 0.56f, 0.70f); r->emis = 0.75f;
     }
     {
         V3 s = v3norm(v3(r->sun[0], r->sun[1], r->sun[2]));

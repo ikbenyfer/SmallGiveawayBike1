@@ -50,7 +50,15 @@ def main():
             print("geen rapport gevonden")
         n = 0
         for s in SHOTS:
-            data = ii.read_app_document(BUNDLE, "shots/%s.png" % s)
+            data = None
+            for attempt in range(4):
+                try:
+                    data = ii.read_app_document(BUNDLE, "shots/%s.png" % s)
+                    break
+                except Exception as e:  # USB/SSL hapert soms bij snel achter elkaar verbinden
+                    print("opnieuw (%s): %s" % (s, e))
+                    import time
+                    time.sleep(1.5)
             if data:
                 open(os.path.join(out, s + ".png"), "wb").write(data)
                 n += 1
