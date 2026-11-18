@@ -32,11 +32,29 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph�
 - **De stad** (404 x 404 m, 7 x 7 blokken) heeft wegen met kruispunten, zebrapaden en middenstrepen. Er zijn flats en kantoren met verlichte ramen, winkelstraten met luifels (waaronder een pizzeria), steegjes met containers en graffiti, een buitenwijk met huizen, tuinen en hekken, parken met vijver en podium, parkeerplaatsen, een garage met tankstation en een plein met het gouden Giveaway Bike-standbeeld. Rondom de stad staan een bomenrand en een hek.
 - **Lopen en springen.** Je kunt **fietsen** en **autorijden**, en in- en uitstappen met de knop RIDE/DRIVE/EXIT. Je kunt ook een auto uit het verkeer pakken: de bestuurder loopt dan weg.
 - **Voetgangers** lopen over de stoep, springen opzij voor voertuigen en vallen om als je ze raakt (geen geweld). Het **verkeer** rijdt op rijstroken, slaat af op kruispunten en remt voor obstakels.
-- **10 missies**: je start ze via de gele markers in de stad, of via het **missiekeuzescherm** (MISSIONS in het hoofdmenu of het pauzemenu). Daar sta je meteen op de goede plek en zit je zo nodig al op een fiets of in een auto:
+- **11 missies**: je start ze via de gele markers in de stad, of via het **missiekeuzescherm** (MISSIONS in het hoofdmenu of het pauzemenu). Daar sta je meteen op de goede plek en zit je zo nodig al op een fiets of in een auto:
   Welcome Ride ($100), Pizza Panic ($250), Street Sprint ($300), Joyride Return ($400), The Big Giveaway ($750), Park Run (te voet, $200), Taxi Rush ($350), Alley Shortcut ($350), Cop Dodge ($400) en Grand Tour ($500).
   Speel je een missie opnieuw, dan krijg je de halve beloning.
 - **Politie en sterren**: rijd je iemand aan of steel je een auto uit het verkeer, dan krijg je een ster (maximaal 3). Per ster komt er een politieauto met zwaailicht achter je aan, die ook op de minimap staat. Blijf 10 seconden ver weg van de politie, dan verlies je een ster. Sta je stil naast de politie, dan word je **BUSTED**: je betaalt een boete (10% van je geld, minstens $50) en begint opnieuw op het plein.
 - **Health bar** onder je geld. Je verliest health door harde botsingen, door aangereden te worden en als de politie je ramt. Na 5 seconden zonder schade herstelt je health vanzelf. Is je health op, dan ben je **KNOCKED OUT** en begin je opnieuw op het plein.
+- **PEGI 18: wapens en een bankoverval.** Alles in dezelfde blokkerige stijl, zonder bloed. Wie geraakt wordt, valt om.
+  - **BLOCK ARMS** (rode marker, in de winkelstraat naast het plein): loop naar binnen en je kunt kopen:
+
+    | Item | Prijs |
+    |---|---|
+    | PISTOL | $250 |
+    | SMG | $900 |
+    | SHOTGUN | $700 |
+    | Kogels voor al je wapens | samen per pak |
+    | Kogelwerend vest | $300 |
+
+    Het vest vangt 75% van de schade op tot het op is. Je wapens, kogels en vest worden bewaard.
+  - **Schieten:** de knop **FIRE** richt vanzelf op het dichtstbijzijnde doel in je kijkrichting. Met **GUN** wissel je van wapen, en "FISTS" is geen wapen. Rechtsboven zie je je kogels. Schieten in de buurt van mensen, iemand raken of de politie raken geeft sterren. Mensen in de buurt rennen weg.
+  - **Agenten te voet:** vanaf 2 sterren stappen er agenten (blauw uniform, pet) uit de politieauto's. Ze rennen naar je toe en schieten terug. Je kunt politieauto's ook kapotschieten; die blijven dan donker staan.
+  - **De Giveaway Bank** staat aan het plein, naast het standbeeld: een stenen gebouw met zuilen en een gouden bord. Aan de achterkant zit de kluisdeur, met een rode alarmlamp.
+  - **Missie 11: THE BIG HEIST** ($5000, je hebt een wapen nodig):
+    1. Ga naar de kluisdeur achter de bank en blijf 15 seconden staan terwijl de kluis wordt opengeboord. Bovenin zie je een balk. Het alarm gaat meteen af, met 3 sterren, en de politie komt, ook te voet.
+    2. Schud de politie af en breng het geld naar de garage, je schuilplaats.
 - **REAL NL (aparte modus, knop in het hoofdmenu):** rijd door het echte Nederland.
   - **Ingebouwd en offline: heel Heemskerk en Beverwijk**, inclusief Wijk aan Zee, de duinen en het strand. Dat zijn 58.107 gebouwen met hun echte hoogte (3D BAG), alle wegen met straatnamen, water, groen en 1.897 postcodes, samen maar 2 MB in de app (`Resources/nl_hb.pak`). Je start via de knoppen rechts (Beverwijk centrum, de stations, Heemskerk centrum, Wijk aan Zee, de Bazaar) of je typt een postcode uit die gemeentes. Daar is geen internet voor nodig.
   - **Streaming terwijl je rijdt:** de wereld bestaat uit tegels van 250 × 250 m. Rondom je liggen er altijd 3 × 3 klaar. Komt er een nieuwe tegel in beeld, dan laadt een achtergrond-thread die, zodat het spel niet hapert. Binnen Heemskerk/Beverwijk komt de tegel uit de ingebouwde kaart. Daarbuiten komt hij uit je downloads, of anders van internet (3D BAG en PDOK), en wordt hij daarna bewaard. Zonder internet zie je buiten de regio "NO MAP DATA HERE".
