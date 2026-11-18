@@ -16,6 +16,7 @@ typedef struct {
 } UIVtx;
 
 #define UI_MAX 6000
+#define RW_SLOTS 128
 
 enum { TOD_DUSK = 0, TOD_NIGHT = 1, TOD_DAY = 2 };
 
@@ -30,8 +31,8 @@ typedef struct {
     GMesh cash, gift, cp, arrow, shadow, marker, siren;
     struct RWorld {
         GMesh ground;
-        GMesh chunk[CHN * CHN];
-        float chb[CHN * CHN][6];
+        GMesh chunk[RW_SLOTS];
+        float chb[RW_SLOTS][6];
         Tex minimap;
     } rw[2];
     int cur;   /* 0 = verzonnen stad, 1 = echte NL-kaart */
@@ -58,6 +59,9 @@ int r_init(Renderer *r, int w, int h);          /* shaders, basistexturen, logo 
 int r_load_font(Renderer *r);
 void r_upload_world(Renderer *r, World *w, int slot); /* chunks naar VBO's, CPU-geheugen vrij */
 void r_build_models(Renderer *r);
+void r_slot_upload(Renderer *r, int world, int slot, MeshB *m);   /* tegel-deelmesh in slot */
+void r_slot_clear(Renderer *r, int world, int slot);
+void r_tex_upload(Tex *t, int w, int h, const uint8_t *rgba);
 void r_set_tod(Renderer *r, int tod);
 void r_draw_scene(Renderer *r, Game *g);
 void r_resize(Renderer *r, int w, int h);

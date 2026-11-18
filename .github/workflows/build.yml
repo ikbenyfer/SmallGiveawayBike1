@@ -14,7 +14,7 @@ jobs:
       - name: Pakketten
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc libegl-dev libgles-dev libegl-mesa0 libgl1-mesa-dri mesa-utils fonts-dejavu-core python3-pil xvfb
+          sudo apt-get install -y gcc libegl-dev libgles-dev libegl-mesa0 libgl1-mesa-dri mesa-utils fonts-dejavu-core python3-pil xvfb zlib1g-dev
 
       - name: Plaatjes en lettertype voor Linux
         run: python3 tools/linux_assets.py preview_assets
@@ -24,7 +24,7 @@ jobs:
         run: |
           gcc -std=c99 -O1 -g -Wall -Wextra -Wno-unused-parameter -Wno-misleading-indentation \
             -fsanitize=address,undefined -fno-sanitize-recover=undefined \
-            Game/*.c Render/*.c Tests/preview_linux.c -o preview -lEGL -lGLESv2 -lm 2>&1 | tee compile.log
+            Game/*.c Render/*.c Tests/preview_linux.c -o preview -lEGL -lGLESv2 -lz -pthread -lm 2>&1 | tee compile.log
           test -x preview
 
       - name: Hele game + automatische test draaien

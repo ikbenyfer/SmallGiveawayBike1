@@ -40,5 +40,6 @@ int plat_http_poll(int id, char **data, long *len);
 int plat_read_file(const char *name, char **data, long *len);
 int plat_write_file(const char *name, const char *data, long len);
 void plat_delete_file(const char *name);
+int plat_read_resource(const char *name, char **data, long *len);   /* uit de app-bundel */
 
 #endif

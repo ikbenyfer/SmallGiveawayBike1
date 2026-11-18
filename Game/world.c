@@ -672,6 +672,7 @@ static void build_minimap(void) {
     float span = MAPW + 2 * BORDER, px = span / 256.0f;
     w->mm = 256;
     w->mmOrg = -BORDER;
+    w->mmOrgZ = -BORDER;
     w->mmSpan = span;
     w->minimap = (uint8_t *)malloc(256 * 256 * 4);
     for (y = 0; y < 256; y++)

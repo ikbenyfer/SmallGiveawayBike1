@@ -174,6 +174,21 @@ int plat_write_file(const char *name, const char *data, long len) {
     return 1;
 }
 
+int plat_read_resource(const char *name, char **data, long *len) {
+    char p[512];
+    FILE *f;
+    long n;
+    snprintf(p, sizeof(p), "Resources/%s", name);
+    f = fopen(p, "rb");
+    if (!f) return 0;
+    fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
+    *data = (char *)malloc((size_t)n + 1);
+    if (fread(*data, 1, (size_t)n, f) != (size_t)n) { fclose(f); free(*data); return 0; }
+    (*data)[n] = 0; *len = n;
+    fclose(f);
+    return 1;
+}
+
 void plat_delete_file(const char *name) {
     char p[512];
     snprintf(p, sizeof(p), "%s/docs/%s", OUT, name);
@@ -226,7 +241,7 @@ int main(void) {
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { printf("FBO niet compleet\n"); return 2; }
 
     fe_init(W, H);
-    for (frame = 0; frame < 30 * 260; frame++) {
+    for (frame = 0; frame < 30 * 420; frame++) {
         t += 1.0 / 30.0;
         fe_frame(t);
         if (frame == 25) plat_screenshot("00a_logo_fadein", W, H);

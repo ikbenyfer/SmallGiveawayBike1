@@ -60,7 +60,7 @@ typedef struct {
     V3 gifts[8]; int ngifts;
 
     int verts_total;
-    float mmOrg, mmSpan;     /* minimap: wereldgebied */
+    float mmOrg, mmOrgZ, mmSpan;     /* minimap: wereldgebied (x, z, breedte) */
 
     /* echte NL-kaart */
     int real;

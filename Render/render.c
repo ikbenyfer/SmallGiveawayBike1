@@ -203,6 +203,28 @@ void r_upload_world(Renderer *r, World *w, int slot) {
     if (w->minimap) tex_from_rgba(&rw->minimap, w->mm, w->mm, w->minimap, 1, 0);
 }
 
+void r_slot_upload(Renderer *r, int world, int slot, MeshB *m) {
+    struct RWorld *rw = &r->rw[world];
+    float *b = rw->chb[slot];
+    int i;
+    b[0] = b[2] = 1e9f; b[3] = b[5] = -1e9f; b[1] = 0; b[4] = 1;
+    for (i = 0; i < m->n; i++) {
+        Vtx *v = &m->v[i];
+        if (v->x < b[0]) b[0] = v->x;
+        if (v->x > b[3]) b[3] = v->x;
+        if (v->z < b[2]) b[2] = v->z;
+        if (v->z > b[5]) b[5] = v->z;
+        if (v->y > b[4]) b[4] = v->y;
+    }
+    upload(&rw->chunk[slot], m);
+}
+
+void r_slot_clear(Renderer *r, int world, int slot) {
+    r->rw[world].chunk[slot].count = 0;
+}
+
+void r_tex_upload(Tex *t, int w, int h, const uint8_t *rgba) { tex_from_rgba(t, w, h, rgba, 1, 0); }
+
 void r_build_models(Renderer *r) {
     MeshB m;
     int i;
@@ -432,7 +454,7 @@ void r_draw_scene(Renderer *r, Game *g) {
         M4 id = m4_identity();
         struct RWorld *rw = &r->rw[r->cur];
         draw_mesh(r, &rw->ground, &id);
-        for (i = 0; i < CHN * CHN; i++) {
+        for (i = 0; i < RW_SLOTS; i++) {
             const float *b = rw->chb[i];
             float cx = clampf(g->camPos.x, b[0], b[3]), cz = clampf(g->camPos.z, b[2], b[5]);
             float dx = cx - g->camPos.x, dz = cz - g->camPos.z;

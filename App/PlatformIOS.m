@@ -293,3 +293,19 @@ void plat_delete_file(const char *name) {
         [[NSFileManager defaultManager] removeItemAtPath:[docs() stringByAppendingPathComponent:[NSString stringWithUTF8String:name]] error:nil];
     }
 }
+
+int plat_read_resource(const char *name, char **data, long *len) {
+    @autoreleasepool {
+        NSString *p = [[NSBundle mainBundle] pathForResource:[NSString stringWithUTF8String:name] ofType:nil];
+        NSData *d = p ? [NSData dataWithContentsOfFile:p] : nil;
+        char *buf;
+        if (!d) return 0;
+        buf = (char *)malloc(d.length + 1);
+        if (!buf) return 0;
+        memcpy(buf, d.bytes, d.length);
+        buf[d.length] = 0;
+        *data = buf;
+        *len = (long)d.length;
+        return 1;
+    }
+}

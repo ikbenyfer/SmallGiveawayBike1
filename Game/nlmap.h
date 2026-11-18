@@ -14,12 +14,6 @@
 
 typedef struct { double cx, cy; char name[128]; } NLGeo;
 
-typedef struct {
-    int buildings, roads, water, terrain, verts, segs;
-    int heightsReal;   /* 1 = hoogtes uit 3D BAG, 0 = geschat */
-    float maxH;
-} NLStats;
-
 /* "1012 js" -> "1012JS"; geeft 1 als het een geldige postcode is */
 int nl_normalize_postcode(const char *in, char *out);
 void nl_url_geocode(char *buf, int n, const char *pc);
@@ -27,13 +21,10 @@ void nl_url_bag3d(char *buf, int n, double cx, double cy);
 void nl_url_bagpdok(char *buf, int n, double cx, double cy);
 void nl_url_top10(char *buf, int n, const char *collection, double cx, double cy);
 int nl_parse_geocode(char *json, long len, NLGeo *out);
+void nl_url_bag3d_bbox(char *buf, int n, double x0, double y0, double x1, double y1);
+void nl_url_bagpdok_bbox(char *buf, int n, double x0, double y0, double x1, double y1);
+void nl_url_top10_bbox(char *buf, int n, const char *collection, double x0, double y0, double x1, double y1);
 
-/* Bouwt de wereld (CPU) uit de JSON-antwoorden. Buffers mogen NULL zijn.
- * bagPdok: 1 als de gebouwen van PDOK BAG komen (zonder hoogte). */
-int nl_build_world(World *w, double cx, double cy,
-                   char *bag, long bagLen, int bagPdok,
-                   char *roads, long roadsLen, char *water, long waterLen, char *terrain, long terrainLen,
-                   NLStats *st);
 /* Straatnaam bij een punt (of NULL) */
 const char *nl_street_name(const World *w, float x, float z);
 
