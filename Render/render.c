@@ -165,6 +165,7 @@ int r_init(Renderer *r, int w, int h) {
     make_soft(&r->glow, 1);
     tex_load(&r->bg, "bg_alley.jpg");
     tex_load(&r->logo, "logo_cutout.png");
+    tex_load(&r->icons, "icons.png");
     r->logoX = LOGO_X; r->logoY = LOGO_Y; r->logoW = LOGO_W; r->logoH = LOGO_H;
     r_set_tod(r, TOD_DUSK);
     return 1;
@@ -802,6 +803,11 @@ void ui_ring(Renderer *r, float x, float y, float rad, float thick, float cr, fl
         float uv[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
         ui_quad4(r, &r->white, xy, uv, cr, cg, cb, ca);
     }
+}
+
+void ui_icon(Renderer *r, int idx, float cx, float cy, float size, float alpha) {
+    float u0 = (float)idx / ICON_COUNT, u1 = (float)(idx + 1) / ICON_COUNT;
+    ui_quad(r, &r->icons, cx - size * 0.5f, cy - size * 0.5f, size, size, u0, 0, u1, 1, 1, 1, 1, alpha);
 }
 
 float ui_text_w(Renderer *r, const char *s, float size) {

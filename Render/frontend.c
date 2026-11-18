@@ -483,8 +483,11 @@ static void draw_minimap(void) {
             float m = fmaxf(fabsf(sx), fabsf(sy));
             int done = g->mission < 0 && tg[k].y > 0.5f;
             if (m > 0.9f) { sx = sx / m * 0.9f; sy = sy / m * 0.9f; }
-            ui_circle(R, cx + sx * half, cy + sy * half, 8, 0, 0, 0, 0.8f);
-            ui_circle(R, cx + sx * half, cy + sy * half, 6, done ? 0.4f : 1.0f, done ? 1.0f : 0.82f, 0.15f, 1);
+            if (g->mission < 0) ui_icon(R, done ? ICON_DONE : ICON_MISSION, cx + sx * half, cy + sy * half, 20, 1);
+            else {
+                ui_circle(R, cx + sx * half, cy + sy * half, 8, 0, 0, 0, 0.8f);
+                ui_circle(R, cx + sx * half, cy + sy * half, 6, 1.0f, 0.82f, 0.15f, 1);
+            }
         }
     }
     if (!g->nl) {
@@ -500,8 +503,8 @@ static void draw_minimap(void) {
             float sx = (rx * rt.x + rz * rt.z) / rad, sy = -(rx * f.x + rz * f.z) / rad;
             float m = fmaxf(fabsf(sx), fabsf(sy));
             if (m > 0.9f) { sx = sx / m * 0.9f; sy = sy / m * 0.9f; }
-            ui_rect(R, cx + sx * half - 7, cy + sy * half - 7, 14, 14, 0, 0, 0, 0.85f);
-            ui_rect(R, cx + sx * half - 5, cy + sy * half - 5, 10, 10, bc[q][0], bc[q][1], bc[q][2], 1);
+            (void)bc;
+            ui_icon(R, q == 0 ? ICON_GUN : (q == 1 ? ICON_BANK : (q == 2 ? ICON_CAR : ICON_CUSTOMS)), cx + sx * half, cy + sy * half, 24, 1);
         }
     }
     /* speler-pijl */
@@ -1151,8 +1154,23 @@ static void draw_bigmap(void) {
         }
     } else {
         const World *w = F.G.w;
+        static const char *names[4] = {"BLOCK ARMS", "GIVEAWAY BANK", "GIVEAWAY MOTORS", "BLOCK CUSTOMS"};
+        static const int pois[4] = {POI_GUNSHOP, POI_BANK, POI_DEALER, POI_CUSTOMS};
+        static const int icons[4] = {ICON_GUN, ICON_BANK, ICON_CAR, ICON_CUSTOMS};
+        int q;
         bm_w2s(w->mmOrg, w->mmOrgZ, &x0, &y0);
         ui_quad(R, &R->rw[0].minimap, x0, y0, w->mmSpan * F.bmScale, w->mmSpan * F.bmScale, 0, 0, 1, 1, 1, 1, 1, 1);
+        for (q = 0; q < NMISSIONS; q++) {
+            const MissionDef *md = &F.G.mdef[q];
+            bm_w2s(md->giver.x, md->giver.z, &sx, &sy);
+            ui_icon(R, F.G.completed[q] ? ICON_DONE : ICON_MISSION, sx, sy, 30, 1);
+            if (F.bmScale > 1.2f) ui_text(R, md->title, sx, sy + 15, 15, 1, 1, 0.85f, 0.95f, 1);
+        }
+        for (q = 0; q < 4; q++) {
+            bm_w2s(w->poi[pois[q]].x, w->poi[pois[q]].z, &sx, &sy);
+            ui_icon(R, icons[q], sx, sy, 40, 1);
+            ui_text(R, names[q], sx, sy + 20, 17, 1, 1, 1, 1, 1);
+        }
     }
     /* speler */
     bm_w2s(F.G.p.x, F.G.p.z, &sx, &sy);
@@ -1195,9 +1213,18 @@ static void draw_bigmap(void) {
         ui_rect(R, R->W * 0.5f - 150, R->H - 96.0f, 300, 70, F.pressed == 905 ? 0.9f : 0.75f, 0.12f, 0.12f, 0.95f);
         ui_text(R, "GO HERE", R->W * 0.5f, R->H - 88.0f, 46, 1, 1, 1, 1, 1);
     }
-    ui_text(R, F.mode == 1 ? "Drag to move, tap to pick a place. Built-in: Heemskerk + Beverwijk. Grey = not loaded."
-                          : "Drag to move. The minimap shows where you are.",
-            R->W * 0.5f, R->H - 20.0f, 14, 0.85f, 0.85f, 0.85f, 1, 1);
+    if (F.mode == 1)
+        ui_text(R, "Drag to move, tap to pick a place. Built-in: Heemskerk + Beverwijk. Grey = not loaded.", R->W * 0.5f, R->H - 20.0f, 14, 0.85f, 0.85f, 0.85f, 1, 1);
+    else {
+        static const char *leg[6] = {"GUNS", "BANK", "CARS", "CUSTOMS", "MISSION", "DONE"};
+        int q;
+        ui_rect(R, R->W * 0.5f - 330, R->H - 50.0f, 660, 44, 0, 0, 0, 0.6f);
+        for (q = 0; q < 6; q++) {
+            float lx = R->W * 0.5f - 300 + q * 110.0f;
+            ui_icon(R, q, lx, R->H - 28.0f, 30, 1);
+            ui_text(R, leg[q], lx + 18, R->H - 38.0f, 16, 1, 1, 1, 1, 0);
+        }
+    }
 }
 
 static int bm_button(float x, float y) {
@@ -2242,6 +2269,16 @@ static void autotest_tick(float dt) {
         else if (F.atStep == 86 && t > F.atT3 + 1.0f) { at_shot("31_custom_car"); F.atStep++; }
         else if (F.atStep == 87 && t > F.atT3 + 8.0f) {
             rep("Na tuning topsnelheid in test: %.0f km/h", F.atMaxSpeed * 3.6f);
+            F.atStep = 88;
+        }
+        else if (F.atStep == 88) {
+            bm_open();
+            F.bmScale = 1.4f;
+            F.bmCx = F.G.w->poi[POI_BANK].x; F.bmCz = F.G.w->poi[POI_BANK].z;
+            F.atStep = 89;
+            return;
+        }
+        else if (F.atStep == 89 && F.state == ST_GAME) {
             F.atStep = 90;
         }
         else if (F.atStep == 90) {
@@ -2420,7 +2457,7 @@ void fe_frame(double now) {
     case ST_BIGMAP:
         ui_begin(R); draw_bigmap(); ui_flush(R);
         if (F.at && F.st > 1.0f) {
-            at_shot("19b_bigmap");
+            at_shot(F.mode == 1 ? "19b_bigmap" : "32_bigmap_city");
             rep("Grote kaart: overzicht geladen=%d, %d tegeltjes, zoom %.2f", F.bmOk, ns_map_count(), F.bmScale);
             set_state(ST_GAME);
         }

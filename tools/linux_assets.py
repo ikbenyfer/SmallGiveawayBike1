@@ -27,7 +27,7 @@ def write_raw(img, path):
         f.write(px)
 
 
-for name in ("bg_alley.jpg", "logo_cutout.png", "nl_hb_map.png"):
+for name in ("bg_alley.jpg", "logo_cutout.png", "nl_hb_map.png", "icons.png"):
     write_raw(Image.open(os.path.join(root, "Resources", name)), os.path.join(out, name + ".raw"))
 
 size = 48
