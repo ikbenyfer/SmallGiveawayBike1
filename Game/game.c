@@ -1427,7 +1427,8 @@ static void update_police_and_health(Game *g, float dt) {
                 if (g->wanted == 0) game_message(g, "You lost the police!", 2.5f);
             }
         }
-        if (close && player_speed(g) < 2.5f) g->bustT += dt;
+        /* gewapend te voet: de politie arresteert niet, maar schiet */
+        if (close && player_speed(g) < 2.5f && !(g->p.veh < 0 && g->weapon != WP_NONE)) g->bustT += dt;
         else g->bustT = fmaxf(0, g->bustT - dt);
         if (g->bustT > 2.5f) {
             long fine = g->money / 10;
