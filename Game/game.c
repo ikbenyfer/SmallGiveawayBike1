@@ -293,6 +293,28 @@ static void setup_missions(Game *g) {
     cp_set(&m->cp[6], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_ANY, "Lose ALL the police, then hide the loot at the garage");
     m->cp[6].clean = 1;
     m->ncp = 7;
+
+    m = &g->mdef[21];
+    m->title = "THE IMPOSSIBLE JOB";
+    m->brief = "Only legends finish this: two robberies, the biggest vault drill ever, a full city chase and a second run for the gold.";
+    m->giver = w->poi[POI_BANK];
+    m->reward = 100000; m->repeatReward = 80000;
+    m->requireWeapon = 1; m->time = 540;
+    cp_set(&m->cp[0], w->poi[POI_BIKESHOP].x, w->poi[POI_BIKESHOP].z, 2.2f, NEED_FOOT, "Step 1: rob the bike shop register");
+    m->cp[0].hold = 10.0f; m->cp[0].alarm = 2;
+    cp_set(&m->cp[1], w->poi[POI_VAULT].x, w->poi[POI_VAULT].z, 1.8f, NEED_FOOT, "Step 2: drill the main vault for 60 seconds - do NOT leave!");
+    m->cp[1].hold = 60.0f; m->cp[1].alarm = 3;
+    cp_set(&m->cp[2], road_c(7), road_c(7), 5.0f, NEED_CAR, "Step 3: steal a car - south-east corner");
+    cp_set(&m->cp[3], road_c(4), road_c(4), 5.0f, NEED_CAR, "City centre");
+    cp_set(&m->cp[4], road_c(0), road_c(7), 5.0f, NEED_CAR, "South-west corner");
+    cp_set(&m->cp[5], road_c(0), road_c(0), 5.0f, NEED_CAR, "North-west corner");
+    cp_set(&m->cp[6], road_c(7), road_c(0), 5.0f, NEED_CAR, "North-east corner");
+    cp_set(&m->cp[7], road_c(3), road_c(5), 5.0f, NEED_CAR, "Back into town");
+    cp_set(&m->cp[8], w->poi[POI_VAULT].x, w->poi[POI_VAULT].z, 1.8f, NEED_FOOT, "Step 4: go back IN for the gold bars (30 s)");
+    m->cp[8].hold = 30.0f; m->cp[8].alarm = 3;
+    cp_set(&m->cp[9], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_ANY, "Final step: lose EVERY cop, then hide at the garage");
+    m->cp[9].clean = 1;
+    m->ncp = 10;
 #undef SW
 #undef RC
 

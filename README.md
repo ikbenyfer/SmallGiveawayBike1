@@ -183,6 +183,14 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph�
   4. Tot slot schud je alle politie af en verstop je de buit bij de garage.
 
   De eerste keer krijg je $30.000, daarna $25.000 per keer.
+- **THE IMPOSSIBLE JOB** (missie 22): de allerzwaarste klus, alleen voor legendes. Je hebt 9 minuten.
+  1. Beroof de kassa van de fietsenwinkel (10 seconden).
+  2. Boor 60 seconden de bankkluis open, terwijl je 3 sterren hebt.
+  3. Race met een auto langs 6 punten door de hele stad.
+  4. Ga terug de bank in voor de goudstaven (nog eens 30 seconden, opnieuw alarm).
+  5. Schud alle politie af en verstop je bij de garage.
+
+  De eerste keer krijg je $100.000, daarna $80.000 per keer.
 - **ONLINE (multiplayer, peer-to-peer, max. 4 spelers)** – iPad en Windows kunnen samen spelen, er is geen server nodig.
   - **HOST A GAME** (hoofdmenu → ONLINE) start de stad als host. Wil je samen in REAL NL spelen, kies dan in het pauzemenu **HOST ONLINE**: iedereen komt dan op dezelfde postcode.
   - **Zelfde wifi:** het spel van de host verschijnt vanzelf in de lijst; tik erop om mee te doen.
