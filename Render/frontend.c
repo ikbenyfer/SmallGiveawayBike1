@@ -1151,7 +1151,7 @@ static void draw_nl_input(void) {
         ui_text(R, ">", 870, 666, 36, 1, 1, 1, F.areaPage + 1 < pages ? 1.0f : 0.3f, 1);
     }
     if (F.delArm) ui_text(R, "Tap ? again to delete that area", 807, 720, 16, 1, 0.5f, 0.5f, 1, 1);
-    else if (F.nAreas > 0) ui_text(R, "Tap an area to play it (works without Wi-Fi). * = heights estimated", 807, 720, 13, 0.75f, 0.75f, 0.75f, 1, 1);
+    else if (F.nAreas > 0) ui_text(R, "Tap an area to play (offline). * = estimated heights", 807, 720, 14, 0.75f, 0.75f, 0.75f, 1, 1);
     ui_text(R, "Data: 3D BAG (TU Delft/3DGI), PDOK/Kadaster - CC BY 4.0", R->W * 0.5f, R->H - 20.0f, 13, 0.7f, 0.7f, 0.7f, 1, 1);
 }
 

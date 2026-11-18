@@ -44,7 +44,11 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten PhÅ
 
   Je loopt, fietst of rijdt erdoorheen. Bovenaan zie je de straat waar je bent, en de minimap is gemaakt uit dezelfde data. Er zijn hier geen missies, politie of verkeer: het is vrij rondrijden.
 
-  De eerste keer heb je **Wi-Fi** nodig. Daarna staat het gebied op de iPad, in `Documents/nl/`, en werkt het ook offline. Onder RECENT staan de laatste 5 postcodes.
+  **Downloadmodus (offline spelen):** in het REAL NL-scherm typ je links een postcode. Dan heb je twee knoppen:
+  - **PLAY**: je gaat er meteen heen.
+  - **DOWNLOAD**: het gebied wordt op de achtergrond opgeslagen. Je kunt meerdere postcodes achter elkaar in de wachtrij zetten. Het downloaden loopt door, ook als je intussen speelt.
+
+  Rechts staat **DOWNLOADED (OFFLINE)**, met per gebied de postcode, de plaats en de grootte (ongeveer 0,7 MB per gebied). Tik op een gebied om het te spelen. Dat werkt **zonder Wi-Fi**: alles komt dan uit `Documents/nl/` op de iPad. Met **X** en daarna **?** verwijder je een gebied. Een gebied dat je via PLAY volledig hebt geladen, komt ook vanzelf in die lijst. Een `*` achter de grootte betekent dat de hoogtes geschat zijn.
 
   iOS 9 vertrouwt het certificaat van de 3D BAG-server niet zelf, omdat het de nieuwere Let's Encrypt-root niet kent. Daarom zitten de officiÃ«le rootcertificaten in de app: ISRG Root X1/X2 en DigiCert Global Root G2, met gecontroleerde SHA-256-vingerafdruk. Ze worden alleen als **extra** vertrouwensanker gebruikt. De systeemcontrole en de hostnaamcontrole blijven gewoon aan. Lukt de 3D BAG toch niet, dan valt de app terug op BAG-plattegronden van PDOK met **geschatte** hoogtes. Dat zie je dan ook in beeld staan.
 
@@ -74,7 +78,7 @@ In de Linux-test tekent een frame **ongeveer 50-90 draw calls en 11-26 duizend d
 Verder: laden 0,3 s, geheugen ongeveer 21-31 MB, geen crash. In-, uitstappen en springen werkten. Screenshots staan in `device_results/`.
 Wat er na de iPad-test is aangepast: muren aan de schaduwkant waren bijna zwart, dus er is meer omgevingslicht. **De touch-besturing met je vingers is nog niet door een mens getest.**
 
-**Linux-CI (Mesa, geen iPad), versie 2:** alles compileert zonder waarschuwingen en AddressSanitizer vindt niets. De autotest doorloopt onder meer de REAL NL-modus met postcode 1012JS: dat geeft 703 gebouwen met echte hoogtes (de hoogste is 35 m), 179 wegen en grachten, laden en bouwen in 2,7 s, en tijdens het rijden de straatnaam "Warmoesstraat". Het gebied heeft wel ongeveer 290 duizend vertices, veel meer dan de verzonnen stad. Of de iPad 2 dat op 30 FPS haalt, moet de iPad-test nog uitwijzen.
+**Linux-CI (Mesa, geen iPad), versie 2:** alles compileert zonder waarschuwingen en AddressSanitizer vindt niets. De autotest doorloopt ook de **downloadmodus**: 9711LM (Groningen) wordt gedownload (680 kB, 2,7 s), daarna offline gespeeld (709 gebouwen, alles uit de opslag) en daarna verwijderd. Verder doorloopt hij de REAL NL-modus met postcode 1012JS: dat geeft 703 gebouwen met echte hoogtes (de hoogste is 35 m), 179 wegen en grachten, laden en bouwen in 2,7 s, en tijdens het rijden de straatnaam "Warmoesstraat". Het gebied heeft wel ongeveer 290 duizend vertices, veel meer dan de verzonnen stad. Of de iPad 2 dat op 30 FPS haalt, moet de iPad-test nog uitwijzen.
 
 Verder doorloopt de autotest:
 - lopen, fiets en auto, en missie 1 (gehaald)
