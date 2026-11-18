@@ -400,7 +400,7 @@ void model_char_body(MeshB *m, int v) {
     /* romp: smal bij de taille, breed bij de borst */
     s = sq(v3(0, 1.32f, 0), v3(0.25f, 0.235f, 0.14f), 0.55f, 0.5f, l.shirt);
     s.bx = 0.82f; s.bz = 0.9f; s.su = 16; s.sv = 10; mb_sq(m, &s);
-    for (k = -1; k <= 1; k += 2) blob(m, v3(0.265f * k, 1.49f, 0), v3(0.09f, 0.075f, 0.11f), 0.8f, 0.8f, 10, 6, l.shirt);
+    for (k = -1; k <= 1; k += 2) blob(m, v3(0.25f * k, 1.475f, 0), v3(0.075f, 0.06f, 0.095f), 0.8f, 0.8f, 10, 6, l.shirt);
     blob(m, v3(0, 1.54f, 0), v3(0.088f, 0.026f, 0.08f), 0.5f, 0.7f, 10, 4, l.shirt);   /* kraag */
     /* nek en hoofd */
     mb_capsule(m, v3(0, 1.53f, 0), v3(0, 1.67f, 0.006f), 0.058f, 0.052f, 10, l.skin);
