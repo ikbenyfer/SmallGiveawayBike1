@@ -1,11 +1,26 @@
 /* Windows-versie: SDL2 (venster, toetsenbord/muis, geluid via SDL_mixer), desktop-OpenGL,
- * WinHTTP voor de echte NL-kaart. Opslag in %APPDATA%\SmallGiveawayBike1. */
+ * WinHTTP (Windows) of libcurl (Linux, bouwen met -DSGB_LINUX_GL) voor de echte NL-kaart. Opslag in %APPDATA%\SmallGiveawayBike1. */
+#ifdef _WIN32
 #include "glwin.h"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
 #include <winhttp.h>
 #include <psapi.h>
 #include <shlobj.h>
+#define SEP "\\"
+#define strtok_r strtok_s
+#else
+#define _GNU_SOURCE
+#include "../Render/gl_inc.h"
+#include <curl/curl.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <limits.h>
+#define MAX_PATH 4096
+#define SEP "/"
+#define InterlockedExchange(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
+#endif
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,8 +28,6 @@
 #include "../Render/platform.h"
 #include "../Render/frontend.h"
 #include "../Game/game.h"
-
-#define strtok_r strtok_s
 
 static char BASE[MAX_PATH];     /* %APPDATA%\SmallGiveawayBike1 */
 static char DATA[MAX_PATH];     /* <exe-map>\data */
@@ -27,7 +40,13 @@ static void mkdirs(const char *path) {
     size_t i;
     snprintf(tmp, sizeof(tmp), "%s", path);
     for (i = 3; tmp[i]; i++) {
-        if (tmp[i] == '\\' || tmp[i] == '/') { char c = tmp[i]; tmp[i] = 0; CreateDirectoryA(tmp, NULL); tmp[i] = c; }
+        if (tmp[i] == '\\' || tmp[i] == '/') { char c = tmp[i]; tmp[i] = 0; 
+#ifdef _WIN32
+            CreateDirectoryA(tmp, NULL);
+#else
+            mkdir(tmp, 0755);
+#endif
+            tmp[i] = c; }
     }
 }
 
@@ -46,20 +65,20 @@ static int read_all(const char *path, char **data, long *len) {
 
 int plat_read_resource(const char *name, char **data, long *len) {
     char p[MAX_PATH];
-    snprintf(p, sizeof(p), "%s\\%s", DATA, name);
+    snprintf(p, sizeof(p), "%s" SEP "%s", DATA, name);
     return read_all(p, data, len);
 }
 
 int plat_read_file(const char *name, char **data, long *len) {
     char p[MAX_PATH];
-    snprintf(p, sizeof(p), "%s\\%s", BASE, name);
+    snprintf(p, sizeof(p), "%s" SEP "%s", BASE, name);
     return read_all(p, data, len);
 }
 
 int plat_write_file(const char *name, const char *data, long len) {
     char p[MAX_PATH];
     FILE *f;
-    snprintf(p, sizeof(p), "%s\\%s", BASE, name);
+    snprintf(p, sizeof(p), "%s" SEP "%s", BASE, name);
     mkdirs(p);
     f = fopen(p, "wb");
     if (!f) return 0;
@@ -70,8 +89,8 @@ int plat_write_file(const char *name, const char *data, long len) {
 
 void plat_delete_file(const char *name) {
     char p[MAX_PATH];
-    snprintf(p, sizeof(p), "%s\\%s", BASE, name);
-    DeleteFileA(p);
+    snprintf(p, sizeof(p), "%s" SEP "%s", BASE, name);
+    remove(p);
 }
 
 void plat_write_text(const char *name, const char *text) { plat_write_file(name, text, (long)strlen(text)); }
@@ -123,7 +142,7 @@ void plat_log(const char *fmt, ...) {
     fflush(stdout);
     if (BASE[0]) {   /* ook naar %APPDATA%\SmallGiveawayBike1\log.txt (handig bij problemen) */
         static FILE *lf;
-        if (!lf) { char p[MAX_PATH]; snprintf(p, sizeof(p), "%s\\log.txt", BASE); lf = fopen(p, "w"); }
+        if (!lf) { char p[MAX_PATH]; snprintf(p, sizeof(p), "%s" SEP "log.txt", BASE); lf = fopen(p, "w"); }
         if (lf) { fprintf(lf, "%s\n", buf); fflush(lf); }
     }
 }
@@ -131,9 +150,18 @@ void plat_log(const char *fmt, ...) {
 double plat_time(void) { return (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency(); }
 
 long plat_memory_kb(void) {
+#ifdef _WIN32
     PROCESS_MEMORY_COUNTERS pmc;
     if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) return (long)(pmc.WorkingSetSize / 1024);
     return -1;
+#else
+    long pages = 0, rss = 0;
+    FILE *f = fopen("/proc/self/statm", "r");
+    if (!f) return -1;
+    if (fscanf(f, "%ld %ld", &pages, &rss) != 2) rss = -1;
+    fclose(f);
+    return rss < 0 ? -1 : rss * (sysconf(_SC_PAGESIZE) / 1024);
+#endif
 }
 
 /* ------------------------------------------------------------------ instellingen (settings.txt) */
@@ -189,7 +217,7 @@ void plat_screenshot(const char *name, int w, int h) {
     unsigned char hdr[54] = {'B', 'M'};
     if (!px) return;
     glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px);
-    snprintf(p, sizeof(p), "%s\\shots\\%s.bmp", BASE, name);
+    snprintf(p, sizeof(p), "%s" SEP "shots" SEP "%s.bmp", BASE, name);
     mkdirs(p);
     f = fopen(p, "wb");
     if (!f) { free(px); return; }
@@ -224,10 +252,10 @@ void plat_audio_init(const char *const *names, int n, const char *const *loops, 
     Mix_Init(MIX_INIT_MP3);
     Mix_AllocateChannels(32);
     Mix_ReserveChannels(nl);
-    for (i = 0; i < n && i < 64; i++) { snprintf(p, sizeof(p), "%s\\sfx_%s.wav", DATA, names[i]); sfx[i] = Mix_LoadWAV(p); }
-    for (i = 0; i < nl && i < 8; i++) { snprintf(p, sizeof(p), "%s\\sfx_%s.wav", DATA, loops[i]); loopc[i] = Mix_LoadWAV(p); }
+    for (i = 0; i < n && i < 64; i++) { snprintf(p, sizeof(p), "%s" SEP "sfx_%s.wav", DATA, names[i]); sfx[i] = Mix_LoadWAV(p); }
+    for (i = 0; i < nl && i < 8; i++) { snprintf(p, sizeof(p), "%s" SEP "sfx_%s.wav", DATA, loops[i]); loopc[i] = Mix_LoadWAV(p); }
     nsfxc = n; nloops = nl;
-    snprintf(p, sizeof(p), "%s\\music.mp3", DATA);
+    snprintf(p, sizeof(p), "%s" SEP "music.mp3", DATA);
     music = Mix_LoadMUS(p);
     if (!music) plat_log("muziek niet geladen: %s", Mix_GetError());
     Mix_VolumeMusic(70);
@@ -260,10 +288,58 @@ void plat_music(int on) {
 /* ------------------------------------------------------------------ netwerk (WinHTTP in een thread per verzoek) */
 
 #define NREQ 256
+#ifdef _WIN32
 typedef struct { volatile LONG state; char url[1024]; char *data; long len; } Req;   /* state: 1 bezig, 2 klaar, 3 fout */
+#else
+typedef struct { volatile int state; char url[1024]; char *data; long len; } Req;
+#endif
 static Req reqs[NREQ];
 static int reqNext;
 
+#ifndef _WIN32
+typedef struct { char *buf; long len, cap; } CurlBuf;
+static size_t curl_write(char *p, size_t sz, size_t n, void *ud) {
+    CurlBuf *b = (CurlBuf *)ud;
+    long add = (long)(sz * n);
+    if (b->len + add + 1 > b->cap) {
+        char *nb;
+        long ncap = (b->len + add + 1) * 2;
+        nb = (char *)realloc(b->buf, (size_t)ncap);
+        if (!nb) return 0;
+        b->buf = nb; b->cap = ncap;
+    }
+    memcpy(b->buf + b->len, p, (size_t)add);
+    b->len += add;
+    return (size_t)add;
+}
+
+static void *http_thread(void *arg) {
+    Req *r = (Req *)arg;
+    CurlBuf b = {NULL, 0, 0};
+    long status = 0;
+    int ok = 0;
+    CURL *c = curl_easy_init();
+    if (c) {
+        curl_easy_setopt(c, CURLOPT_URL, r->url);
+        curl_easy_setopt(c, CURLOPT_USERAGENT, "SmallGiveawayBike1/1.0 (Linux)");
+        curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
+        curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 15L);
+        curl_easy_setopt(c, CURLOPT_TIMEOUT, 90L);
+        curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, curl_write);
+        curl_easy_setopt(c, CURLOPT_WRITEDATA, &b);
+        if (curl_easy_perform(c) == CURLE_OK) {
+            curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &status);
+            ok = status == 200 && b.len > 0;
+        }
+        curl_easy_cleanup(c);
+    }
+    if (ok) { b.buf[b.len] = 0; r->data = b.buf; r->len = b.len; InterlockedExchange(&r->state, 2); }
+    else { free(b.buf); InterlockedExchange(&r->state, 3); }
+    plat_log("NET %s: http %ld, %ld bytes", ok ? "ok" : "fout", status, b.len);
+    return NULL;
+}
+#else
 static DWORD WINAPI http_thread(LPVOID arg) {
     Req *r = (Req *)arg;
     wchar_t wurl[1024], host[256], path[1024];
@@ -302,20 +378,30 @@ static DWORD WINAPI http_thread(LPVOID arg) {
     plat_log("NET %s: http %lu, %ld bytes", ok ? "ok" : "fout", (unsigned long)status, len);
     return 0;
 }
+#endif
 
 int plat_http_start(const char *url) {
     int i;
     for (i = 0; i < NREQ; i++) {
         int k = (reqNext + i) % NREQ;
         if (reqs[k].state == 0) {
-            HANDLE h;
             reqNext = k + 1;
             snprintf(reqs[k].url, sizeof(reqs[k].url), "%s", url);
             reqs[k].data = NULL; reqs[k].len = 0;
             reqs[k].state = 1;
-            h = CreateThread(NULL, 0, http_thread, &reqs[k], 0, NULL);
-            if (!h) { reqs[k].state = 0; return -1; }
-            CloseHandle(h);
+#ifdef _WIN32
+            {
+                HANDLE h = CreateThread(NULL, 0, http_thread, &reqs[k], 0, NULL);
+                if (!h) { reqs[k].state = 0; return -1; }
+                CloseHandle(h);
+            }
+#else
+            {
+                pthread_t th;
+                if (pthread_create(&th, NULL, http_thread, &reqs[k]) != 0) { reqs[k].state = 0; return -1; }
+                pthread_detach(th);
+            }
+#endif
             return k + 1;
         }
     }
@@ -348,19 +434,38 @@ int main(int argc, char **argv) {
         if (strcmp(argv[i], "--mptest-join") == 0) fe_set_mptest(2);
         if (strcmp(argv[i], "--appdata") == 0 && i + 1 < argc) snprintf(BASE, sizeof(BASE), "%s", argv[++i]);
     }
+#ifdef _WIN32
     GetModuleFileNameA(NULL, exe, MAX_PATH);
     slash = strrchr(exe, '\\');
+#else
+    {
+        ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+        if (n > 0) exe[n] = 0; else snprintf(exe, sizeof(exe), "./x");
+    }
+    slash = strrchr(exe, '/');
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+#endif
     if (slash) *slash = 0;
-    snprintf(DATA, sizeof(DATA), "%s\\data", exe);
+    snprintf(DATA, sizeof(DATA), "%s" SEP "data", exe);
     if (!BASE[0]) {
+#ifdef _WIN32
         if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, BASE) != S_OK) snprintf(BASE, sizeof(BASE), "%s", exe);
         strncat(BASE, "\\SmallGiveawayBike1", sizeof(BASE) - strlen(BASE) - 1);
+#else
+        const char *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
+        if (xdg && xdg[0]) snprintf(BASE, sizeof(BASE), "%s/SmallGiveawayBike1", xdg);
+        else snprintf(BASE, sizeof(BASE), "%s/.local/share/SmallGiveawayBike1", home ? home : ".");
+#endif
     }
-    CreateDirectoryA(BASE, NULL);
+    {
+        char p[MAX_PATH + 4];
+        snprintf(p, sizeof(p), "%s" SEP "x", BASE);
+        mkdirs(p);
+    }
     settings_load();
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0) {
-        MessageBoxA(NULL, SDL_GetError(), "Small Giveaway Bike 1", MB_ICONERROR);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", SDL_GetError(), NULL);
         return 1;
     }
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
@@ -368,7 +473,7 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     win = SDL_CreateWindow("Small Giveaway Bike 1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL);
-    if (!win) { MessageBoxA(NULL, SDL_GetError(), "Small Giveaway Bike 1", MB_ICONERROR); return 1; }
+    if (!win) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", SDL_GetError(), NULL); return 1; }
     {
         PlatImage ic;
         memset(&ic, 0, sizeof(ic));
@@ -379,8 +484,13 @@ int main(int argc, char **argv) {
         }
     }
     ctx = SDL_GL_CreateContext(win);
+#ifdef _WIN32
     if (!ctx || !sgb_gl_load(getproc)) {
-        MessageBoxA(NULL, "OpenGL 2.1 is nodig. Werk je grafische driver bij.", "Small Giveaway Bike 1", MB_ICONERROR);
+#else
+    (void)getproc;
+    if (!ctx) {
+#endif
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", "OpenGL 2.1 is nodig. Werk je grafische driver bij.", win);
         return 1;
     }
     SDL_GL_SetSwapInterval(1);

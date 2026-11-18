@@ -7,6 +7,19 @@ De game is geschreven in C en Objective-C met **OpenGL ES 2.0** (GLKit). Hij wer
 > - **Versie 1** (stad, fiets, auto, 5 missies, menu) is op de echte iPad 2 getest met de automatische test. Resultaat: **stabiel 30 FPS** op laag, midden en hoog, laden in 0,3 s, 21-31 MB geheugen, geen crash. Zie de tabel onderaan.
 > - **Versie 2** voegt politie, sterren, een health bar, 10 missies en een missiekeuzescherm toe. Hij voegt ook de **REAL NL-modus** toe: je typt een postcode en rijdt dan door de echte straten met de echte gebouwen. Deze versie is gebouwd en slaagt voor de Linux-test, maar is **nog niet op de iPad getest**. Vooral of het downloaden op iOS 9 lukt, moet de iPad nog laten zien.
 
+## Downloads (Releases)
+Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release (`v1.2.<buildnummer>`). Die release bevat:
+- **iPad:** `SmallGiveawayBike1.ipa` (en een `.deb`)
+- **Windows:** `SmallGiveawayBike1-Windows.zip`
+- **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
+
+## Linux-versie
+Dit is de 64-bit versie van dezelfde game, gebouwd met SDL2 en OpenGL.
+- **Eenmalig installeren:** `sudo apt install libsdl2-2.0-0 libsdl2-mixer-2.0-0 libcurl4`
+- **Starten:** pak het bestand uit met `tar xzf SmallGiveawayBike1-Linux.tar.gz` en start daarna `./SmallGiveawayBike1`.
+- **Besturing:** hetzelfde als op Windows.
+- **Opslag:** `~/.local/share/SmallGiveawayBike1`
+
 ## Windows-versie
 Er is ook een **Windows-versie** (64-bit), met dezelfde game en alle onderdelen: de stad, de missies, de politie, wapens, auto's, REAL NL met Heemskerk + Beverwijk, streaming en downloads, muziek en geluid.
 

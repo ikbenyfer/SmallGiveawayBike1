@@ -219,3 +219,89 @@ jobs:
         with:
           name: SmallGiveawayBike1-Windows
           path: SmallGiveawayBike1-Windows.zip
+
+  linux:
+    name: Linux-versie (x64, SDL2)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pakketten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libsdl2-dev libsdl2-mixer-dev libcurl4-openssl-dev zlib1g-dev libgl-dev python3-pil fonts-dejavu-core
+
+      - name: Compileren
+        shell: bash
+        run: |
+          gcc -std=gnu99 -O2 -Wall -Wno-unused-parameter -Wno-misleading-indentation -DSGB_LINUX_GL -DNDEBUG \
+            $(sdl2-config --cflags) Game/*.c Render/*.c Win/main_win.c -o SmallGiveawayBike1 \
+            -lSDL2 -lSDL2_mixer -lGL -lcurl -lz -pthread -lm 2>&1 | tee linux_compile.log
+          test -x SmallGiveawayBike1
+          ldd SmallGiveawayBike1 | grep -E "SDL|curl|libGL"
+
+      - name: Pakket maken
+        run: |
+          P=SmallGiveawayBike1-Linux
+          mkdir -p $P/data
+          cp SmallGiveawayBike1 $P/
+          python3 tools/linux_assets.py $P/data
+          cp Resources/sfx_*.wav Resources/music.mp3 Resources/nl_hb.pak Resources/nl_hb_map.txt $P/data/
+          cat > $P/LEESMIJ.txt <<'TXT'
+          Small Giveaway Bike 1 - Linux-versie (x64)
+          ==========================================
+          Eenmalig nodig (Ubuntu/Debian/Mint):
+            sudo apt install libsdl2-2.0-0 libsdl2-mixer-2.0-0 libcurl4
+          (Fedora: sudo dnf install SDL2 SDL2_mixer libcurl)
+
+          Starten:  ./SmallGiveawayBike1   (de map data moet ernaast blijven staan)
+
+          Besturing
+            W A S D / pijltjes   lopen, of in een voertuig: W gas, S rem/achteruit, A/D sturen
+            Muis                  rondkijken (Esc geeft de muis terug)
+            Linkermuisknop        schieten (met een wapen)
+            Spatie                springen
+            E of F                in- en uitstappen
+            Q                     ander wapen
+            M of Tab              grote kaart
+            Esc                   pauze / terug
+            F11                   volledig scherm
+
+          Online spelen: hoofdmenu ONLINE (UDP-poort 27016; op hetzelfde netwerk ook 27017).
+          Opslag, instellingen en log.txt: ~/.local/share/SmallGiveawayBike1
+          Kaartgegevens: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, PDOK) - CC BY 4.0.
+          TXT
+          sed -i 's/^          //' $P/LEESMIJ.txt
+          chmod +x $P/SmallGiveawayBike1
+          tar czf SmallGiveawayBike1-Linux.tar.gz $P
+          ls -l SmallGiveawayBike1-Linux.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SmallGiveawayBike1-Linux
+          path: SmallGiveawayBike1-Linux.tar.gz
+
+  release:
+    name: GitHub-release (iPad + Windows + Linux)
+    needs: [preview, build, windows, linux]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+
+      - name: Release maken
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          ls -R art
+          TAG="v1.2.${{ github.run_number }}"
+          printf 'Automatische build van main (%s).\n\n%s\n\nBestanden:\n- iPad (iOS 9, armv7): SmallGiveawayBike1.ipa of de .deb\n- Windows (x64): SmallGiveawayBike1-Windows.zip\n- Linux (x64): SmallGiveawayBike1-Linux.tar.gz\n' "${GITHUB_SHA:0:7}" "$MSG" > notes.md
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Small Giveaway Bike 1 $TAG" --notes-file notes.md --latest \
+            art/SmallGiveawayBike1/*.ipa art/SmallGiveawayBike1/*.deb \
+            art/SmallGiveawayBike1-Windows/*.zip art/SmallGiveawayBike1-Linux/*.tar.gz
