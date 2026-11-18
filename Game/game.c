@@ -1065,7 +1065,7 @@ static void update_cop(Game *g, Ped *p, float dt) {
     eye = v3(p->x, p->y + 1.5f, p->z);
     tgt = v3(px, g->p.y + 1.2f, pz);
     p->h = approach_angle(p->h, atan2f(dx, dz), 6.0f * dt);
-    if (d > 11.0f || !line_of_sight(g, eye, tgt)) {
+    if (d > 11.0f || (!line_of_sight(g, eye, tgt) && d > 6.0f)) {
         float nx, nz;
         p->x += dx / d * p->speed * dt; p->z += dz / d * p->speed * dt;
         world_push_circle(g->w, &p->x, &p->z, 0.35f, p->y, &nx, &nz);
@@ -1415,7 +1415,7 @@ static void update_police_and_health(Game *g, float dt) {
         if (!c->active || c->state == PED_DOWN) continue;
         dx = c->x - px; dz = c->z - pz;
         if (dx * dx + dz * dz < 40.0f * 40.0f) near = 1;
-        if (dx * dx + dz * dz < 3.5f * 3.5f) close = 1;
+        if (dx * dx + dz * dz < 2.0f * 2.0f) close = 1;
     }
     if (g->wanted > 0) {
         if (near) g->evadeT = 0;
