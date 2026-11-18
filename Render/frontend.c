@@ -1164,7 +1164,7 @@ static void draw_bigmap(void) {
             const MissionDef *md = &F.G.mdef[q];
             bm_w2s(md->giver.x, md->giver.z, &sx, &sy);
             ui_icon(R, F.G.completed[q] ? ICON_DONE : ICON_MISSION, sx, sy, 30, 1);
-            if (F.bmScale > 1.2f) ui_text(R, md->title, sx, sy + 15, 15, 1, 1, 0.85f, 0.95f, 1);
+            if (F.bmScale > 2.2f) ui_text(R, md->title, sx, sy + 15, 15, 1, 1, 0.85f, 0.95f, 1);
         }
         for (q = 0; q < 4; q++) {
             bm_w2s(w->poi[pois[q]].x, w->poi[pois[q]].z, &sx, &sy);
