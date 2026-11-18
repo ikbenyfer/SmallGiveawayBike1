@@ -24,7 +24,7 @@ typedef struct { char pc[8]; char name[96]; long kb; double rx, ry; } NLArea;
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS };
 enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH };
 
 #define NTOUCH 10
@@ -52,6 +52,7 @@ static struct {
     Input in;
     int jumpEdge, actionEdge, switchEdge;
     char shopMsg[96];
+    float atMaxSpeed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
     int lOn, rOn;
     /* instellingen */
@@ -149,6 +150,15 @@ static void save_all(void) {
         plat_save_int("guns", F.G.owned[1] | (F.G.owned[2] << 1) | (F.G.owned[3] << 2));
         plat_save_int("ammo1", F.G.ammo[1]); plat_save_int("ammo2", F.G.ammo[2]); plat_save_int("ammo3", F.G.ammo[3]);
         plat_save_int("armor", (int)F.G.armor);
+        {
+            int c;
+            for (c = 0; c < MAX_OWNED; c++) {
+                const struct GarageCar *gc = &F.G.garage[c];
+                char key[16];
+                snprintf(key, sizeof(key), "car%d", c);
+                plat_save_int(key, gc->exists ? (1 | (gc->model << 1) | (gc->paint << 4) | (gc->eng << 9) | (gc->hand << 11) | (gc->neon << 13) | (gc->spoiler << 16)) : 0);
+            }
+        }
         F.savedMoney = F.G.money; F.savedDone = done;
     }
     plat_save_flush();
@@ -211,6 +221,22 @@ static void load_step(void) {
                 F.G.owned[1] = guns & 1; F.G.owned[2] = (guns >> 1) & 1; F.G.owned[3] = (guns >> 2) & 1;
                 F.G.ammo[1] = plat_load_int("ammo1", 0); F.G.ammo[2] = plat_load_int("ammo2", 0); F.G.ammo[3] = plat_load_int("ammo3", 0);
                 F.G.armor = (float)plat_load_int("armor", 0);
+            }
+            {
+                int c;
+                for (c = 0; c < MAX_OWNED; c++) {
+                    char key[16];
+                    int v;
+                    struct GarageCar *gc = &F.G.garage[c];
+                    snprintf(key, sizeof(key), "car%d", c);
+                    v = plat_load_int(key, 0);
+                    gc->exists = v & 1; gc->model = (v >> 1) & 7; gc->paint = (v >> 4) & 31; gc->eng = (v >> 9) & 3;
+                    gc->hand = (v >> 11) & 3; gc->neon = (v >> 13) & 7; gc->spoiler = (v >> 16) & 1;
+                    if (gc->model >= CAR_MODELS) gc->model = 0;
+                    if (gc->paint >= NPAINTS) gc->paint = 0;
+                    if (gc->neon >= NNEONS) gc->neon = 0;
+                }
+                game_spawn_owned(&F.G);
             }
         }
         F.loadDone = 1;
@@ -462,17 +488,20 @@ static void draw_minimap(void) {
         }
     }
     if (!g->nl) {
-        V3 pts[2];
+        V3 pts[4];
         int q;
+        static const float bc[4][3] = {{0.95f, 0.15f, 0.15f}, {0.2f, 0.75f, 0.3f}, {1.0f, 0.55f, 0.1f}, {0.2f, 0.45f, 1.0f}};
         pts[0] = g->w->poi[POI_GUNSHOP];
         pts[1] = g->w->poi[POI_BANK];
-        for (q = 0; q < 2; q++) {
+        pts[2] = g->w->poi[POI_DEALER];
+        pts[3] = g->w->poi[POI_CUSTOMS];
+        for (q = 0; q < 4; q++) {
             float rx = pts[q].x - px, rz = pts[q].z - pz;
             float sx = (rx * rt.x + rz * rt.z) / rad, sy = -(rx * f.x + rz * f.z) / rad;
             float m = fmaxf(fabsf(sx), fabsf(sy));
             if (m > 0.9f) { sx = sx / m * 0.9f; sy = sy / m * 0.9f; }
             ui_rect(R, cx + sx * half - 7, cy + sy * half - 7, 14, 14, 0, 0, 0, 0.85f);
-            ui_rect(R, cx + sx * half - 5, cy + sy * half - 5, 10, 10, q ? 0.2f : 0.95f, q ? 0.75f : 0.15f, q ? 0.3f : 0.15f, 1);
+            ui_rect(R, cx + sx * half - 5, cy + sy * half - 5, 10, 10, bc[q][0], bc[q][1], bc[q][2], 1);
         }
     }
     /* speler-pijl */
@@ -1499,6 +1528,135 @@ static void shop_tap(float x, float y, int phase) {
     }
 }
 
+static const char *CUSTOM_ITEMS[5] = {"PAINT", "ENGINE", "HANDLING", "NEON", "SPOILER"};
+static const char *PAINT_NAMES[NPAINTS] = {"RED", "BLUE", "YELLOW", "WHITE", "GREEN", "BLACK", "ORANGE", "PURPLE", "CYAN", "SILVER"};
+static const char *NEON_NAMES[NNEONS] = {"OFF", "RED", "BLUE", "GREEN", "PINK", "WHITE"};
+
+static void draw_dealer(void) {
+    Renderer *R = &F.R;
+    char b[96];
+    int i, owned = 0;
+    for (i = 0; i < MAX_OWNED; i++) owned += F.G.garage[i].exists;
+    r_draw_scene(R, &F.G);
+    ui_begin(R);
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.7f);
+    ui_rect(R, 112, 40, 800, 640, 0.07f, 0.07f, 0.08f, 0.95f);
+    ui_rect(R, 112, 40, 800, 70, 0.95f, 0.5f, 0.08f, 1);
+    ui_text(R, "GIVEAWAY MOTORS", 512, 50, 50, 1, 1, 1, 1, 1);
+    fmt_money(b, sizeof(b), F.G.money);
+    ui_text(R, b, 892, 124, 34, 0.55f, 1.0f, 0.55f, 1, 2);
+    snprintf(b, sizeof(b), "Your garage: %d / %d cars (parked here at the dealer)", owned, MAX_OWNED);
+    ui_text(R, b, 136, 132, 18, 0.85f, 0.85f, 0.85f, 1, 0);
+    for (i = 0; i < CAR_MODELS; i++) {
+        float y = 178.0f + i * 104.0f;
+        int pr = F.pressed == 700 + i, afford = F.G.money >= CARS[i].price;
+        Col pc = paint_color(model_default_paint(i));
+        ui_rect(R, 132, y, 760, 94, 0.12f, 0.12f, 0.14f, 0.95f);
+        ui_rect(R, 132, y, 10, 94, pc.r / 255.0f, pc.g / 255.0f, pc.b / 255.0f, 1);
+        ui_text(R, CARS[i].name, 160, y + 6, 36, 1, 1, 1, 1, 0);
+        snprintf(b, sizeof(b), "Top speed %d km/h   -   0-100 in %.1f s", (int)(CARS[i].maxF * 3.6f), 27.8f / (CARS[i].acc * 0.75f));
+        ui_text(R, b, 160, y + 50, 18, 0.85f, 0.85f, 0.85f, 1, 0);
+        {
+            float bar = CARS[i].maxF / 34.0f;
+            ui_rect(R, 160, y + 76, 300, 6, 0.25f, 0.25f, 0.28f, 1);
+            ui_rect(R, 160, y + 76, 300 * bar, 6, 1.0f, 0.55f, 0.1f, 1);
+        }
+        ui_rect(R, 712, y + 18, 160, 58, pr ? 0.9f : (afford ? 0.2f : 0.25f), pr ? 0.2f : (afford ? 0.55f : 0.25f), pr ? 0.2f : 0.25f, 1);
+        fmt_money(b, sizeof(b), CARS[i].price);
+        ui_text(R, b, 792, y + 28, 30, 1, 1, 1, 1, 1);
+    }
+    if (F.shopMsg[0]) ui_text(R, F.shopMsg, 512, 600, 20, 1, 0.85f, 0.4f, 1, 1);
+    ui_text(R, "Bought cars are yours: upgrade them at BLOCK CUSTOMS (blue marker).", 512, 634, 16, 0.75f, 0.75f, 0.75f, 1, 1);
+    big_button("LEAVE", 512, 724, 40, F.pressed == 790, 1);
+    ui_flush(R);
+}
+
+static void dealer_tap(float x, float y, int phase) {
+    int i, hit = 0;
+    for (i = 0; i < CAR_MODELS; i++) {
+        float yy = 178.0f + i * 104.0f;
+        if (x > 712 && x < 872 && y > yy + 18 && y < yy + 76) hit = 700 + i;
+    }
+    if (hit_text(x, y, "LEAVE", 512, 746, 40)) hit = 790;
+    if (phase != TOUCH_END) { F.pressed = hit; return; }
+    F.pressed = 0;
+    if (hit == 790) { set_state(ST_GAME); return; }
+    if (hit >= 700 && hit < 700 + CAR_MODELS) {
+        int r = game_buy_car(&F.G, hit - 700);
+        if (r > 0) {
+            snprintf(F.G.banner, sizeof(F.G.banner), "NEW CAR!");
+            snprintf(F.G.sub, sizeof(F.G.sub), "Your %s is ready. Upgrade it at BLOCK CUSTOMS.", CARS[hit - 700].name);
+            F.G.bannerT = 4.0f; F.G.bannerGood = 1;
+            F.G.moneyShown = F.G.money;
+            save_all();
+            set_state(ST_GAME);
+        } else snprintf(F.shopMsg, sizeof(F.shopMsg), r < 0 ? "Your garage is full (4 cars)." : "Not enough money.");
+    }
+}
+
+static void custom_value(int item, char *b, size_t n) {
+    const Vehicle *v = &F.G.veh[F.G.p.veh];
+    switch (item) {
+    case 0: snprintf(b, n, "%s", v->custom ? PAINT_NAMES[v->paint % NPAINTS] : "FACTORY"); break;
+    case 1: snprintf(b, n, "LEVEL %d / 3", v->eng); break;
+    case 2: snprintf(b, n, "LEVEL %d / 3", v->hand); break;
+    case 3: snprintf(b, n, "%s", NEON_NAMES[v->neon % NNEONS]); break;
+    default: snprintf(b, n, "%s", v->spoiler ? "ON" : "OFF"); break;
+    }
+}
+
+static void draw_customs(void) {
+    Renderer *R = &F.R;
+    char b[96], val[48];
+    int i;
+    const Vehicle *v;
+    if (F.G.p.veh < 0) { set_state(ST_GAME); return; }
+    v = &F.G.veh[F.G.p.veh];
+    r_draw_scene(R, &F.G);
+    ui_begin(R);
+    ui_rect(R, 0, 0, 520, (float)R->H, 0, 0, 0, 0.8f);
+    ui_rect(R, 0, 0, 520, 70, 0.1f, 0.35f, 0.95f, 1);
+    ui_text(R, "BLOCK CUSTOMS", 260, 10, 48, 1, 1, 1, 1, 1);
+    snprintf(b, sizeof(b), "%s  -  top speed %d km/h", v->custom ? CARS[v->model % CAR_MODELS].name : "YOUR RIDE", (int)((v->custom ? car_top_speed(v) : 19.0f) * 3.6f));
+    ui_text(R, b, 24, 84, 20, 1, 1, 1, 1, 0);
+    fmt_money(b, sizeof(b), F.G.money);
+    ui_text(R, b, 500, 112, 32, 0.55f, 1.0f, 0.55f, 1, 2);
+    for (i = 0; i < 5; i++) {
+        float y = 160.0f + i * 92.0f;
+        int price = game_custom_price(&F.G, i), pr = F.pressed == 800 + i;
+        ui_rect(R, 20, y, 480, 82, 0.12f, 0.12f, 0.15f, 0.95f);
+        ui_text(R, CUSTOM_ITEMS[i], 36, y + 6, 32, 1, 1, 1, 1, 0);
+        custom_value(i, val, sizeof(val));
+        ui_text(R, val, 36, y + 46, 20, 1.0f, 0.8f, 0.3f, 1, 0);
+        if (i == 0 && v->custom) { Col pc = paint_color(v->paint); ui_rect(R, 250, y + 46, 40, 22, pc.r / 255.0f, pc.g / 255.0f, pc.b / 255.0f, 1); }
+        if (i == 3 && v->neon) { Col nc = neon_color(v->neon); ui_rect(R, 250, y + 46, 40, 22, nc.r / 255.0f, nc.g / 255.0f, nc.b / 255.0f, 1); }
+        ui_rect(R, 330, y + 14, 156, 54, pr ? 0.9f : (price >= 0 && F.G.money >= price ? 0.15f : 0.25f), pr ? 0.2f : (price >= 0 && F.G.money >= price ? 0.45f : 0.25f), pr ? 0.2f : (price >= 0 && F.G.money >= price ? 0.9f : 0.25f), 1);
+        if (price >= 0) snprintf(b, sizeof(b), "%s $%d", i == 0 || i == 3 ? "NEXT" : (i == 4 ? "SWAP" : "UP"), price);
+        else snprintf(b, sizeof(b), "MAX");
+        ui_text(R, b, 408, y + 26, 22, 1, 1, 1, 1, 1);
+    }
+    if (F.shopMsg[0]) ui_text(R, F.shopMsg, 260, 630, 18, 1, 0.85f, 0.4f, 1, 1);
+    ui_text(R, v->garageSlot >= 0 ? "Saved on your own car." : "Not your car: changes are not saved.", 260, 660, 15, 0.75f, 0.75f, 0.75f, 1, 1);
+    big_button("DONE", 260, 724, 40, F.pressed == 890, 1);
+    ui_flush(R);
+}
+
+static void customs_tap(float x, float y, int phase) {
+    int i, hit = 0;
+    for (i = 0; i < 5; i++) {
+        float yy = 160.0f + i * 92.0f;
+        if (x > 330 && x < 486 && y > yy + 14 && y < yy + 68) hit = 800 + i;
+    }
+    if (hit_text(x, y, "DONE", 260, 746, 40)) hit = 890;
+    if (phase != TOUCH_END) { F.pressed = hit; return; }
+    F.pressed = 0;
+    if (hit == 890) { set_state(ST_GAME); save_all(); return; }
+    if (hit >= 800 && hit < 805) {
+        if (game_custom(&F.G, hit - 800)) { F.shopMsg[0] = 0; F.G.moneyShown = F.G.money; save_all(); }
+        else snprintf(F.shopMsg, sizeof(F.shopMsg), game_custom_price(&F.G, hit - 800) < 0 ? "Already maxed out." : "Not enough money.");
+    }
+}
+
 static void draw_pause(void) {
     Renderer *R = &F.R;
     int i;
@@ -1584,6 +1742,8 @@ static void menu_tap(float x, float y, int phase) {
     if (F.state == ST_NLINPUT) { nl_input_tap(x, y, phase); return; }
     if (F.state == ST_BIGMAP) { bigmap_touch(x, y, phase); return; }
     if (F.state == ST_SHOP) { shop_tap(x, y, phase); return; }
+    if (F.state == ST_DEALER) { dealer_tap(x, y, phase); return; }
+    if (F.state == ST_CUSTOMS) { customs_tap(x, y, phase); return; }
     if (F.state == ST_NLLOAD) {
         if (F.job.err && phase == TOUCH_END) {
             if (F.mode != 0) nl_exit_to_city();
@@ -2040,6 +2200,48 @@ static void autotest_tick(float dt) {
         else if (F.atStep == 77 && t > F.atT3 + 1.5f) {
             rep("Overval klaar=%d, banner='%s', geld $%ld", g->completed[10], g->banner, g->money);
             at_shot("27_heist_passed");
+            F.atStep = 78;
+        }
+        else if (F.atStep == 78) {
+            if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; g->p.veh = -1; }
+            g->money += 30000;
+            g->wanted = 0;
+            game_teleport(g, g->w->poi[POI_DEALER].x, g->w->poi[POI_DEALER].z + 4.0f, 0);
+            rep("Autodealer: GIVEAWAY MOTORS");
+            F.atStep++;
+        }
+        else if (F.atStep == 79) { game_teleport(g, g->w->poi[POI_DEALER].x, g->w->poi[POI_DEALER].z, 0); F.atStep++; }
+        else if (F.atStep == 80 && g->p.veh >= 0) {
+            rep("In de nieuwe auto: model %s, eigen=%d", CARS[g->veh[g->p.veh].model].name, g->veh[g->p.veh].garageSlot >= 0);
+            /* naar de ringweg voor een snelheidstest */
+            game_teleport(g, road_c(0) + LANE_OFF, road_c(1), 0);
+            F.atMaxSpeed = 0;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 81 && t > F.atT3 + 7.0f) {
+            at_shot("29_supercar");
+            rep("BOLT X topsnelheid in test: %.0f km/h", F.atMaxSpeed * 3.6f);
+            g->veh[g->p.veh].speed = 0;
+            game_teleport(g, g->w->poi[POI_CUSTOMS].x, g->w->poi[POI_CUSTOMS].z + 8.0f, PI_F);
+            F.atStep++;
+        }
+        else if (F.atStep == 82) {
+            g->veh[g->p.veh].speed = 0;
+            game_teleport(g, g->w->poi[POI_CUSTOMS].x, g->w->poi[POI_CUSTOMS].z, PI_F);
+            F.atStep = 84;
+        }
+        else if (F.atStep == 85) {
+            game_teleport(g, road_c(0) + LANE_OFF, road_c(1), 0);
+            g->veh[g->p.veh].speed = 0;
+            g->camYaw = PI_F * 0.75f;
+            F.atMaxSpeed = 0;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 86 && t > F.atT3 + 1.0f) { at_shot("31_custom_car"); F.atStep++; }
+        else if (F.atStep == 87 && t > F.atT3 + 8.0f) {
+            rep("Na tuning topsnelheid in test: %.0f km/h", F.atMaxSpeed * 3.6f);
             F.atStep = 90;
         }
         else if (F.atStep == 90) {
@@ -2083,6 +2285,10 @@ static void autotest_tick(float dt) {
     if (t > 22.5f && t < 24.2f) in->brake = 1;
     if (t > 36.0f && t < 58.0f) { in->lx = 0.35f; in->my = 0.0f; }
     if (F.atStep >= 73 && F.atStep <= 74) in->fire = 1;
+    if ((F.atStep == 81 && t > F.atT3 + 0.3f) || (F.atStep >= 86 && F.atStep <= 87 && t > F.atT3 + 1.2f)) {
+        in->gas = 1;
+        if (g->p.veh >= 0 && fabsf(g->veh[g->p.veh].speed) > F.atMaxSpeed) F.atMaxSpeed = fabsf(g->veh[g->p.veh].speed);
+    }
     if (F.mode == 1 && F.atStep >= 45 && F.atStep <= 47 && t > F.atNlT + 2.6f && t < F.atNlT + 7.4f) { in->gas = 1; in->mx = 0.1f; }
     s = seg_cur();
     if (F.skipStat > 0) { F.skipStat--; s = NULL; }  /* frames rond een screenshot niet meetellen */
@@ -2191,6 +2397,26 @@ void fe_frame(double now) {
             set_state(ST_GAME);
         }
         break;
+    case ST_DEALER:
+        draw_dealer();
+        if (F.at && F.st > 1.0f) {
+            at_shot("28_dealer");
+            rep("Dealer: BOLT X kopen: %d (geld voor $%ld)", game_buy_car(&F.G, 3), F.G.money);
+            set_state(ST_GAME);
+        }
+        break;
+    case ST_CUSTOMS:
+        draw_customs();
+        if (F.at && F.st > 1.0f && F.atStep == 84) {
+            int ok = game_custom(&F.G, 0) + game_custom(&F.G, 1) + game_custom(&F.G, 1) + game_custom(&F.G, 1) + game_custom(&F.G, 2) + game_custom(&F.G, 3) + game_custom(&F.G, 3) + game_custom(&F.G, 4);
+            at_shot("30_customs");
+            rep("Customs: %d aanpassingen, motor %d, handling %d, neon %d, spoiler %d, top %d km/h, garage-lak %d",
+                ok, F.G.veh[F.G.p.veh].eng, F.G.veh[F.G.p.veh].hand, F.G.veh[F.G.p.veh].neon, F.G.veh[F.G.p.veh].spoiler,
+                (int)(car_top_speed(&F.G.veh[F.G.p.veh]) * 3.6f), F.G.garage[0].paint);
+            F.atStep++;
+            set_state(ST_GAME);
+        }
+        break;
     case ST_BIGMAP:
         ui_begin(R); draw_bigmap(); ui_flush(R);
         if (F.at && F.st > 1.0f) {
@@ -2212,6 +2438,8 @@ void fe_frame(double now) {
             else build_input();
             if (F.state == ST_GAME || F.at) game_update(&F.G, &F.in, dt);
             if (F.G.shopOpen) { F.G.shopOpen = 0; F.shopMsg[0] = 0; set_state(ST_SHOP); }
+            if (F.G.dealerOpen) { F.G.dealerOpen = 0; F.shopMsg[0] = 0; set_state(ST_DEALER); }
+            if (F.G.customsOpen) { F.G.customsOpen = 0; F.shopMsg[0] = 0; set_state(ST_CUSTOMS); }
             if (!F.at && F.mode == 0) {
                 int i, done = 0;
                 for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;

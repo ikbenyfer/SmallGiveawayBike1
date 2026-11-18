@@ -4,7 +4,8 @@
 
 #include "world.h"
 
-#define MAX_VEH 52
+#define MAX_VEH 60
+#define MAX_OWNED 4
 #define MAX_POLICE 3
 #define MAX_PED 20
 #define MAX_COPS 4      /* laatste 4 voetganger-plekken: agenten */
@@ -30,6 +31,7 @@ typedef struct {
     float x, z, y, h, speed, steer, lean, wheel;
     int traffic, police, wrecked, copsOut;
     float hp;
+    int custom, model, paint, eng, hand, neon, spoiler, garageSlot;   /* spelerauto / BLOCK CUSTOMS */
     int ti, tj, dir, phase;   /* verkeer: doel-kruispunt en richting */
     float tx, tz, stuck, ghost, hitcool;
 } Vehicle;
@@ -68,7 +70,7 @@ typedef struct {
     World *w;
     Player p;
     Vehicle veh[MAX_VEH];
-    int nveh, firstTraffic, firstPolice;
+    int nveh, firstTraffic, firstPolice, firstOwned;
     Ped ped[MAX_PED];
     int wantTraffic, wantPeds;
 
@@ -98,6 +100,8 @@ typedef struct {
     int shopOpen, inShop;
     int statShots, statHits, copShots;
     float lastCopSpawn;
+    struct GarageCar { int exists, model, paint, eng, hand, neon, spoiler; } garage[MAX_OWNED];
+    int dealerOpen, inDealer, customsOpen, inCustoms;
     int wanted;
     float evadeT, bustT, crimeCool, ramCool;
 
@@ -128,6 +132,16 @@ typedef struct { const char *name; int price, ammoPrice, ammoPack; float damage,
 extern const WeaponDef WEAPONS[WP_COUNT];
 int game_has_weapon(const Game *g);
 int game_buy(Game *g, int item);   /* 0 pistool, 1 SMG, 2 shotgun, 3 kogels, 4 vest */
+typedef struct GarageCar GarageCar;
+typedef struct { const char *name; int price; float maxF, acc, steer; } CarDef;
+extern const CarDef CARS[];
+extern const int ENGINE_PRICE[3], HANDLING_PRICE[3];
+float car_top_speed(const Vehicle *v);
+void game_spawn_owned(Game *g);
+int game_buy_car(Game *g, int model);
+void game_sell_car(Game *g, int slot);
+int game_custom_price(const Game *g, int item);   /* 0 lak, 1 motor, 2 handling, 3 neon, 4 spoiler */
+int game_custom(Game *g, int item);
 void game_damage(Game *g, float amount);
 /* missie starten vanuit het keuzescherm: speler naar het startpunt (evt. met voertuig) */
 void game_start_mission_at(Game *g, int m);

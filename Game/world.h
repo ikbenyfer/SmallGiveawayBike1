@@ -34,7 +34,7 @@ typedef struct { float x, z, h; int type, variant; } ParkSpot;
 
 enum {
     POI_SPAWN = 0, POI_PLAZA, POI_PIZZA, POI_GARAGE, POI_STAGE, POI_BIKESHOP,
-    POI_REDCAR, POI_GIVEAWAY_BIKE, POI_BANK, POI_VAULT, POI_GUNSHOP, POI_COUNT
+    POI_REDCAR, POI_GIVEAWAY_BIKE, POI_BANK, POI_VAULT, POI_GUNSHOP, POI_DEALER, POI_CUSTOMS, POI_COUNT
 };
 
 typedef struct {
@@ -58,6 +58,7 @@ typedef struct {
     V3 cash[24]; int ncash;
     V3 houses[16]; int nhouses;   /* voordeuren voor bezorgmissies */
     V3 gifts[8]; int ngifts;
+    V3 dealerSpot[4]; float dealerSpotH;
 
     int verts_total;
     float mmOrg, mmOrgZ, mmSpan;     /* minimap: wereldgebied (x, z, breedte) */

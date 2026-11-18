@@ -245,6 +245,8 @@ void r_build_models(Renderer *r) {
     BUILD(r->marker, model_marker(&m));
     BUILD(r->siren, model_siren(&m));
     BUILD(r->gun, model_gun(&m));
+    BUILD(r->spoiler, model_spoiler(&m));
+    for (i = 0; i < CAR_MODELS; i++) { BUILD(r->carBody[i], model_car_body(&m, i)); BUILD(r->carDetail[i], model_car_detail(&m, i)); }
     BUILD(r->tracer, model_tracer(&m));
 #undef BUILD
     mb_free(&m);
@@ -482,9 +484,22 @@ void r_draw_scene(Renderer *r, Game *g) {
             draw_mesh(r, &r->bike[v->variant % BIKE_VARIANTS], &m);
             if (i == g->p.veh) draw_char(r, 0, m, g->p.anim * 2.0f, 1, 0, 0);
         } else {
-            if (v->wrecked) tint(r, 0.3f, 0.3f, 0.32f);
-            draw_mesh(r, &r->car[v->variant % CAR_VARIANTS], &m);
-            if (v->wrecked) tint(r, 1, 1, 1);
+            if (v->custom) {
+                Col pc = paint_color(v->paint);
+                tint(r, pc.r / 255.0f, pc.g / 255.0f, pc.b / 255.0f);
+                draw_mesh(r, &r->carBody[v->model % CAR_MODELS], &m);
+                if (v->spoiler && v->model != 3) {
+                    M4 sm = m4_mul(m, m4_translate(0, v->model == 2 ? 0.72f - 0.0f : 0.95f, v->model == 0 ? -1.85f : -2.0f));
+                    sm = m4_mul(sm, m4_scale(1, v->model == 0 ? 0.35f : 0.3f, 1));
+                    draw_mesh(r, &r->spoiler, &sm);
+                }
+                tint(r, 1, 1, 1);
+                draw_mesh(r, &r->carDetail[v->model % CAR_MODELS], &m);
+            } else {
+                if (v->wrecked) tint(r, 0.3f, 0.3f, 0.32f);
+                draw_mesh(r, &r->car[v->variant % CAR_VARIANTS], &m);
+                if (v->wrecked) tint(r, 1, 1, 1);
+            }
             if (v->police && !v->wrecked) {
                 /* zwaailicht: links rood, rechts blauw, om en om */
                 int ph = ((int)(g->time * 6.0f)) & 1;
@@ -589,6 +604,30 @@ void r_draw_scene(Renderer *r, Game *g) {
             M4 m = m4_mul(m4_trs_y(g->p.x + f.x * 0.95f + rt.x * 0.33f, g->p.y + 1.4f, g->p.z + f.z * 0.95f + rt.z * 0.33f, g->p.h + t * 20.0f), m4_scale(4, 4, 0.3f));
             tint(r, 1.0f, 0.8f, 0.3f);
             draw_mesh(r, &r->tracer, &m);
+        }
+        for (k = 0; k < g->nveh; k++) {   /* neon onder de auto */
+            Vehicle *v = &g->veh[k];
+            Col nc;
+            M4 m;
+            if (!v->active || !v->custom || v->neon <= 0) continue;
+            if (!sphere_visible(r, v->x, 0.2f, v->z, 3.0f, fogEnd)) continue;
+            nc = neon_color(v->neon);
+            m = m4_mul(m4_trs_y(v->x, v->y + 0.07f, v->z, v->h), m4_scale(1.45f, 1, 2.7f));
+            tint(r, nc.r / 255.0f * 0.7f, nc.g / 255.0f * 0.7f, nc.b / 255.0f * 0.7f);
+            draw_mesh(r, &r->shadow, &m);
+        }
+        if (!g->nl) {
+            static const float mc[2][3] = {{1.0f, 0.55f, 0.1f}, {0.15f, 0.45f, 1.0f}};
+            int q;
+            for (q = 0; q < 2; q++) {
+                V3 pp = g->w->poi[q == 0 ? POI_DEALER : POI_CUSTOMS];
+                float pulse = 0.75f + 0.25f * sinf(t * 4.0f + q);
+                float rs = q ? 3.0f : 2.0f;
+                M4 m = m4_mul(m4_trs_y(pp.x, world_ground_y(g->w, pp.x, pp.z) + 0.06f, pp.z, t), m4_scale(rs, 1, rs));
+                if (!sphere_visible(r, pp.x, 1, pp.z, 4, fogEnd)) continue;
+                tint(r, mc[q][0] * pulse, mc[q][1] * pulse, mc[q][2] * pulse);
+                draw_mesh(r, &r->marker, &m);
+            }
         }
         if (!g->nl && g->mission < 0) {
             V3 gs = g->w->poi[POI_GUNSHOP];

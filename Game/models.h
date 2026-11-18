@@ -32,6 +32,15 @@ void model_arrow(MeshB *m);
 void model_shadow(MeshB *m);       /* schijf r=1 */
 void model_marker(MeshB *m);
 void model_siren(MeshB *m);
+#define CAR_MODELS 4      /* 0 CITY HATCH, 1 RHINO V8, 2 VORTEX GT, 3 BOLT X */
+#define NPAINTS 10
+#define NNEONS 6
+void model_car_body(MeshB *m, int model);     /* wit: wordt met de lakkleur getint */
+void model_car_detail(MeshB *m, int model);   /* glas, wielen, lampen */
+void model_spoiler(MeshB *m);
+Col paint_color(int i);
+Col neon_color(int i);
+int model_default_paint(int model);
 void model_gun(MeshB *m);       /* in de hand, loop langs -y (armrichting) */
 void model_tracer(MeshB *m);    /* lijntje van z=0 tot z=1 */       /* missie-start: ring + ster */
 

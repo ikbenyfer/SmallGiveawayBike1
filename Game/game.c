@@ -456,6 +456,14 @@ static void vehicle_world_collide(Game *g, Vehicle *v) {
 static void drive_vehicle(Game *g, Vehicle *v, float thr, float brk, float steerIn, float dt) {
     int bike = v->type == VEH_BIKE;
     float maxF = bike ? 11.5f : 19.0f, acc = bike ? 4.8f : 6.5f, brake = bike ? 10.0f : 13.0f, maxR = bike ? -2.0f : -6.0f;
+    float steerK = bike ? 1.35f : 0.95f;
+    if (!bike && v->custom) {
+        const CarDef *cd = &CARS[v->model % CAR_MODELS];
+        maxF = cd->maxF * (1.0f + 0.08f * v->eng);
+        acc = cd->acc * (1.0f + 0.15f * v->eng);
+        brake = 13.0f + v->hand * 2.0f;
+        steerK = cd->steer * (1.0f + 0.12f * v->hand);
+    }
     float yaw;
     if (thr > 0) {
         if (v->speed < 0) v->speed += brake * dt;
@@ -470,7 +478,7 @@ static void drive_vehicle(Game *g, Vehicle *v, float thr, float brk, float steer
     v->steer = approachf(v->steer, steerIn, 3.5f * dt);
     {
         float sp = fabsf(v->speed);
-        float k = bike ? 1.35f : 0.95f;
+        float k = steerK;
         yaw = v->steer * k * clampf(sp / 5.0f, 0, 1) * (1.0f - 0.35f * clampf(sp / maxF, 0, 1));
         if (v->speed < 0) yaw = -yaw;
         v->h = wrap_angle(v->h - yaw * dt * 2.0f);
@@ -770,7 +778,7 @@ void game_init(Game *g, World *w) {
     g->camPitch = 0.32f;
     g->camDist = 5.0f;
     g->camSens = 1.0f;
-    for (i = 0; i < w->npark && g->nveh < MAX_VEH - MAX_TRAFFIC - MAX_POLICE; i++) {
+    for (i = 0; i < w->npark && g->nveh < MAX_VEH - MAX_TRAFFIC - MAX_POLICE - MAX_OWNED; i++) {
         Vehicle *v;
         int k = i;
         /* de Giveaway Bike (fiets, variant 0) altijd als eerste */
@@ -785,6 +793,7 @@ void game_init(Game *g, World *w) {
         v = &g->veh[g->nveh++];
         memset(v, 0, sizeof(*v));
         v->active = 1;
+        v->garageSlot = -1;
         v->type = w->park[k].type; v->variant = w->park[k].variant;
         v->x = w->park[k].x; v->z = w->park[k].z; v->h = w->park[k].h;
         v->y = world_ground_y(w, v->x, v->z);
@@ -793,6 +802,8 @@ void game_init(Game *g, World *w) {
     for (i = 0; i < MAX_TRAFFIC; i++) { memset(&g->veh[g->nveh], 0, sizeof(Vehicle)); g->nveh++; }
     g->firstPolice = g->nveh;
     for (i = 0; i < MAX_POLICE; i++) { memset(&g->veh[g->nveh], 0, sizeof(Vehicle)); g->nveh++; }
+    g->firstOwned = g->nveh;
+    for (i = 0; i < MAX_OWNED; i++) { memset(&g->veh[g->nveh], 0, sizeof(Vehicle)); g->veh[g->nveh].garageSlot = -1; g->nveh++; }
     g->health = 100.0f;
     setup_missions(g);
     game_set_quality(g, 1);
@@ -1166,6 +1177,127 @@ static void update_weapons(Game *g, const Input *in, float dt) {
     }
 }
 
+/* ------------------------------------------------------------------ autodealer en BLOCK CUSTOMS */
+
+const CarDef CARS[CAR_MODELS] = {
+    {"CITY HATCH", 1500, 19.0f, 6.5f, 0.95f},
+    {"RHINO V8", 6000, 25.0f, 9.5f, 0.90f},
+    {"VORTEX GT", 9000, 28.0f, 10.5f, 1.05f},
+    {"BOLT X", 20000, 34.0f, 12.5f, 1.10f},
+};
+const int ENGINE_PRICE[3] = {1000, 2500, 5000};
+const int HANDLING_PRICE[3] = {800, 1600, 3200};
+
+float car_top_speed(const Vehicle *v) {
+    return CARS[v->model % CAR_MODELS].maxF * (1.0f + 0.08f * v->eng);
+}
+
+static void place_owned(Game *g, int slot) {
+    Vehicle *v = &g->veh[g->firstOwned + slot];
+    GarageCar *c = &g->garage[slot];
+    memset(v, 0, sizeof(*v));
+    if (!c->exists) return;
+    v->active = 1; v->type = VEH_CAR; v->variant = 1; v->custom = 1;
+    v->model = c->model; v->paint = c->paint; v->eng = c->eng; v->hand = c->hand; v->neon = c->neon; v->spoiler = c->spoiler;
+    v->garageSlot = slot;
+    v->x = g->w->dealerSpot[slot].x; v->z = g->w->dealerSpot[slot].z; v->h = g->w->dealerSpotH;
+    v->y = world_ground_y(g->w, v->x, v->z);
+}
+
+void game_spawn_owned(Game *g) {
+    int i;
+    if (g->nl) return;
+    for (i = 0; i < MAX_OWNED; i++) place_owned(g, i);
+}
+
+/* 1 = gekocht (speler zit erin), 0 = te weinig geld, -1 = garage vol */
+int game_buy_car(Game *g, int model) {
+    int slot;
+    if (model < 0 || model >= CAR_MODELS) return 0;
+    for (slot = 0; slot < MAX_OWNED && g->garage[slot].exists; slot++) {}
+    if (slot >= MAX_OWNED) return -1;
+    if (g->money < CARS[model].price) return 0;
+    g->money -= CARS[model].price;
+    g->garage[slot].exists = 1;
+    g->garage[slot].model = model;
+    g->garage[slot].paint = model_default_paint(model);
+    g->garage[slot].eng = g->garage[slot].hand = g->garage[slot].neon = g->garage[slot].spoiler = 0;
+    place_owned(g, slot);
+    if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; }
+    g->p.veh = g->firstOwned + slot;
+    g->p.x = g->veh[g->p.veh].x; g->p.z = g->veh[g->p.veh].z; g->p.h = g->veh[g->p.veh].h;
+    g->camYaw = g->p.h;
+    return 1;
+}
+
+void game_sell_car(Game *g, int slot) {
+    if (slot < 0 || slot >= MAX_OWNED || !g->garage[slot].exists) return;
+    if (g->p.veh == g->firstOwned + slot) return;
+    g->money += CARS[g->garage[slot].model].price / 2;
+    g->garage[slot].exists = 0;
+    g->veh[g->firstOwned + slot].active = 0;
+}
+
+/* prijs van de volgende stap (of -1 als het niet kan) */
+int game_custom_price(const Game *g, int item) {
+    const Vehicle *v;
+    if (g->p.veh < 0) return -1;
+    v = &g->veh[g->p.veh];
+    if (v->type != VEH_CAR || v->police) return -1;
+    switch (item) {
+    case 0: return 200;
+    case 1: return v->eng < 3 ? ENGINE_PRICE[v->eng] : -1;
+    case 2: return v->hand < 3 ? HANDLING_PRICE[v->hand] : -1;
+    case 3: return 500;
+    case 4: return 400;
+    default: return -1;
+    }
+}
+
+int game_custom(Game *g, int item) {
+    Vehicle *v;
+    int price = game_custom_price(g, item);
+    if (price < 0 || g->money < price) return 0;
+    v = &g->veh[g->p.veh];
+    g->money -= price;
+    if (!v->custom) { v->custom = 1; v->model = 0; v->paint = v->variant % 6; if (v->traffic) v->traffic = 0; }
+    switch (item) {
+    case 0: v->paint = (v->paint < 0 ? 0 : v->paint + 1) % NPAINTS; break;
+    case 1: v->eng++; break;
+    case 2: v->hand++; break;
+    case 3: v->neon = (v->neon + 1) % NNEONS; break;
+    case 4: v->spoiler = !v->spoiler; break;
+    }
+    if (v->garageSlot >= 0 && v->garageSlot < MAX_OWNED) {
+        GarageCar *c = &g->garage[v->garageSlot];
+        c->paint = v->paint; c->eng = v->eng; c->hand = v->hand; c->neon = v->neon; c->spoiler = v->spoiler;
+    }
+    return 1;
+}
+
+static void update_shops(Game *g) {
+    float dx, dz;
+    int in2;
+    if (g->nl) return;
+    /* dealer: te voet binnenlopen */
+    dx = g->p.x - g->w->poi[POI_DEALER].x; dz = g->p.z - g->w->poi[POI_DEALER].z;
+    in2 = g->p.veh < 0 && dx * dx + dz * dz < 2.4f * 2.4f;
+    if (in2 && !g->inDealer) g->dealerOpen = 1;
+    g->inDealer = in2;
+    /* BLOCK CUSTOMS: met een auto langzaam naar binnen rijden */
+    dx = g->p.x - g->w->poi[POI_CUSTOMS].x; dz = g->p.z - g->w->poi[POI_CUSTOMS].z;
+    in2 = g->p.veh >= 0 && g->veh[g->p.veh].type == VEH_CAR && dx * dx + dz * dz < 3.5f * 3.5f;
+    if (in2 && !g->inCustoms) {
+        if (fabsf(g->veh[g->p.veh].speed) < 5.0f && !g->veh[g->p.veh].police) { g->customsOpen = 1; g->veh[g->p.veh].speed = 0; }
+        else if (g->msgT <= 0) game_message(g, "Slow down to enter BLOCK CUSTOMS", 1.5f);
+    }
+    g->inCustoms = in2;
+    if (g->p.veh < 0) {
+        dx = g->p.x - g->w->poi[POI_CUSTOMS].x; dz = g->p.z - g->w->poi[POI_CUSTOMS].z;
+        if (dx * dx + dz * dz < 3.0f * 3.0f && g->msgT <= 0) game_message(g, "BLOCK CUSTOMS: drive in with a car", 1.5f);
+    }
+}
+
 /* ------------------------------------------------------------------ politie en gezondheid */
 
 void game_add_wanted(Game *g, int n) {
@@ -1479,6 +1611,7 @@ void game_update(Game *g, const Input *in, float dt) {
     }
 
     update_weapons(g, in, dt);
+    update_shops(g);
     update_police_and_health(g, dt);
     if (!g->nl) update_missions(g, dt);
     /* wapenwinkel: binnenlopen opent het winkelmenu */

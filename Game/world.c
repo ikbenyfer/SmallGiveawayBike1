@@ -418,6 +418,41 @@ static void gen_plaza(float ix0, float iz0, float ix1, float iz1, Rng *r) {
     add_park(cx + 3.0f, cz + 15.0f, PI_F * 0.5f, VEH_BIKE, 0);
 }
 
+static void display_car(int model, float x, float z, float h, Col paint) {
+    int start = cur->n, i;
+    mb_set_xf(cur, m4_trs_y(x, CURB + 0.3f, z, h));
+    model_car_body(cur, model);
+    for (i = start; i < cur->n; i++) {
+        Vtx *v = &cur->v[i];
+        v->r = (uint8_t)(v->r * paint.r / 255); v->g = (uint8_t)(v->g * paint.g / 255); v->b = (uint8_t)(v->b * paint.b / 255);
+    }
+    model_car_detail(cur, model);
+    mb_clear_xf(cur);
+}
+
+/* GIVEAWAY MOTORS: toonzaal met etalage-auto's, eigen auto's staan aan de zuidkant */
+static void gen_dealer(float ix0, float iz0, float ix1, float iz1, Rng *r) {
+    float cx = (ix0 + ix1) * 0.5f, k;
+    int i;
+    mb_flat(cur, ix0, iz0, ix1, iz1, CURB + 0.02f, col(74, 74, 80));
+    building(ix0 + 2, iz0 + 1, ix1 - 2, iz0 + 15, 2, col(220, 222, 226), 2, 1, r);
+    mb_box(cur, v3(cx - 9, CURB + 6.6f, iz0 + 14.6f), v3(cx + 9, CURB + 8.2f, iz0 + 15.2f), col_e(250, 140, 30, 230), 0);
+    mb_box(cur, v3(cx - 7, CURB + 7.0f, iz0 + 15.2f), v3(cx + 7, CURB + 7.8f, iz0 + 15.3f), col_e(255, 255, 255, 255), 0);
+    for (i = 0; i < 3; i++) {
+        float x = ix0 + 9 + i * 13.0f, z = iz0 + 22.0f;
+        static const int models[3] = {1, 2, 3};
+        mb_cyl(cur, v3(x, CURB, z), 3.0f, 0.3f, 14, 1, col(200, 200, 205), col(230, 230, 235), 1);
+        display_car(models[i], x, z, 0.6f + i * 0.3f, paint_color(model_default_paint(models[i])));
+        add_box(x - 3.0f, z - 3.0f, x + 3.0f, z + 3.0f, CURB + 1.6f, BOX_PROP);
+    }
+    for (k = ix0 + 2.0f; k < ix1 - 2.0f; k += 9.5f) mb_flat(cur, k - 0.07f, iz1 - 8.0f, k + 0.07f, iz1 - 0.5f, CURB + 0.04f, col(230, 230, 225));
+    for (i = 0; i < 4; i++) W->dealerSpot[i] = v3(ix0 + 6.75f + i * 9.5f, 0, iz1 - 4.2f);
+    W->dealerSpotH = PI_F;
+    W->poi[POI_DEALER] = v3(cx, 0, iz0 + 17.0f);
+    lamp(ix0 + 1.5f, iz1 - 10, 1, 0);
+    lamp(ix1 - 1.5f, iz1 - 10, -1, 0);
+}
+
 static void gen_parking(float ix0, float iz0, float ix1, float iz1, Rng *r, int bi, int bj) {
     float x;
     int n = 0;
@@ -465,6 +500,10 @@ static void gen_garage(float ix0, float iz0, float ix1, float iz1, Rng *r) {
         mb_box(cur, v3(x0 + 4, h - 1.4f, z1), v3(x1 - 4, h - 0.3f, z1 + 0.3f), col_e(240, 120, 30, 220), 0);
         add_box(x0, z0, x1, z1, h, BOX_BUILDING);
         W->poi[POI_GARAGE] = v3(x0 + 11, 0, z1 + 4.0f);
+        /* BLOCK CUSTOMS: de linker garagedeur, blauw bord */
+        W->poi[POI_CUSTOMS] = v3(x0 + 5.25f, 0, z1 + 3.5f);
+        mb_box(cur, v3(x0 + 2.2f, CURB + 4.4f, z1 + 0.05f), v3(x0 + 8.3f, CURB + 5.3f, z1 + 0.3f), col_e(40, 120, 255, 230), 0);
+        mb_box(cur, v3(x0 + 3.0f, CURB + 4.7f, z1 + 0.3f), v3(x0 + 7.5f, CURB + 5.0f, z1 + 0.35f), col_e(255, 255, 255, 255), 0);
     }
     /* tankstation */
     {
@@ -558,7 +597,10 @@ static void gen_block(int i, int j) {
     case 'H': gen_houses(ix0, iz0, ix1, iz1, &r, i, j); break;
     case 'P': gen_park(ix0, iz0, ix1, iz1, &r, i == 3 && j == 4); break;
     case 'C': gen_plaza(ix0, iz0, ix1, iz1, &r); break;
-    case 'L': gen_parking(ix0, iz0, ix1, iz1, &r, i, j); break;
+    case 'L':
+        if (i == 1 && j == 2) gen_dealer(ix0, iz0, ix1, iz1, &r);
+        else gen_parking(ix0, iz0, ix1, iz1, &r, i, j);
+        break;
     case 'G': gen_garage(ix0, iz0, ix1, iz1, &r); break;
     default: break;
     }
