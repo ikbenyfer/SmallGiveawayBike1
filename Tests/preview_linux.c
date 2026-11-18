@@ -241,7 +241,7 @@ int main(void) {
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { printf("FBO niet compleet\n"); return 2; }
 
     fe_init(W, H);
-    for (frame = 0; frame < 30 * 420; frame++) {
+    for (frame = 0; frame < 30 * 900; frame++) {
         t += 1.0 / 30.0;
         fe_frame(t);
         if (frame == 25) plat_screenshot("00a_logo_fadein", W, H);
