@@ -143,6 +143,10 @@ typedef struct {
     /* eigen huis (alleen in de stad) */
     int homeLvl, garLvl, homeMarker, homeMenuOpen;
     float homeCool;
+    /* v3.2 winkels: training, kleding, luxe in huis, energie */
+    int cardio, tough, outfits, outfit, decor;
+    float boostT;
+    int bizOpen, inBiz;   /* bizOpen = winkel + 1 (frontend opent het menu) */
 } Game;
 
 void game_init(Game *g, World *w);

@@ -81,11 +81,18 @@ static int house_boxes(int lvl, HBox *b, int max) {
     return n;
 }
 
+static int g_decor;
+void home_set_decor(int mask) { g_decor = mask; }
+
 static int interior_boxes(int lvl, HBox *b, int max) {
-    float x0, z0, x1, z1;
+    float x0, z0, x1, z1, zc;
     int n = 0;
 #define B(X0, Z0, X1, Z1) do { if (n < max) { b[n].x0 = (X0); b[n].z0 = (Z0); b[n].x1 = (X1); b[n].z1 = (Z1); n++; } } while (0)
     home_room(lvl, &x0, &z0, &x1, &z1);
+    zc = (z0 + z1) * 0.5f;
+    if (g_decor & 1) B(x0 + 0.45f, z1 - 2.4f, x0 + 1.05f, z1 - 1.8f);
+    if (g_decor & 2) B(x1 - 0.75f, zc - 0.3f, x1 - 0.05f, zc + 1.1f);
+    if (g_decor & 4) B(x0 + 2.35f, z0, x0 + 3.15f, z0 + 0.75f);
     B(x1 - 3.2f, z0, x1 - 0.2f, z0 + 2.2f);           /* bed */
     B(x0 + 3.0f, z1 - 1.1f, x0 + 5.6f, z1 - 0.2f);    /* bank */
     B(x0 + 3.4f, z0, x0 + 5.6f, z0 + 0.7f);           /* tv-meubel */
@@ -426,4 +433,68 @@ void home_build_garage(MeshB *m, int glvl) {
     mb_box(m, v3(x0, 2.3f, z1 - 2.0f), v3(x0 + 0.1f, 2.6f, z1 - 1.0f), col_e(250, 200, 30, 220), 0);
     /* rijstrook-pijlen */
     for (k = 0; k < cap; k++) mb_flat(m, x0 + 3.2f + 4.2f * k, z1 - 3.7f, x0 + 4.8f + 4.2f * k, z1 - 3.3f, 0.02f, white);
+}
+
+/* ------------------------------------------------------------------ luxe spullen uit BLING */
+
+void home_build_decor(MeshB *m, int lvl, int item) {
+    float x0, z0, x1, z1, zc;
+    Col gold = col(240, 190, 60), dark = col(30, 30, 36);
+    int k;
+    lvl = clampl(lvl, HOME_LEVELS);
+    home_room(lvl, &x0, &z0, &x1, &z1);
+    zc = (z0 + z1) * 0.5f;
+    switch (item) {
+    case 0: {   /* gouden beeld op een sokkel */
+        float cx = x0 + 0.75f, cz = z1 - 2.1f;
+        mb_box(m, v3(cx - 0.3f, 0, cz - 0.3f), v3(cx + 0.3f, 0.6f, cz + 0.3f), col(240, 240, 236), 0);
+        mb_capsule(m, v3(cx - 0.07f, 0.6f, cz), v3(cx - 0.07f, 1.05f, cz), 0.07f, 0.06f, 8, gold);
+        mb_capsule(m, v3(cx + 0.07f, 0.6f, cz), v3(cx + 0.07f, 1.05f, cz), 0.07f, 0.06f, 8, gold);
+        blob(m, v3(cx, 1.3f, cz), v3(0.17f, 0.24f, 0.11f), 0.6f, 0.6f, 10, 6, gold);
+        blob(m, v3(cx, 1.66f, cz), v3(0.1f, 0.12f, 0.1f), 0.85f, 0.85f, 10, 6, gold);
+        mb_capsule(m, v3(cx + 0.15f, 1.45f, cz), v3(cx + 0.3f, 1.85f, cz), 0.045f, 0.04f, 6, gold);
+        mb_capsule(m, v3(cx - 0.15f, 1.45f, cz), v3(cx - 0.22f, 1.1f, cz), 0.045f, 0.04f, 6, gold);
+        break;
+    }
+    case 1: {   /* aquarium */
+        float ax0 = x1 - 0.75f, ax1 = x1 - 0.05f, az0 = zc - 0.3f, az1 = zc + 1.1f;
+        mb_box(m, v3(ax0, 0, az0), v3(ax1, 0.75f, az1), dark, 0);
+        mb_box(m, v3(ax0 + 0.02f, 0.75f, az0 + 0.02f), v3(ax1 - 0.02f, 1.6f, az1 - 0.02f), col_e(60, 150, 220, 160), 0);
+        mb_box(m, v3(ax0, 1.6f, az0), v3(ax1, 1.68f, az1), dark, 0);
+        for (k = 0; k < 6; k++) {
+            float fx = ax0 - 0.01f, fy = 0.9f + 0.1f * (k % 3) + 0.05f * (k / 3), fz = az0 + 0.2f + k * 0.18f;
+            blob(m, v3(fx, fy, fz), v3(0.012f, 0.035f, 0.06f), 0.8f, 0.8f, 6, 4, col_e(255, 120 + 20 * k, 40, 200));
+        }
+        for (k = 0; k < 4; k++) blob(m, v3(ax0 - 0.01f, 0.8f, az0 + 0.25f + k * 0.3f), v3(0.01f, 0.12f, 0.03f), 0.8f, 0.8f, 6, 4, col_e(60, 200, 90, 120));
+        break;
+    }
+    case 2: {   /* arcadekast */
+        float ax0 = x0 + 2.4f, ax1 = x0 + 3.1f, az0 = z0 + 0.05f, az1 = z0 + 0.7f;
+        mb_box(m, v3(ax0, 0, az0), v3(ax1, 1.8f, az1), col(40, 30, 90), 0);
+        mb_quad(m, v3(ax0 + 0.08f, 1.1f, az1 + 0.01f), v3(ax1 - 0.08f, 1.1f, az1 + 0.01f), v3(ax1 - 0.08f, 1.55f, az1 - 0.08f), v3(ax0 + 0.08f, 1.55f, az1 - 0.08f),
+                v3(0, 0.2f, 1), col_e(80, 255, 140, 255));
+        mb_box(m, v3(ax0, 0.85f, az1), v3(ax1, 0.95f, az1 + 0.25f), col(60, 50, 120), 0);
+        blob(m, v3(ax0 + 0.2f, 1.0f, az1 + 0.12f), v3(0.03f, 0.06f, 0.03f), 0.9f, 0.9f, 6, 4, col(220, 40, 40));
+        for (k = 0; k < 3; k++) blob(m, v3(ax0 + 0.38f + k * 0.09f, 0.97f, az1 + 0.12f), v3(0.03f, 0.02f, 0.03f), 0.9f, 0.9f, 6, 3, col_e(250, 220, 40, 200));
+        mb_box(m, v3(ax0, 1.62f, az1 - 0.02f), v3(ax1, 1.8f, az1 + 0.01f), col_e(255, 80, 200, 255), 0);
+        break;
+    }
+    case 3: {   /* neonbord boven de bank: hartje + streep */
+        float cx = x0 + 4.3f, y = 1.95f, z = z1 - 0.03f;
+        blob(m, v3(cx - 0.12f, y + 0.08f, z), v3(0.13f, 0.13f, 0.02f), 0.9f, 0.9f, 10, 5, col_e(255, 60, 170, 255));
+        blob(m, v3(cx + 0.12f, y + 0.08f, z), v3(0.13f, 0.13f, 0.02f), 0.9f, 0.9f, 10, 5, col_e(255, 60, 170, 255));
+        blob(m, v3(cx, y - 0.08f, z), v3(0.16f, 0.14f, 0.02f), 0.5f, 0.9f, 10, 5, col_e(255, 60, 170, 255));
+        mb_box(m, v3(cx - 0.9f, y - 0.35f, z - 0.02f), v3(cx + 0.9f, y - 0.31f, z + 0.01f), col_e(80, 220, 255, 255), 0);
+        break;
+    }
+    default: {   /* discolampen aan het plafond + discobal */
+        static const int cc[5][3] = {{255, 60, 60}, {60, 255, 90}, {70, 120, 255}, {255, 220, 50}, {230, 70, 255}};
+        for (k = 0; k < 10; k++) {
+            float lx = x0 + 1.0f + (x1 - x0 - 2.0f) * ((k * 37) % 10) / 9.0f, lz = z0 + 1.0f + (z1 - z0 - 2.0f) * ((k * 53) % 10) / 9.0f;
+            blob(m, v3(lx, 2.9f, lz), v3(0.12f, 0.08f, 0.12f), 0.9f, 0.9f, 8, 4, col_e(cc[k % 5][0], cc[k % 5][1], cc[k % 5][2], 255));
+        }
+        blob(m, v3((x0 + x1) * 0.5f, 2.7f, zc), v3(0.22f, 0.22f, 0.22f), 1, 1, 12, 8, col_e(220, 220, 230, 200));
+        break;
+    }
+    }
 }

@@ -10,6 +10,7 @@
 #include "nlstream.h"
 #include "mp.h"
 #include "../Game/home.h"
+#include "../Game/biz.h"
 #define NL_MAX_AREAS 64
 #define NL_DL_R 2
 
@@ -29,7 +30,7 @@ typedef struct { char pc[8]; char name[96]; long kb; double rx, ry; } NLArea;
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME, ST_BIZ };
 enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH, CTL_RUN };
 
 #define NTOUCH 10
@@ -58,7 +59,7 @@ static struct {
     int jumpEdge, actionEdge, switchEdge;
     char shopMsg[96];
     float atMaxSpeed;
-    int atShot2;
+    int atShot2, bizShop, atBiz;
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
     int lOn, rOn;
@@ -189,6 +190,11 @@ static void save_all(void) {
         plat_save_int("armor", (int)F.G.armor);
         plat_save_int("home", F.G.homeLvl);
         plat_save_int("garage", F.G.garLvl);
+        plat_save_int("cardio", F.G.cardio);
+        plat_save_int("tough", F.G.tough);
+        plat_save_int("outfits", F.G.outfits);
+        plat_save_int("outfit", F.G.outfit);
+        plat_save_int("decor", F.G.decor);
         {
             int c;
             for (c = 0; c < MAX_OWNED; c++) {
@@ -280,6 +286,12 @@ static void load_step(void) {
                 F.G.garLvl = plat_load_int("garage", 0);
                 if (F.G.homeLvl < 0 || F.G.homeLvl >= HOME_LEVELS) F.G.homeLvl = 0;
                 if (F.G.garLvl < 0 || F.G.garLvl >= GARAGE_LEVELS) F.G.garLvl = 0;
+                F.G.cardio = plat_load_int("cardio", 0); if (F.G.cardio < 0 || F.G.cardio > 3) F.G.cardio = 0;
+                F.G.tough = plat_load_int("tough", 0); if (F.G.tough < 0 || F.G.tough > 3) F.G.tough = 0;
+                F.G.outfits = plat_load_int("outfits", 0);
+                F.G.outfit = plat_load_int("outfit", 0); if (F.G.outfit < 0 || F.G.outfit >= BIZ_OUTFITS) F.G.outfit = 0;
+                F.G.decor = plat_load_int("decor", 0) & ((1 << BIZ_DECOR) - 1);
+                F.G.stamina = game_stamina_max(&F.G);
             }
             {
                 int c;
@@ -553,7 +565,7 @@ static void draw_minimap(void) {
         }
     }
     if (!g->nl) {
-        V3 pts[5];
+        V3 pts[5 + BIZ_COUNT];
         int q;
         static const float bc[4][3] = {{0.95f, 0.15f, 0.15f}, {0.2f, 0.75f, 0.3f}, {1.0f, 0.55f, 0.1f}, {0.2f, 0.45f, 1.0f}};
         pts[0] = g->w->poi[POI_GUNSHOP];
@@ -561,13 +573,15 @@ static void draw_minimap(void) {
         pts[2] = g->w->poi[POI_DEALER];
         pts[3] = g->w->poi[POI_CUSTOMS];
         home_door(g->homeLvl, &pts[4].x, &pts[4].z);
-        for (q = 0; q < 5; q++) {
+        for (q = 0; q < BIZ_COUNT; q++) pts[5 + q] = g->w->poi[biz_poi(q)];
+        for (q = 0; q < 5 + BIZ_COUNT; q++) {
             float rx = pts[q].x - px, rz = pts[q].z - pz;
             float sx = (rx * rt.x + rz * rt.z) / rad, sy = -(rx * f.x + rz * f.z) / rad;
             float m = fmaxf(fabsf(sx), fabsf(sy));
             if (m > 0.9f) { sx = sx / m * 0.9f; sy = sy / m * 0.9f; }
             (void)bc;
-            ui_icon(R, q == 0 ? ICON_GUN : (q == 1 ? ICON_BANK : (q == 2 ? ICON_CAR : (q == 3 ? ICON_CUSTOMS : ICON_HOME))), cx + sx * half, cy + sy * half, 24, 1);
+            ui_icon(R, q >= 5 ? ICON_BURGER + (q - 5) : (q == 0 ? ICON_GUN : (q == 1 ? ICON_BANK : (q == 2 ? ICON_CAR : (q == 3 ? ICON_CUSTOMS : ICON_HOME)))),
+                    cx + sx * half, cy + sy * half, q >= 5 ? 20 : 24, 1);
         }
     }
     /* speler-pijl */
@@ -653,8 +667,9 @@ static void draw_hud(void) {
         float hw = 210.0f, hx = W - 86 - hw;
         ui_rect(R, hx, 85, hw * clampf(g->armor / 100.0f, 0, 1), 5, 0.35f, 0.65f, 1.0f, 0.95f);
     }
-    if (g->stamina < 99.5f || g->running) {   /* uithoudingsvermogen (rennen) */
-        float hw = 210.0f, hx = W - 86 - hw, st = clampf(g->stamina / 100.0f, 0, 1);
+    if (g->stamina < game_stamina_max(g) - 0.5f || g->running || g->boostT > 0) {   /* uithoudingsvermogen (rennen) */
+        float hw = 210.0f, hx = W - 86 - hw, st = clampf(g->stamina / game_stamina_max(g), 0, 1);
+        if (g->boostT > 0) { snprintf(b, sizeof(b), "ENERGY %.0f", g->boostT); ui_text(R, b, hx - 10, 92, 15, 0.4f, 1.0f, 0.9f, 1, 2); }
         float bl = g->tired ? 0.5f + 0.5f * sinf(F.t * 9.0f) : 1.0f;
         ui_rect(R, hx - 3, 93, hw + 6, 11, 0, 0, 0, 0.6f);
         ui_rect(R, hx, 95, hw * st, 7, g->tired ? 1.0f : 0.95f, g->tired ? 0.35f : 0.8f, 0.15f, bl);
@@ -1266,13 +1281,14 @@ static void draw_bigmap(void) {
                 ui_icon(R, ICON_MISSION, sx, sy, 30, 1);
             }
         }
-        for (q = 0; q < 5; q++) {
+        for (q = 0; q < 5 + BIZ_COUNT; q++) {
             float px2, pz2;
             if (q < 4) { px2 = w->poi[pois[q]].x; pz2 = w->poi[pois[q]].z; }
-            else home_door(F.G.homeLvl, &px2, &pz2);
+            else if (q == 4) home_door(F.G.homeLvl, &px2, &pz2);
+            else { px2 = w->poi[biz_poi(q - 5)].x; pz2 = w->poi[biz_poi(q - 5)].z; }
             bm_w2s(px2, pz2, &sx, &sy);
-            ui_icon(R, q < 4 ? icons[q] : ICON_HOME, sx, sy, 40, 1);
-            ui_text(R, names[q], sx, sy + 20, 17, 1, 1, 1, 1, 1);
+            ui_icon(R, q < 4 ? icons[q] : (q == 4 ? ICON_HOME : ICON_BURGER + (q - 5)), sx, sy, q >= 5 ? 34 : 40, 1);
+            ui_text(R, q < 5 ? names[q] : biz_name(q - 5), sx, sy + 18, 16, 1, 1, 1, 1, 1);
         }
     }
     /* speler */
@@ -1881,6 +1897,66 @@ static const char *PAINT_NAMES[NPAINTS] = {"RED", "BLUE", "YELLOW", "WHITE", "GR
 static const char *NEON_NAMES[NNEONS] = {"OFF", "RED", "BLUE", "GREEN", "PINK", "WHITE"};
 
 
+
+/* ------------------------------------------------------------------ v3.2: winkels in de stad (generiek menu) */
+
+static void draw_biz(void) {
+    Renderer *R = &F.R;
+    Game *g = &F.G;
+    BizItem it[BIZ_MAX_ITEMS];
+    char b[64];
+    float cr, cg, cb, rowH;
+    int i, n = biz_items(g, F.bizShop, it);
+    biz_color(F.bizShop, &cr, &cg, &cb);
+    rowH = n > 5 ? 60.0f : 84.0f;
+    r_draw_scene(R, g);
+    ui_begin(R);
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.7f);
+    ui_rect(R, 132, 30, 760, 650, 0.07f, 0.07f, 0.09f, 0.96f);
+    ui_rect(R, 132, 30, 760, 66, cr * 0.85f, cg * 0.85f, cb * 0.85f, 1);
+    ui_icon(R, ICON_BURGER + F.bizShop, 180, 63, 46, 1);
+    ui_text(R, biz_name(F.bizShop), 512, 38, 48, 1, 1, 1, 1, 1);
+    fmt_money(b, sizeof(b), g->money);
+    ui_text(R, b, 872, 104, 30, 0.55f, 1.0f, 0.55f, 1, 2);
+    ui_text(R, biz_tagline(F.bizShop), 156, 110, 17, 0.8f, 0.8f, 0.8f, 1, 0);
+    for (i = 0; i < n; i++) {
+        float y = 146.0f + i * rowH, bh = rowH - 22.0f;
+        int pr = F.pressed == 1500 + i, ok = it[i].state == 0 && g->money >= it[i].price;
+        ui_rect(R, 152, y, 720, rowH - 8, 0.12f, 0.12f, 0.15f, 0.95f);
+        if (it[i].state == 1) ui_rect(R, 152, y, 8, rowH - 8, cr, cg, cb, 1);
+        ui_text(R, it[i].name, 172, y + 4, rowH > 70 ? 30 : 24, 1, 1, 1, it[i].state == 2 ? 0.5f : 1.0f, 0);
+        ui_text(R, it[i].info, 172, y + (rowH > 70 ? 44 : 32), 15, 0.8f, 0.8f, 0.8f, 1, 0);
+        if (F.bizShop == BIZ_BLING && it[i].state == 1) { ui_text(R, "OWNED", 780, y + bh * 0.5f - 6, 22, cr, cg, cb, 1, 1); continue; }
+        if (F.bizShop == BIZ_DRIP && it[i].state == 1) { ui_text(R, "WEARING", 780, y + bh * 0.5f - 6, 22, cr, cg, cb, 1, 1); continue; }
+        if (it[i].state == 2) continue;
+        ui_rect(R, 712, y + 7, 140, bh, pr ? 0.9f : (ok ? 0.2f : 0.25f), pr ? 0.2f : (ok ? 0.55f : 0.25f), pr ? 0.2f : 0.25f, 1);
+        if (it[i].price > 0) { snprintf(b, sizeof(b), "$%d", it[i].price); ui_text(R, b, 782, y + bh * 0.5f - 6, 26, 1, 1, 1, 1, 1); }
+        else ui_text(R, F.bizShop == BIZ_DRIP ? "WEAR" : "FREE", 782, y + bh * 0.5f - 6, 24, 1, 1, 1, 1, 1);
+    }
+    if (F.shopMsg[0]) ui_text(R, F.shopMsg, 512, 650, 20, 1, 0.85f, 0.4f, 1, 1);
+    big_button("LEAVE", 512, 718, 40, F.pressed == 1590, 1);
+    ui_flush(R);
+}
+
+static void biz_tap(float x, float y, int phase) {
+    BizItem it[BIZ_MAX_ITEMS];
+    int i, hit = 0, n = biz_items(&F.G, F.bizShop, it);
+    float rowH = n > 5 ? 60.0f : 84.0f;
+    for (i = 0; i < n; i++) {
+        float yy = 146.0f + i * rowH;
+        if (x > 712 && x < 852 && y > yy + 4 && y < yy + rowH - 10) hit = 1500 + i;
+    }
+    if (hit_text(x, y, "LEAVE", 512, 740, 40)) hit = 1590;
+    if (phase != TOUCH_END) { F.pressed = hit; return; }
+    F.pressed = 0;
+    if (hit == 1590) { set_state(ST_GAME); save_all(); return; }
+    if (hit >= 1500 && hit < 1500 + n) {
+        if (biz_buy(&F.G, F.bizShop, hit - 1500, F.shopMsg, sizeof(F.shopMsg)) && F.sfxOn) plat_sfx(SFX_BUY, 0.8f);
+        F.G.moneyShown = F.G.money;
+        save_all();
+    }
+}
+
 /* ------------------------------------------------------------------ eigen huis: laptop-scherm */
 
 static const char *HOME_NAMES[HOME_LEVELS] = {"SMALL HOUSE", "FAMILY HOUSE", "VILLA"};
@@ -2185,6 +2261,7 @@ static void menu_tap(float x, float y, int phase) {
     if (F.state == ST_MP) { mp_screen_tap(x, y, phase); return; }
     if (F.state == ST_DEALER) { dealer_tap(x, y, phase); return; }
     if (F.state == ST_HOME) { home_tap(x, y, phase); return; }
+    if (F.state == ST_BIZ) { biz_tap(x, y, phase); return; }
     if (F.state == ST_CUSTOMS) { customs_tap(x, y, phase); return; }
     if (F.state == ST_NLLOAD) {
         if (F.job.err && phase == TOUCH_END) {
@@ -2800,6 +2877,31 @@ static void autotest_tick(float dt) {
             F.atStep++;
         }
         else if (F.atStep == 114 && t > F.atT3 + 1.2f) { g->camYaw = PI_F * 0.42f; at_shot("38_villa_outside"); F.atT3 = t; F.atStep++; }
+        else if (F.atStep == 120) {   /* naar de volgende winkel */
+            V3 pp = g->w->poi[biz_poi(F.atBiz)];
+            g->money += 50000;
+            game_teleport(g, pp.x, pp.z, 0);
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 121 && F.state == ST_GAME && t > F.atT3 + 1.5f) {
+            game_teleport(g, g->p.x, g->p.z + 6.0f, 0);   /* van de ring af */
+            F.atBiz++;
+            F.atStep = F.atBiz < BIZ_COUNT ? 120 : 122;
+        }
+        else if (F.atStep == 122) {   /* thuis: luxe spullen bekijken */
+            float x0, z0, x1, z1;
+            home_room(g->homeLvl, &x0, &z0, &x1, &z1);
+            game_teleport(g, x0 + 4.0f, (z0 + z1) * 0.5f + 1.0f, -PI_F * 0.75f);
+            g->camYaw = -PI_F * 0.75f;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 123 && t > F.atT3 + 1.2f) { g->camYaw = -PI_F * 0.75f; at_shot("45_home_bling"); F.atT3 = t; F.atStep++; }
+        else if (F.atStep == 124 && t > F.atT3 + 0.3f) {
+            game_teleport(g, road_c(2), road_c(1) + 6.0f, 0);
+            F.atStep = 90;
+        }
         else if (F.atStep == 115 && t > F.atT3 + 0.3f) {
             game_teleport(g, road_c(2), road_c(1) + 6.0f, 0);
             g->stamina = 100; g->tired = 0;
@@ -2813,7 +2915,8 @@ static void autotest_tick(float dt) {
             if (t > F.atT3 + 2.5f && F.atStep == 108 && !F.atShot2) { at_shot("39_running"); F.atShot2 = 1; }
             if (t > F.atT3 + 7.0f) {
                 rep("Rennen: topsnelheid %.1f m/s, uithoudingsvermogen %.0f, uitgeput=%d", F.atMaxSpeed, g->stamina, g->tired);
-                F.atStep = 90;
+                F.atBiz = 0;
+                F.atStep = 120;
             }
         }
         else if (F.atStep == 90) {
@@ -2980,6 +3083,22 @@ void fe_frame(double now) {
             set_state(ST_GAME);
         }
         break;
+    case ST_BIZ:
+        draw_biz();
+        if (F.at && F.st > 1.0f) {
+            static const char *shots[BIZ_COUNT] = {"40_burger", "41_gym", "42_drip", "43_bling", "44_spray"};
+            char msg[96];
+            int k, nb = 0;
+            at_shot(shots[F.bizShop % BIZ_COUNT]);
+            if (F.bizShop == BIZ_BURGER) nb += biz_buy(&F.G, BIZ_BURGER, 1, msg, sizeof(msg));
+            if (F.bizShop == BIZ_GYM) nb += biz_buy(&F.G, BIZ_GYM, 0, msg, sizeof(msg)) + biz_buy(&F.G, BIZ_GYM, 1, msg, sizeof(msg));
+            if (F.bizShop == BIZ_DRIP) nb += biz_buy(&F.G, BIZ_DRIP, 3, msg, sizeof(msg));
+            if (F.bizShop == BIZ_BLING) for (k = 0; k < BIZ_DECOR; k++) nb += biz_buy(&F.G, BIZ_BLING, k, msg, sizeof(msg));
+            rep("Winkel %s: %d aankopen, geld $%ld (cardio %d, taai %d, kleding %d, decor %d)", biz_name(F.bizShop), nb, F.G.money,
+                F.G.cardio, F.G.tough, F.G.outfit, F.G.decor);
+            set_state(ST_GAME);
+        }
+        break;
     case ST_HOME:
         draw_home();
         if (F.at && F.st > 1.0f) {
@@ -3033,6 +3152,7 @@ void fe_frame(double now) {
             if (F.G.dealerOpen) { F.G.dealerOpen = 0; F.shopMsg[0] = 0; set_state(ST_DEALER); }
             if (F.G.customsOpen) { F.G.customsOpen = 0; F.shopMsg[0] = 0; set_state(ST_CUSTOMS); }
             if (F.G.homeMenuOpen) { F.G.homeMenuOpen = 0; F.shopMsg[0] = 0; set_state(ST_HOME); }
+            if (F.G.bizOpen) { F.bizShop = F.G.bizOpen - 1; F.G.bizOpen = 0; F.shopMsg[0] = 0; set_state(ST_BIZ); }
             if (!F.at && F.mode == 0) {
                 int i, done = 0;
                 for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;
@@ -3150,7 +3270,7 @@ void fe_key_command(int cmd) {
     }
     switch (F.state) {
     case ST_GAME: set_state(ST_PAUSE); save_all(); break;
-    case ST_PAUSE: case ST_BIGMAP: case ST_SHOP: case ST_DEALER: case ST_HOME: set_state(ST_GAME); break;
+    case ST_PAUSE: case ST_BIGMAP: case ST_SHOP: case ST_DEALER: case ST_HOME: case ST_BIZ: set_state(ST_GAME); save_all(); break;
     case ST_CUSTOMS: set_state(ST_GAME); save_all(); break;
     case ST_SETTINGS: set_state(F.prevState == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
     case ST_MISSIONS: set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;

@@ -1,5 +1,6 @@
 #include "render.h"
 #include "../Game/home.h"
+#include "../Game/biz.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -278,6 +279,7 @@ void r_build_models(Renderer *r) {
     BUILD(r->tracer, model_tracer(&m));
     for (i = 0; i < 3; i++) { BUILD(r->homeExt[i], home_build_exterior(&m, i)); BUILD(r->homeInt[i], home_build_interior(&m, i)); }
     for (i = 0; i < 4; i++) BUILD(r->homeGar[i], home_build_garage(&m, i));
+    for (i = 0; i < 15; i++) BUILD(r->decor[i / 5][i % 5], home_build_decor(&m, i / 5, i % 5));
 #undef BUILD
     mb_free(&m);
 }
@@ -545,7 +547,7 @@ static void draw_player_transition(Renderer *r, Game *g) {
     y = v->y;
     m = m4_trs_y(x, y, z, h);
     if (bike) m = m4_mul(m, m4_rot_z(v->lean * clampf((e - split) / (1.0f - split), 0, 1)));
-    draw_char_pose(r, 0, m, &p, 0, 0);
+    draw_char_pose(r, biz_outfit_variant(g->outfit), m, &p, 0, 0);
 }
 
 static void draw_shadow(Renderer *r, float x, float y, float z, float sx, float sz, float h) {
@@ -663,10 +665,10 @@ void r_draw_scene(Renderer *r, Game *g) {
             if (v->custom && IS_MOTO(v->model)) {
                 int k = (v->model - CAR_MODELS) % MOTO_MODELS;
                 draw_mesh(r, hiV ? &r->moto[k] : &r->motoLo[k], &m);
-                if (rider) draw_char(r, 0, m, 0, 3, 0, 0, 0);   /* motor: niet trappen */
+                if (rider) draw_char(r, biz_outfit_variant(g->outfit), m, 0, 3, 0, 0, 0);   /* motor: niet trappen */
             } else {
                 draw_mesh(r, hiV ? &r->bike[v->variant % BIKE_VARIANTS] : &r->bikeLo[v->variant % BIKE_VARIANTS], &m);
-                if (rider) draw_char(r, 0, m, g->p.anim * 2.0f, 1, 0, 0, 0);
+                if (rider) draw_char(r, biz_outfit_variant(g->outfit), m, g->p.anim * 2.0f, 1, 0, 0, 0);
             }
         } else {
             int hiV = near_cam(r, &m, LOD_VEH);
@@ -715,8 +717,10 @@ void r_draw_scene(Renderer *r, Game *g) {
         if (sphere_visible(r, (HOME_PLOT_X0 + HOME_PLOT_X1) * 0.5f, 3, (HOME_PLOT_Z0 + HOME_PLOT_Z1) * 0.5f, 30, fogEnd))
             draw_mesh(r, &r->homeExt[hl], &id);
         if (r->cam.x < HOME_ZONE_X) {
+            int d;
             draw_mesh(r, &r->homeInt[hl], &id);
             draw_mesh(r, &r->homeGar[gl], &id);
+            for (d = 0; d < 5; d++) if ((g->decor >> d) & 1) draw_mesh(r, &r->decor[hl][d], &id);
         }
     }
     /* voetgangers */
@@ -771,7 +775,7 @@ void r_draw_scene(Renderer *r, Game *g) {
     } else if (mode == MODE_FOOT) {
         M4 m = m4_trs_y(g->p.x, g->p.y, g->p.z, g->p.h);
         float ground = world_ground_y(g->w, g->p.x, g->p.z);
-        draw_char(r, 0, m, g->p.anim, g->p.onGround ? 0 : 2, 0, g->weapon % WP_COUNT, g->p.onGround ? fabsf(g->p.speed) : 0);
+        draw_char(r, biz_outfit_variant(g->outfit), m, g->p.anim, g->p.onGround ? 0 : 2, 0, g->weapon % WP_COUNT, g->p.onGround ? fabsf(g->p.speed) : 0);
         if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
             float s = clampf(0.5f - (g->p.y - ground) * 0.15f, 0.2f, 0.5f);
             shadows[nsh] = v3(g->p.x, ground, g->p.z); shs[nsh][0] = s; shs[nsh][1] = s; shs[nsh][2] = 0; nsh++;
@@ -876,6 +880,22 @@ void r_draw_scene(Renderer *r, Game *g) {
                 if (!sphere_visible(r, hp[q].x, 1, hp[q].z, 3, fogEnd)) continue;
                 tint(r, hc[hk[q]][0] * pulse, hc[hk[q]][1] * pulse, hc[hk[q]][2] * pulse);
                 draw_mesh(r, &r->marker, &m);
+            }
+        }
+        if (!g->nl) {
+            int q;
+            for (q = 0; q < BIZ_COUNT; q++) {
+                V3 pp = g->w->poi[biz_poi(q)];
+                float cr, cg, cb, pulse = 0.75f + 0.25f * sinf(t * 4.0f + q * 1.3f), rs = q == BIZ_SPRAY ? 3.0f : 1.8f;
+                M4 m;
+                if (!sphere_visible(r, pp.x, 1, pp.z, 3.5f, fogEnd)) continue;
+                biz_color(q, &cr, &cg, &cb);
+                m = m4_mul(m4_trs_y(pp.x, world_ground_y(g->w, pp.x, pp.z) + 0.06f, pp.z, t), m4_scale(rs, 1, rs));
+                tint(r, cr * pulse, cg * pulse, cb * pulse);
+                draw_mesh(r, &r->marker, &m);
+                m = m4_mul(m4_trs_y(pp.x, 0, pp.z, 0), m4_scale(rs, 1.6f, rs));
+                tint(r, cr * 0.22f, cg * 0.22f, cb * 0.22f);
+                draw_mesh(r, &r->cp, &m);
             }
         }
         if (!g->nl && g->mission < 0) {

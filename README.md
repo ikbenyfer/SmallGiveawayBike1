@@ -161,6 +161,18 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
   - `tools/build_region_pack.py` maakt het pakket opnieuw (op de pc, met internet).
   - Bronvermelding: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, PDOK), gemeentegrenzen en postcodes (PDOK). Alles valt onder CC BY 4.0.
   - iOS 9 kent de rootcertificaten van 3D BAG niet. Daarom zitten ISRG Root X1/X2 en DigiCert Global Root G2 in de app als **extra** vertrouwensanker; de normale controle blijft aan. Lukt 3D BAG toch niet, dan valt de app terug op PDOK BAG met geschatte hoogtes.
+- **Winkels in de stad** (elk met een eigen icoontje op de kaart; loop in de gekleurde ring):
+  - **GIVEAWAY BURGER** (oranje): eten en drinken, van $20 tot $150. Dat geeft gezondheid, uithoudingsvermogen en een ENERGY-boost, waarmee je een tijdje rent zonder moe te worden.
+  - **BLOCK GYM** (lichtblauw): voorgoed trainen.
+    - **CARDIO:** je maximale uithoudingsvermogen gaat van 100 naar 130, 165 en 200.
+    - **TOUGHNESS:** je krijgt 10, 20 of 30% minder schade.
+    - Een personal trainer geeft je direct een energie-boost.
+  - **DRIP** (roze): 7 outfits om je speler een andere look te geven. Wat je eenmaal gekocht hebt, kun je gratis wisselen.
+  - **BLING** (goud): luxe spullen die in je huis verschijnen: een gouden beeld, een aquarium, een arcadekast, een neonbord en discolampen.
+  - **BLOCK SPRAY** (blauw, een drive-in aan de oostrand): rijd erin met een voertuig.
+    - Overspuiten kost $400 per ster, daarna ben je de politie kwijt.
+    - Repareren en wassen kost $150.
+    - Een nieuwe kleur kost $300.
 - **Rennen en uithoudingsvermogen:**
   - Houd **RUN** ingedrukt (op Windows/Linux: Shift) om te rennen. Normaal lopen gaat 15 km/h, rennen 27 km/h.
   - Rennen kost uithoudingsvermogen: de gele balk onder je gezondheid. Is die leeg, dan ben je buiten adem en kun je pas weer rennen als hij terug op 30% staat.

@@ -1,5 +1,6 @@
 #include "game.h"
 #include "home.h"
+#include "biz.h"
 #include "models.h"
 #include <string.h>
 #include <stdio.h>
@@ -945,7 +946,7 @@ void game_init(Game *g, World *w) {
     g->p.h = w->spawn_heading;
     g->p.y = world_ground_y(w, g->p.x, g->p.z);
     g->p.veh = -1;
-    g->stamina = 100.0f;
+    g->stamina = 100.0f;   /* (na het laden van de training zet de frontend dit op het maximum) */
     g->p.onGround = 1;
     g->camYaw = g->p.h;
     g->camPitch = 0.32f;
@@ -1055,7 +1056,7 @@ static void home_action(Game *g, int kind) {
     case HM_BED:
         if (!foot) break;
         g->health = 100.0f;
-        g->stamina = 100.0f; g->tired = 0;
+        g->stamina = game_stamina_max(g); g->tired = 0;
         game_message(g, "You took a nap. Health restored!", 2.5f);
         game_sfx(g, SFX_CASH, g->p.x, g->p.z);
         break;
@@ -1081,6 +1082,7 @@ static void home_tick(Game *g, float dt) {
     int kind[12], n, i, cur = HM_NONE;
     float rad[12], px, pz;
     if (g->nl) return;
+    home_set_decor(g->decor);
     if (g->homeCool > 0) g->homeCool -= dt;
     px = g->p.veh >= 0 ? g->veh[g->p.veh].x : g->p.x;
     pz = g->p.veh >= 0 ? g->veh[g->p.veh].z : g->p.z;
@@ -1107,12 +1109,13 @@ static void update_player_foot(Game *g, const Input *in, float dt) {
     if (mag > 1) { mx /= mag; my /= mag; mag = 1; }
     /* rennen kost uithoudingsvermogen; leeg = even uitgeput tot 30 */
     g->running = in->run && mag > 0.3f && !g->tired && g->stamina > 0;
+    if (g->boostT > 0) g->boostT -= dt;
     if (g->running) {
-        g->stamina -= 20.0f * dt;
+        if (g->boostT <= 0) g->stamina -= 20.0f * dt;
         g->staminaCool = 0.9f;
         if (g->stamina <= 0) { g->stamina = 0; g->tired = 1; game_message(g, "Out of breath!", 1.2f); }
     } else if (g->staminaCool > 0) g->staminaCool -= dt;
-    else g->stamina = fminf(100.0f, g->stamina + (mag > 0.3f ? 11.0f : 22.0f) * dt);
+    else g->stamina = fminf(game_stamina_max(g), g->stamina + (mag > 0.3f ? 11.0f : 22.0f) * dt);
     if (g->tired && g->stamina >= 30.0f) g->tired = 0;
     if (mag > 0.12f) {
         V3 d = v3add(v3scale(f, my), v3scale(r, mx));
@@ -1680,6 +1683,7 @@ void game_add_wanted(Game *g, int n) {
 
 void game_damage(Game *g, float amount) {
     if (g->health <= 0) return;
+    amount *= 1.0f - 0.1f * (float)(g->tough < 0 ? 0 : (g->tough > 3 ? 3 : g->tough));   /* BLOCK GYM: taaiheid */
     if (g->armor > 0) {
         float a = fminf(g->armor, amount * 0.75f);
         g->armor -= a;
@@ -2002,6 +2006,22 @@ void game_update(Game *g, const Input *in, float dt) {
         int in2 = dx * dx + dz * dz < 2.2f * 2.2f;
         if (in2 && !g->inShop) g->shopOpen = 1;
         g->inShop = in2;
+    }
+    /* v3.2 winkels: binnenlopen (of inrijden bij BLOCK SPRAY) opent het menu */
+    if (!g->nl) {
+        int k, cur = 0;
+        float qx = g->p.veh >= 0 ? g->veh[g->p.veh].x : g->p.x, qz = g->p.veh >= 0 ? g->veh[g->p.veh].z : g->p.z;
+        for (k = 0; k < BIZ_COUNT; k++) {
+            V3 pp = g->w->poi[biz_poi(k)];
+            float dx = qx - pp.x, dz = qz - pp.z, rr = k == BIZ_SPRAY ? 3.2f : 2.0f;
+            if (k != BIZ_SPRAY && g->p.veh >= 0) continue;
+            if (dx * dx + dz * dz < rr * rr) { cur = k + 1; break; }
+        }
+        if (cur && cur != g->inBiz) {
+            g->bizOpen = cur;
+            if (g->p.veh >= 0) g->veh[g->p.veh].speed = 0;
+        }
+        g->inBiz = cur;
     }
     update_camera(g, in, dt);
 

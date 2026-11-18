@@ -283,6 +283,26 @@ static void gen_shops(float ix0, float iz0, float ix1, float iz1, Rng *r, int bi
             if (bi == 1 && bj == 4 && side == 1 && s == 1) {
                 W->poi[POI_BIKESHOP] = v3((x0 + x1) * 0.5f, 0, iz1 + SIDEWALK * 0.5f + 0.3f);
             }
+            {   /* v3.2: nieuwe winkels met een lichtbak en luifel in hun eigen kleur */
+                static const int sh[4][5] = {   /* blok i, blok j, kant, plek, poi */
+                    {0, 2, 0, 1, POI_BURGER}, {6, 2, 0, 0, POI_GYM}, {3, 5, 0, 1, POI_DRIP}, {6, 5, 1, 1, POI_BLING}};
+                static const int sc[4][3] = {{240, 150, 30}, {40, 200, 220}, {230, 60, 160}, {250, 215, 60}};
+                int q;
+                for (q = 0; q < 4; q++) {
+                    float cx = (x0 + x1) * 0.5f, fz, dz;
+                    Col c, cd;
+                    if (bi != sh[q][0] || bj != sh[q][1] || side != sh[q][2] || s != sh[q][3]) continue;
+                    c = col_e(sc[q][0], sc[q][1], sc[q][2], 230);
+                    cd = col((int)(sc[q][0] * 0.6f), (int)(sc[q][1] * 0.6f), (int)(sc[q][2] * 0.6f));
+                    fz = side ? z1 : z0; dz = side ? 1.0f : -1.0f;
+                    W->poi[sh[q][4]] = v3(cx, 0, fz + dz * (SIDEWALK * 0.5f + 0.3f));
+                    mb_box(cur, v3(x0 + 0.6f, CURB + 4.0f, fz + (side ? 0.1f : -0.45f)), v3(x1 - 0.6f, CURB + 5.2f, fz + (side ? 0.45f : -0.1f)), c, 0);
+                    mb_box(cur, v3(x0 + 0.4f, CURB + 2.9f, fz + (side ? 0.0f : -1.5f)), v3(x1 - 0.4f, CURB + 3.05f, fz + (side ? 1.5f : 0.0f)), cd, 0);
+                    mb_quad(cur, v3(cx - 1.1f, CURB, fz + dz * 0.06f), v3(cx + 1.1f, CURB, fz + dz * 0.06f),
+                            v3(cx + 1.1f, CURB + 2.5f, fz + dz * 0.06f), v3(cx - 1.1f, CURB + 2.5f, fz + dz * 0.06f), v3(0, 0, dz),
+                            col_e(sc[q][0] / 2 + 100, sc[q][1] / 2 + 100, sc[q][2] / 2 + 100, 140));
+                }
+            }
         }
     /* binnenplaats */
     mb_flat(cur, ix0, iz0 + 13.0f, ix1, iz1 - 13.0f, CURB + 0.02f, col(120, 118, 112));
@@ -656,6 +676,7 @@ static void gen_outer(void) {
         else if (side == 2) { x = u; z = MAPW + d; }
         else { x = -d; z = u; }
         if (x > 401.0f && x < 437.0f && z > 172.0f && z < 226.0f) continue;   /* perceel van het eigen huis */
+        if (x > 401.0f && x < 437.0f && z > 116.0f && z < 146.0f) continue;   /* BLOCK SPRAY */
         at(x, z);
         tree(x, z, &r);
     }
@@ -678,6 +699,30 @@ static void gen_outer(void) {
         add_box(lo - 2, hi, hi + 2, hi + 2, 3.0f, BOX_WALL);
         add_box(lo - 2, lo, lo, hi, 3.0f, BOX_WALL);
         add_box(hi, lo, hi + 2, hi, 3.0f, BOX_WALL);
+    }
+    /* BLOCK SPRAY: overkapte spuitstraat aan de oostrand (inrijden vanaf de weg) */
+    {
+        float bx0 = 405.0f, bx1 = 419.0f, bz0 = 124.0f, bz1 = 138.0f;
+        Col blue = col(40, 60, 140), grey = col(170, 170, 176);
+        int q;
+        at(412, 131);
+        mb_flat(cur, 403.5f, bz0 + 2.0f, bx1, bz1 - 2.0f, 0.02f, col(80, 80, 86));
+        mb_box(cur, v3(bx0, 3.4f, bz0), v3(bx1, 3.8f, bz1), blue, 0);
+        mb_box(cur, v3(bx1 - 0.4f, 0, bz0), v3(bx1, 3.4f, bz1), grey, BOX_NOBOTTOM);
+        mb_box(cur, v3(bx0 + 3.0f, 0, bz0), v3(bx1, 3.4f, bz0 + 0.3f), grey, BOX_NOBOTTOM);
+        mb_box(cur, v3(bx0 + 3.0f, 0, bz1 - 0.3f), v3(bx1, 3.4f, bz1), grey, BOX_NOBOTTOM);
+        add_box(bx1 - 0.4f, bz0, bx1, bz1, 3.4f, BOX_BUILDING);
+        add_box(bx0 + 3.0f, bz0, bx1, bz0 + 0.3f, 3.4f, BOX_BUILDING);
+        add_box(bx0 + 3.0f, bz1 - 0.3f, bx1, bz1, 3.4f, BOX_BUILDING);
+        for (q = 0; q < 2; q++) {
+            float pz = q ? bz1 - 0.2f : bz0 + 0.2f;
+            mb_box(cur, v3(bx0, 0, pz - 0.2f), v3(bx0 + 0.4f, 3.4f, pz + 0.2f), grey, BOX_NOBOTTOM);
+            add_box(bx0, pz - 0.2f, bx0 + 0.4f, pz + 0.2f, 3.4f, BOX_PROP);
+        }
+        mb_box(cur, v3(bx0 - 0.1f, 3.8f, bz0 + 2.0f), v3(bx0 + 0.3f, 4.8f, bz1 - 2.0f), col_e(250, 60, 140, 230), 0);
+        for (q = 0; q < 5; q++)   /* spuitkoppen aan het plafond */
+            mb_box(cur, v3(bx0 + 4.0f + q * 2.6f, 3.0f, bz0 + 6.0f), v3(bx0 + 4.4f + q * 2.6f, 3.4f, bz1 - 6.0f), col_e(120, 200, 255, 80), 0);
+        W->poi[POI_SPRAY] = v3(412.0f, 0, 131.0f);
     }
     /* grondplaat + heuvels aan de horizon (altijd getekend) */
     {

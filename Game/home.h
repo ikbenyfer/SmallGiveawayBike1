@@ -40,6 +40,7 @@ int home_markers(int lvl, int glvl, V3 *pos, int *kind, float *rad, int max);
 
 /* botsing met muren en meubels (buiten, in huis en in de garage) */
 int home_push(int lvl, int glvl, float *x, float *z, float r);
+void home_set_decor(int mask);   /* luxe spullen (BLING) die in huis staan: ook botsen */
 /* binnen een kamer: camera binnen de muren houden */
 int home_room_at(int lvl, int glvl, float x, float z, float *x0, float *z0, float *x1, float *z1);
 
@@ -47,5 +48,6 @@ int home_room_at(int lvl, int glvl, float x, float z, float *x0, float *z0, floa
 void home_build_exterior(MeshB *m, int lvl);
 void home_build_interior(MeshB *m, int lvl);
 void home_build_garage(MeshB *m, int glvl);
+void home_build_decor(MeshB *m, int lvl, int item);   /* 0 beeld, 1 aquarium, 2 arcade, 3 neon, 4 discolampen */
 
 #endif

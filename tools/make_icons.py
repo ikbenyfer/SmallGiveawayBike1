@@ -1,5 +1,6 @@
 """Tekent de kaart-icoontjes (eigen pictogrammen) naar Resources/icons.png.
-Volgorde (64 x 64 elk, naast elkaar): 0 wapenwinkel, 1 bank, 2 autodealer, 3 customs, 4 missie, 5 missie gehaald, 6 eigen huis.
+Volgorde (64 x 64 elk, naast elkaar): 0 wapenwinkel, 1 bank, 2 autodealer, 3 customs, 4 missie, 5 missie gehaald, 6 eigen huis,
+7 burger, 8 gym, 9 kleding, 10 bling, 11 spuitstraat.
 Gebruik: py -3.12 tools/make_icons.py
 """
 import os
@@ -75,6 +76,41 @@ d.polygon(P((32, 12), (52, 30), (12, 30)), fill=W)
 d.rectangle(P((17, 29), (47, 50)), fill=W)
 d.rectangle(P((28, 36), (36, 50)), fill=(150, 70, 210, 255))
 d.rectangle(P((40, 15), (45, 24)), fill=W)
+icons.append(im)
+
+# 7: burger
+im, d = badge((240, 150, 30, 255))
+d.chord(P((14, 14), (50, 40)), 180, 360, fill=W)
+d.rectangle(P((14, 30), (50, 33)), fill=(90, 50, 20, 255))
+d.rectangle(P((13, 34), (51, 37)), fill=(60, 170, 60, 255))
+d.rounded_rectangle(P((14, 38), (50, 47)), radius=3 * S, fill=W)
+icons.append(im)
+
+# 8: gym (halter)
+im, d = badge((40, 200, 220, 255))
+d.rectangle(P((18, 30), (46, 34)), fill=W)
+for x in (13, 19, 41, 47):
+    d.rounded_rectangle(P((x - 3, 21), (x + 3, 43)), radius=2 * S, fill=W)
+icons.append(im)
+
+# 9: kleding (t-shirt)
+im, d = badge((230, 60, 160, 255))
+d.polygon(P((22, 14), (27, 17), (37, 17), (42, 14), (52, 22), (47, 29), (43, 26), (43, 50), (21, 50), (21, 26), (17, 29), (12, 22)), fill=W)
+icons.append(im)
+
+# 10: bling (diamant)
+im, d = badge((250, 215, 60, 255))
+d.polygon(P((18, 24), (24, 16), (40, 16), (46, 24), (32, 49)), fill=W)
+d.line(P((18, 24), (46, 24)), fill=(250, 215, 60, 255), width=2 * S)
+d.line(P((26, 24), (32, 49), (38, 24)), fill=(250, 215, 60, 255), width=2 * S)
+icons.append(im)
+
+# 11: spuitstraat (spuitbus met wolkje)
+im, d = badge((60, 100, 230, 255))
+d.rounded_rectangle(P((24, 24), (38, 50)), radius=3 * S, fill=W)
+d.rectangle(P((28, 18), (34, 24)), fill=W)
+for (x, y) in ((42, 14), (47, 19), (43, 22), (49, 13)):
+    d.ellipse(P((x - 2.5, y - 2.5), (x + 2.5, y + 2.5)), fill=W)
 icons.append(im)
 
 atlas = Image.new("RGBA", (64 * len(icons), 64), (0, 0, 0, 0))
