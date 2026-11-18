@@ -26,10 +26,13 @@ typedef struct {
     GLint wVP, wModel, wSun, wSunCol, wAmb, wCam, wFog, wFogCol, wTint, wEmis, wAlpha, wUnlit;
     GLint uProj, uTex;
 
-    GMesh body[CHAR_VARIANTS], leg[CHAR_VARIANTS], arm[CHAR_VARIANTS];
-    GMesh bike[BIKE_VARIANTS], car[CAR_VARIANTS];
-    GMesh cash, gift, cp, arrow, shadow, marker, siren, gun, tracer, spoiler;
+    /* v3.0: gladde modellen dichtbij, de oude blokmodellen (Lo) ver weg */
+    GMesh body[CHAR_VARIANTS], thigh[CHAR_VARIANTS], shin[CHAR_VARIANTS], uarm[CHAR_VARIANTS], farm[CHAR_VARIANTS];
+    GMesh bodyLo[CHAR_VARIANTS], leg[CHAR_VARIANTS], arm[CHAR_VARIANTS];
+    GMesh bike[BIKE_VARIANTS], car[CAR_VARIANTS], bikeLo[BIKE_VARIANTS], carLo[CAR_VARIANTS];
+    GMesh cash, gift, cp, arrow, shadow, marker, siren, gun, tracer, spoiler, weapon[4];
     GMesh carBody[CAR_MODELS], carDetail[CAR_MODELS], moto[MOTO_MODELS];
+    GMesh carBodyLo[CAR_MODELS], carDetailLo[CAR_MODELS], motoLo[MOTO_MODELS];
     struct RWorld {
         GMesh ground;
         GMesh chunk[RW_SLOTS];

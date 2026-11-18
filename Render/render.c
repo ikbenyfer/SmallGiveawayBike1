@@ -240,11 +240,17 @@ void r_build_models(Renderer *r) {
 #define BUILD(dst, call) do { mb_reset(&m); call; upload(&(dst), &m); } while (0)
     for (i = 0; i < CHAR_VARIANTS; i++) {
         BUILD(r->body[i], model_char_body(&m, i));
+        BUILD(r->thigh[i], model_char_thigh(&m, i));
+        BUILD(r->shin[i], model_char_shin(&m, i));
+        BUILD(r->uarm[i], model_char_uarm(&m, i));
+        BUILD(r->farm[i], model_char_farm(&m, i));
+        BUILD(r->bodyLo[i], model_char_body_lo(&m, i));
         BUILD(r->leg[i], model_char_leg(&m, i));
         BUILD(r->arm[i], model_char_arm(&m, i));
     }
-    for (i = 0; i < BIKE_VARIANTS; i++) BUILD(r->bike[i], model_bike(&m, i));
-    for (i = 0; i < CAR_VARIANTS; i++) BUILD(r->car[i], model_car(&m, i));
+    for (i = 0; i < BIKE_VARIANTS; i++) { BUILD(r->bike[i], model_bike(&m, i)); BUILD(r->bikeLo[i], model_bike_lo(&m, i)); }
+    for (i = 0; i < CAR_VARIANTS; i++) { BUILD(r->car[i], model_car(&m, i)); BUILD(r->carLo[i], model_car_lo(&m, i)); }
+    for (i = 1; i < 4; i++) BUILD(r->weapon[i], model_weapon(&m, i));
     BUILD(r->cash, model_cash(&m));
     BUILD(r->gift, model_gift(&m));
     BUILD(r->cp, model_checkpoint(&m));
@@ -254,8 +260,20 @@ void r_build_models(Renderer *r) {
     BUILD(r->siren, model_siren(&m));
     BUILD(r->gun, model_gun(&m));
     BUILD(r->spoiler, model_spoiler(&m));
-    for (i = 0; i < CAR_MODELS; i++) { BUILD(r->carBody[i], model_car_body(&m, i)); BUILD(r->carDetail[i], model_car_detail(&m, i)); }
-    for (i = 0; i < MOTO_MODELS; i++) BUILD(r->moto[i], model_moto(&m, i));
+    for (i = 0; i < CAR_MODELS; i++) {
+        BUILD(r->carBody[i], model_car_body(&m, i)); BUILD(r->carDetail[i], model_car_detail(&m, i));
+        BUILD(r->carBodyLo[i], model_car_body_lo(&m, i)); BUILD(r->carDetailLo[i], model_car_detail_lo(&m, i));
+    }
+    for (i = 0; i < MOTO_MODELS; i++) { BUILD(r->moto[i], model_moto(&m, i)); BUILD(r->motoLo[i], model_moto_lo(&m, i)); }
+    {
+        int tv = 0, k;
+        for (k = 0; k < CHAR_VARIANTS; k++) tv += r->body[k].count + r->thigh[k].count + r->shin[k].count + r->uarm[k].count + r->farm[k].count;
+        for (k = 0; k < CAR_VARIANTS; k++) tv += r->car[k].count;
+        for (k = 0; k < CAR_MODELS; k++) tv += r->carBody[k].count + r->carDetail[k].count;
+        plat_log("SGB modellen v3: personage %d + %d + %d + %d + %d hoekpunten, auto %d, sportauto %d, motor %d, fiets %d (totaal hoog %d)",
+                 r->body[0].count, r->thigh[0].count, r->shin[0].count, r->uarm[0].count, r->farm[0].count,
+                 r->car[0].count, r->carBody[3].count + r->carDetail[3].count, r->moto[1].count, r->bike[0].count, tv);
+    }
     BUILD(r->tracer, model_tracer(&m));
 #undef BUILD
     mb_free(&m);
@@ -350,35 +368,181 @@ static int sphere_visible(Renderer *r, float x, float y, float z, float rad, flo
 }
 
 /* pose: 0 lopen/staan, 1 fiets, 2 sprong */
-static void draw_char(Renderer *r, int v, M4 base, float walk, int pose, float lay, int armed) {
-    M4 bodyM, m;
-    float legA = sinf(walk) * 0.75f, armA = -sinf(walk) * 0.6f;
-    int k;
+/* ---- personages: houding met knieen en ellebogen (v3.0) ---- */
+
+typedef struct { float lean, bob, seatY, seatZ, th[2], kn[2], sh[2], el[2]; } CPose;   /* [0] = links (k=-1), [1] = rechts */
+
+static float g_animT;   /* speltijd, voor ademhalen in stilstand */
+
+static CPose pose_lerp(CPose a, CPose b, float t) {
+    CPose o;
+    int i;
+    o.lean = lerpf(a.lean, b.lean, t); o.bob = lerpf(a.bob, b.bob, t);
+    o.seatY = lerpf(a.seatY, b.seatY, t); o.seatZ = lerpf(a.seatZ, b.seatZ, t);
+    for (i = 0; i < 2; i++) {
+        o.th[i] = lerpf(a.th[i], b.th[i], t); o.kn[i] = lerpf(a.kn[i], b.kn[i], t);
+        o.sh[i] = lerpf(a.sh[i], b.sh[i], t); o.el[i] = lerpf(a.el[i], b.el[i], t);
+    }
+    return o;
+}
+
+/* lopen/rennen (speed in m/s), of stilstaan met ademhaling */
+static CPose pose_walk(float w, float speed, int idSeed) {
+    CPose p;
+    float run = clampf((speed - 2.6f) / 3.0f, 0, 1), mv = clampf(speed / 1.2f, 0, 1);
+    float A = lerpf(0.5f, 0.92f, run) * mv, K = lerpf(0.6f, 1.4f, run) * mv;
+    int i;
+    memset(&p, 0, sizeof(p));
+    for (i = 0; i < 2; i++) {
+        float ph = w + (i ? 0.0f : PI_F);
+        p.th[i] = A * sinf(ph) - 0.12f * run;
+        p.kn[i] = 0.06f + K * fmaxf(0.0f, -cosf(ph)) + 0.12f * run;
+        p.sh[i] = -A * 0.85f * sinf(ph);
+        p.el[i] = -(0.15f + 1.1f * run) - 0.15f * mv * fmaxf(0.0f, -sinf(ph));
+    }
+    p.lean = 0.2f * run + 0.03f * mv;
+    p.bob = -(0.025f + 0.04f * run) * fabsf(cosf(w)) * mv;
+    if (mv < 0.05f) {   /* stilstaan: rustig ademen, armen iets los */
+        float b = sinf(g_animT * 1.8f + idSeed * 1.7f);
+        p.sh[0] = 0.03f + 0.03f * b; p.sh[1] = 0.03f - 0.03f * b;
+        p.el[0] = p.el[1] = -0.12f - 0.03f * b;
+        p.bob = 0.006f * b;
+        p.kn[0] = p.kn[1] = 0.04f;
+    }
+    return p;
+}
+
+static CPose pose_air(void) {
+    CPose p;
+    memset(&p, 0, sizeof(p));
+    p.th[1] = -0.75f; p.kn[1] = 1.15f; p.th[0] = 0.25f; p.kn[0] = 0.55f;
+    p.sh[0] = p.sh[1] = -2.5f; p.el[0] = p.el[1] = -0.35f;
+    p.lean = 0.06f;
+    return p;
+}
+
+static CPose pose_ride(float pedal, int moto) {
+    CPose p;
+    int i;
+    memset(&p, 0, sizeof(p));
+    p.seatY = BIKE_SEAT_Y - HIP_Y + 0.02f;
+    p.seatZ = moto ? -0.38f : -0.24f;
+    p.lean = moto ? 0.42f : 0.38f;
+    for (i = 0; i < 2; i++) {
+        float ps = sinf(pedal + (i ? 0.0f : PI_F));
+        if (moto) { p.th[i] = -1.05f; p.kn[i] = 1.55f; }
+        else { p.th[i] = -1.25f + 0.45f * ps; p.kn[i] = 1.45f - 0.45f * ps; }
+        p.sh[i] = moto ? -1.15f : -1.1f;
+        p.el[i] = moto ? -0.45f : -0.3f;
+    }
+    return p;
+}
+
+static CPose pose_sit(void) {
+    CPose p;
+    int i;
+    memset(&p, 0, sizeof(p));
+    p.seatY = -0.38f;
+    p.lean = -0.12f;
+    for (i = 0; i < 2; i++) { p.th[i] = -1.45f; p.kn[i] = 1.45f; p.sh[i] = -0.9f; p.el[i] = -0.6f; }
+    return p;
+}
+
+static int near_cam(Renderer *r, const M4 *m, float d) {
+    float dx = m->m[12] - r->cam.x, dy = m->m[13] - r->cam.y, dz = m->m[14] - r->cam.z;
+    return dx * dx + dy * dy + dz * dz < d * d;
+}
+
+#define LOD_CHAR 34.0f
+#define LOD_VEH 48.0f
+
+static void draw_char_pose(Renderer *r, int v, M4 base, const CPose *p, float lay, int weapon) {
+    M4 seat, bodyM, m, m2;
+    int k, hi;
     v = ((v % CHAR_VARIANTS) + CHAR_VARIANTS) % CHAR_VARIANTS;
     if (lay > 0) base = m4_mul(base, m4_mul(m4_translate(0, 0.25f * lay, 0), m4_rot_x(-lay * 1.45f)));
-    if (pose == 1) {
-        base = m4_mul(base, m4_translate(0, BIKE_SEAT_Y - HIP_Y + 0.02f, -0.24f));
-        bodyM = m4_mul(base, m4_mul(m4_translate(0, HIP_Y, 0), m4_mul(m4_rot_x(0.38f), m4_translate(0, -HIP_Y, 0))));
-    } else bodyM = base;
-    draw_mesh(r, &r->body[v], &bodyM);
+    hi = near_cam(r, &base, LOD_CHAR);
+    seat = m4_mul(base, m4_translate(0, p->seatY + p->bob, p->seatZ));
+    bodyM = m4_mul(seat, m4_mul(m4_translate(0, HIP_Y, 0), m4_mul(m4_rot_x(p->lean), m4_translate(0, -HIP_Y, 0))));
+    draw_mesh(r, hi ? &r->body[v] : &r->bodyLo[v], &bodyM);
     for (k = -1; k <= 1; k += 2) {
-        float a;
-        if (pose == 1) a = -1.25f + sinf(walk + (k > 0 ? 0 : PI_F)) * 0.45f;
-        else if (pose == 2) a = k > 0 ? -0.7f : 0.2f;
-        else a = legA * k;
-        m = m4_mul(base, m4_mul(m4_translate(HIP_X * k, HIP_Y, 0), m4_rot_x(a)));
-        draw_mesh(r, &r->leg[v], &m);
+        int i = k > 0;
+        float th = p->th[i], kn = p->kn[i];
+        if (lay > 0) { th = lerpf(th, 0.1f * k, clampf(lay, 0, 1)); kn = lerpf(kn, 0.15f, clampf(lay, 0, 1)); }
+        m = m4_mul(seat, m4_mul(m4_translate(HIP_X * k, HIP_Y, 0), m4_rot_x(th)));
+        if (hi) {
+            draw_mesh(r, &r->thigh[v], &m);
+            m2 = m4_mul(m, m4_mul(m4_translate(0, -KNEE_Y, 0), m4_rot_x(kn)));
+            draw_mesh(r, &r->shin[v], &m2);
+        } else draw_mesh(r, &r->leg[v], &m);
     }
     for (k = -1; k <= 1; k += 2) {
-        float a;
-        if (pose == 1) a = -1.15f;
-        else if (pose == 2) a = -2.6f;
-        else a = armA * k;
-        if (armed && k < 0 && lay <= 0) a = -1.5f;   /* rechterarm naar voren: wapen richten */
-        m = m4_mul(bodyM, m4_mul(m4_translate(SHOULDER_X * k, SHOULDER_Y, 0), m4_mul(m4_rot_z(k * 0.06f), m4_rot_x(a))));
-        draw_mesh(r, &r->arm[v], &m);
-        if (armed && k < 0) draw_mesh(r, &r->gun, &m);
+        int i = k > 0;
+        float sh = p->sh[i], el = p->el[i];
+        if (weapon && k < 0 && lay <= 0) { sh = -1.5f; el = 0; }   /* rechterarm gestrekt naar voren: richten */
+        if (lay > 0) { sh = lerpf(sh, -0.3f * k, clampf(lay, 0, 1)); el = lerpf(el, -0.2f, clampf(lay, 0, 1)); }
+        m = m4_mul(bodyM, m4_mul(m4_translate(SHOULDER_X * k, SHOULDER_Y, 0), m4_mul(m4_rot_z(k * 0.06f), m4_rot_x(sh))));
+        if (hi) {
+            draw_mesh(r, &r->uarm[v], &m);
+            m2 = m4_mul(m, m4_mul(m4_translate(0, -ELBOW_Y, 0), m4_rot_x(el)));
+            draw_mesh(r, &r->farm[v], &m2);
+            if (weapon && k < 0) draw_mesh(r, &r->weapon[weapon % WP_COUNT], &m);
+        } else {
+            draw_mesh(r, &r->arm[v], &m);
+            if (weapon && k < 0) draw_mesh(r, &r->gun, &m);
+        }
     }
+}
+
+/* pose: 0 lopen/staan, 1 fietsen, 2 in de lucht/opzij springen, 3 motorrijden */
+static void draw_char(Renderer *r, int v, M4 base, float walk, int pose, float lay, int weapon, float speed) {
+    CPose p;
+    if (pose == 1) p = pose_ride(walk, 0);
+    else if (pose == 3) p = pose_ride(0, 1);
+    else if (pose == 2) p = pose_air();
+    else p = pose_walk(walk, speed, v);
+    draw_char_pose(r, v, base, &p, lay, weapon);
+}
+
+/* in- en uitstappen van de speler: lopen naar de deur/het zadel en gaan zitten (of andersom) */
+static void draw_player_transition(Renderer *r, Game *g) {
+    const Player *pl = &g->p;
+    const Vehicle *v = &g->veh[pl->anVeh];
+    int entering = pl->anKind <= 2, bike = pl->anKind == 2 || pl->anKind == 4;
+    int moto = bike && v->custom && IS_MOTO(v->model);
+    float k = clampf(1.0f - pl->anT / (pl->anDur > 0 ? pl->anDur : 0.5f), 0, 1);
+    float e = entering ? k : 1.0f - k;   /* 0 = buiten staan, 1 = zitten */
+    V3 rr = right_of(v->h);   /* uitstappen gaat naar -rechts (zie exit_vehicle) */
+    float ox = entering ? pl->anX : pl->x, oz = entering ? pl->anZ : pl->z;
+    float side = bike ? 0.55f : 1.15f;
+    float dx = v->x - rr.x * side, dz = v->z - rr.z * side;   /* deur / naast het zadel */
+    float sx = bike ? v->x : v->x - rr.x * 0.38f, sz = bike ? v->z : v->z - rr.z * 0.38f;
+    float x, z, h, y, split = bike ? 0.35f : 0.5f;
+    CPose p;
+    M4 m;
+    if (e < split) {
+        float t = e / split;
+        x = lerpf(ox, dx, t); z = lerpf(oz, dz, t);
+        h = atan2f(dx - ox, dz - oz);
+        if ((dx - ox) * (dx - ox) + (dz - oz) * (dz - oz) < 0.04f) h = v->h;
+        p = pose_walk(t * 6.0f, 2.0f, 0);
+    } else {
+        float t = (e - split) / (1.0f - split), ts = t * t * (3 - 2 * t);
+        x = lerpf(dx, sx, ts); z = lerpf(dz, sz, ts);
+        h = v->h;
+        if (bike) {
+            p = pose_lerp(pose_walk(0, 0, 0), pose_ride(0, moto), ts);
+            p.th[1] -= sinf(t * PI_F) * 1.3f;   /* been over het zadel zwaaien */
+            p.kn[1] += sinf(t * PI_F) * 0.6f;
+        } else {
+            p = pose_lerp(pose_walk(0, 0, 0), pose_sit(), ts);
+            p.lean += sinf(t * PI_F) * 0.35f;     /* bukken om in te stappen */
+        }
+    }
+    y = v->y;
+    m = m4_trs_y(x, y, z, h);
+    if (bike) m = m4_mul(m, m4_rot_z(v->lean * clampf((e - split) / (1.0f - split), 0, 1)));
+    draw_char_pose(r, 0, m, &p, 0, 0);
 }
 
 static void draw_shadow(Renderer *r, float x, float y, float z, float sx, float sz, float h) {
@@ -396,6 +560,7 @@ void r_draw_scene(Renderer *r, Game *g) {
     int nsh = 0;
 
     r->drawnChunks = 0; r->drawnTris = 0;
+    g_animT = g->time;
     r->cam = g->camPos;
     r->proj = m4_perspective(58.0f * PI_F / 180.0f, aspect, 0.3f, g->drawDist + 40.0f);
     r->view = m4_lookat(g->camPos, g->camTarget, v3(0, 1, 0));
@@ -490,28 +655,32 @@ void r_draw_scene(Renderer *r, Game *g) {
         m = m4_trs_y(v->x, v->y, v->z, v->h);
         if (v->type == VEH_BIKE) {
             m = m4_mul(m, m4_rot_z(v->lean));
+            int rider = i == g->p.veh && !(g->p.anT > 0 && g->p.anKind == 2);
+            int hiV = near_cam(r, &m, LOD_VEH);
             if (v->custom && IS_MOTO(v->model)) {
-                draw_mesh(r, &r->moto[(v->model - CAR_MODELS) % MOTO_MODELS], &m);
-                if (i == g->p.veh) draw_char(r, 0, m, 0, 1, 0, 0);   /* motor: niet trappen */
+                int k = (v->model - CAR_MODELS) % MOTO_MODELS;
+                draw_mesh(r, hiV ? &r->moto[k] : &r->motoLo[k], &m);
+                if (rider) draw_char(r, 0, m, 0, 3, 0, 0, 0);   /* motor: niet trappen */
             } else {
-                draw_mesh(r, &r->bike[v->variant % BIKE_VARIANTS], &m);
-                if (i == g->p.veh) draw_char(r, 0, m, g->p.anim * 2.0f, 1, 0, 0);
+                draw_mesh(r, hiV ? &r->bike[v->variant % BIKE_VARIANTS] : &r->bikeLo[v->variant % BIKE_VARIANTS], &m);
+                if (rider) draw_char(r, 0, m, g->p.anim * 2.0f, 1, 0, 0, 0);
             }
         } else {
+            int hiV = near_cam(r, &m, LOD_VEH);
             if (v->custom) {
                 Col pc = paint_color(v->paint);
                 tint(r, pc.r / 255.0f, pc.g / 255.0f, pc.b / 255.0f);
-                draw_mesh(r, &r->carBody[v->model % CAR_MODELS], &m);
+                draw_mesh(r, hiV ? &r->carBody[v->model % CAR_MODELS] : &r->carBodyLo[v->model % CAR_MODELS], &m);
                 if (v->spoiler && v->model != 3) {
                     M4 sm = m4_mul(m, m4_translate(0, v->model == 2 ? 0.72f - 0.0f : 0.95f, v->model == 0 ? -1.85f : -2.0f));
                     sm = m4_mul(sm, m4_scale(1, v->model == 0 ? 0.35f : 0.3f, 1));
                     draw_mesh(r, &r->spoiler, &sm);
                 }
                 tint(r, 1, 1, 1);
-                draw_mesh(r, &r->carDetail[v->model % CAR_MODELS], &m);
+                draw_mesh(r, hiV ? &r->carDetail[v->model % CAR_MODELS] : &r->carDetailLo[v->model % CAR_MODELS], &m);
             } else {
                 if (v->wrecked) tint(r, 0.3f, 0.3f, 0.32f);
-                draw_mesh(r, &r->car[v->variant % CAR_VARIANTS], &m);
+                draw_mesh(r, hiV ? &r->car[v->variant % CAR_VARIANTS] : &r->carLo[v->variant % CAR_VARIANTS], &m);
                 if (v->wrecked) tint(r, 1, 1, 1);
             }
             if (v->police && !v->wrecked) {
@@ -543,7 +712,8 @@ void r_draw_scene(Renderer *r, Game *g) {
         if (!p->active) continue;
         if (!sphere_visible(r, p->x, p->y + 1.0f, p->z, 1.2f, fogEnd * 0.8f)) continue;
         m = m4_trs_y(p->x, p->y, p->z, p->h);
-        draw_char(r, p->variant, m, p->state == PED_IDLE ? 0 : p->anim, p->state == PED_DODGE ? 2 : 0, p->lay, p->cop);
+        draw_char(r, p->variant, m, p->state == PED_IDLE ? 0 : p->anim, p->state == PED_DODGE ? 2 : 0, p->lay, p->cop ? WP_PISTOL : 0,
+                  p->state == PED_IDLE ? 0 : fabsf(p->speed));
         if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
             shadows[nsh] = v3(p->x, p->y, p->z); shs[nsh][0] = 0.45f; shs[nsh][1] = 0.45f; shs[nsh][2] = 0; nsh++;
         }
@@ -567,13 +737,13 @@ void r_draw_scene(Renderer *r, Game *g) {
         } else if (rp->mode == 1) {
             if (rp->vcustom && IS_MOTO(rp->vmodel)) {
                 draw_mesh(r, &r->moto[(rp->vmodel - CAR_MODELS) % MOTO_MODELS], &m);
-                draw_char(r, shirt[rp->id & 3], m, 0, 1, 0, 0);
+                draw_char(r, shirt[rp->id & 3], m, 0, 3, 0, 0, 0);
             } else {
                 draw_mesh(r, &r->bike[rp->vvariant % BIKE_VARIANTS], &m);
-                draw_char(r, shirt[rp->id & 3], m, rp->animLocal * 2.0f, 1, 0, 0);
+                draw_char(r, shirt[rp->id & 3], m, rp->animLocal * 2.0f, 1, 0, 0, 0);
             }
         } else {
-            draw_char(r, shirt[rp->id & 3], m, fabsf(rp->speed) > 0.2f ? rp->animLocal : 0, 0, rp->health <= 0 ? 1.0f : 0, rp->weapon != WP_NONE);
+            draw_char(r, shirt[rp->id & 3], m, rp->animLocal, 0, rp->health <= 0 ? 1.0f : 0, rp->weapon % WP_COUNT, fabsf(rp->speed));
         }
         if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
             shadows[nsh] = v3(rp->x, rp->y, rp->z);
@@ -582,10 +752,12 @@ void r_draw_scene(Renderer *r, Game *g) {
         }
     }
     /* speler te voet */
-    if (mode == MODE_FOOT) {
+    if (g->p.anT > 0 && g->p.anKind > 0 && g->p.anVeh >= 0 && g->p.anVeh < g->nveh && g->veh[g->p.anVeh].active) {
+        draw_player_transition(r, g);
+    } else if (mode == MODE_FOOT) {
         M4 m = m4_trs_y(g->p.x, g->p.y, g->p.z, g->p.h);
         float ground = world_ground_y(g->w, g->p.x, g->p.z);
-        draw_char(r, 0, m, g->p.speed > 0.2f ? g->p.anim : 0, g->p.onGround ? 0 : 2, 0, g->weapon != WP_NONE);
+        draw_char(r, 0, m, g->p.anim, g->p.onGround ? 0 : 2, 0, g->weapon % WP_COUNT, g->p.onGround ? fabsf(g->p.speed) : 0);
         if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
             float s = clampf(0.5f - (g->p.y - ground) * 0.15f, 0.2f, 0.5f);
             shadows[nsh] = v3(g->p.x, ground, g->p.z); shs[nsh][0] = s; shs[nsh][1] = s; shs[nsh][2] = 0; nsh++;

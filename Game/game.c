@@ -477,6 +477,10 @@ static void enter_vehicle(Game *g, int idx) {
         game_add_wanted(g, 1);
         game_message(g, "Car stolen! The police are coming...", 2.5f);
     }
+    g->p.anX = g->p.x; g->p.anZ = g->p.z; g->p.anH = g->p.h;
+    g->p.anKind = v->type == VEH_BIKE ? 2 : 1;
+    g->p.anDur = g->p.anT = v->type == VEH_BIKE ? 0.5f : 0.7f;
+    g->p.anVeh = idx;
     g->p.veh = idx;
     g->p.speed = 0;
     g->p.vy = 0;
@@ -497,6 +501,10 @@ static void exit_vehicle(Game *g) {
     world_push_circle(g->w, &g->p.x, &g->p.z, 0.35f, g->p.y, &nx, &nz);
     v->speed = 0;
     v->steer = 0;
+    g->p.anX = v->x; g->p.anZ = v->z; g->p.anH = v->h;
+    g->p.anKind = v->type == VEH_BIKE ? 4 : 3;
+    g->p.anDur = g->p.anT = v->type == VEH_BIKE ? 0.45f : 0.6f;
+    g->p.anVeh = g->p.veh;
     g->p.veh = -1;
     g->p.cool = 0.5f;
     game_sfx(g, SFX_DOOR, v->x, v->z);
@@ -1706,6 +1714,7 @@ void game_update(Game *g, const Input *in, float dt) {
     if (dt > 0.1f) dt = 0.1f;
     g->time += dt;
     if (g->p.cool > 0) g->p.cool -= dt;
+    if (g->p.anT > 0) { g->p.anT -= dt; if (g->p.anT <= 0) { g->p.anT = 0; g->p.anKind = 0; } }
     if (g->msgT > 0) g->msgT -= dt;
     if (g->bannerT > 0) g->bannerT -= dt;
     if (g->moneyFlash > 0) g->moneyFlash -= dt;
@@ -1729,6 +1738,10 @@ void game_update(Game *g, const Input *in, float dt) {
         drive_vehicle(g, v, thr, brk, clampf(in->mx * 1.15f, -1, 1), dt);
         g->p.x = v->x; g->p.z = v->z; g->p.y = v->y; g->p.h = v->h;
         g->p.anim += fabsf(v->speed) * dt * 1.2f;
+    } else if (g->p.anT > 0 && g->p.anKind >= 3) {
+        Input still = *in;   /* even stilstaan tijdens het uitstappen */
+        still.mx = still.my = 0; still.jumpPressed = still.jump = 0; still.fire = 0;
+        update_player_foot(g, &still, dt);
     } else {
         update_player_foot(g, in, dt);
     }

@@ -289,6 +289,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: VERSION
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@v4
         with:
           path: art
@@ -299,7 +304,9 @@ jobs:
           MSG: ${{ github.event.head_commit.message }}
         run: |
           ls -R art
-          TAG="v1.2.${{ github.run_number }}"
+          VER="$(cat VERSION 2>/dev/null || echo 1.2)"
+          TAG="v$VER"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then TAG="v$VER-build.${{ github.run_number }}"; fi
           printf 'Automatische build van main (%s).\n\n%s\n\nBestanden:\n- iPad (iOS 9, armv7): SmallGiveawayBike1.ipa of de .deb\n- Windows (x64): SmallGiveawayBike1-Windows.zip\n- Linux (x64): SmallGiveawayBike1-Linux.tar.gz\n' "${GITHUB_SHA:0:7}" "$MSG" > notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Small Giveaway Bike 1 $TAG" --notes-file notes.md --latest \

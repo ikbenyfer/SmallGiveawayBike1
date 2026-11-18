@@ -63,6 +63,9 @@ typedef struct {
     float x, z, y, vy, h, anim, speed;
     int onGround, veh;
     float cool, hitCool;
+    /* v3.0 animatie in-/uitstappen (alleen beeld): 1 auto in, 2 fiets/motor op, 3 auto uit, 4 fiets/motor af */
+    float anT, anDur, anX, anZ, anH;
+    int anKind, anVeh;
 } Player;
 
 typedef struct { float x, z, r; int need; const char *text; float hold; int alarm, clean; } Checkpoint;

@@ -56,4 +56,33 @@ void mb_flat(MeshB *m, float x0, float z0, float x1, float z1, float y, Col c);
 /* Schijf (plat, naar boven) */
 void mb_disc(MeshB *m, V3 c, float r, int seg, Col col0);
 
+/* ---- gladde vormen (v3.0): eigen normaal per hoekpunt, dus zacht belicht in plaats van blokkig ---- */
+
+/* Driehoek met normaal per hoek (de draairichting volgt de gemiddelde normaal). */
+void mb_tri_n(MeshB *m, V3 a, V3 b, V3 c, V3 na, V3 nb, V3 nc, Col ca, Col cb, Col cc);
+
+/* Superellipsoide: van bol (round 1) tot afgerond blok (round ~0.15).
+ * c = midden, h = halve maten. Taper: x/z-schaal onderaan (bx,bz) en bovenaan (tx,tz).
+ * shear: z-verschuiving bovenaan (+) en onderaan (-). part: 0 heel, 1 alleen bovenhelft, -1 onderhelft. */
+typedef struct {
+    V3 c, h;
+    float roundV, roundH;
+    int su, sv;
+    float bx, bz, tx, tz, shear;
+    int part;
+    Col col;
+} SQ;
+SQ sq(V3 c, V3 h, float roundV, float roundH, Col col);   /* standaard 16x10 segmenten, geen taper */
+void mb_sq(MeshB *m, const SQ *s);
+
+/* Ronde buis van a naar b (straal ra -> rb): capsule met bolle uiteinden, of open buis. */
+void mb_capsule(MeshB *m, V3 a, V3 b, float ra, float rb, int seg, Col c);
+void mb_rtube(MeshB *m, V3 a, V3 b, float ra, float rb, int seg, Col c);
+
+/* Draaivorm: profiel (straal r[i], positie d[i] langs de as) rond as (0=x, 1=y, 2=z) door c. */
+void mb_lathe(MeshB *m, V3 c, int axis, const float *r, const float *d, const Col *cols, int n, int seg);
+
+/* Wiel langs de x-as: afgeronde band, velg, optioneel spaken. */
+void mb_wheel(MeshB *m, V3 c, float r, float width, Col tire, Col rim, int spokes);
+
 #endif
