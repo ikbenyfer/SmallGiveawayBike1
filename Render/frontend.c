@@ -43,6 +43,7 @@ static struct {
     float fpsAcc, fps, worst, worstShown;
     int fpsFrames;
     float perfT;
+    int lastDC;
     long savedMoney; int savedDone;
     /* stof */
     float dust[40][4];
@@ -742,7 +743,7 @@ static void near_vehicle_tp(int idx) {
 static char pendingShot[48];
 static void at_shot(const char *name) {
     snprintf(pendingShot, sizeof(pendingShot), "%s", name);
-    rep("screenshot %s (t=%.1f, modus=%d, dc=%d, tris=%d)", name, F.atT, game_mode(&F.G), F.R.drawCalls, F.R.drawnTris);
+    rep("screenshot %s (t=%.1f, modus=%d, dc=%d, tris=%d)", name, F.atT, game_mode(&F.G), F.lastDC, F.R.drawnTris);
 }
 
 /* script: per stap een tijd; geeft invoer voor dit frame */
@@ -894,7 +895,7 @@ static void autotest_tick(float dt) {
         s->frames++;
         s->time += dt;
         if (dt > s->worst && s->frames > 3) s->worst = dt;
-        s->dc += F.R.drawCalls;
+        s->dc += F.lastDC;
         s->tris += F.R.drawnTris;
     }
 }
@@ -990,6 +991,7 @@ void fe_frame(double now) {
         break;
     default: break;
     }
+    F.lastDC = R->drawCalls;
     if (pendingShot[0]) {
         plat_screenshot(pendingShot, R->W, R->H);
         pendingShot[0] = 0;
