@@ -35,7 +35,7 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
 - **11 missies**: je start ze via de gele markers in de stad, of via het **missiekeuzescherm** (MISSIONS in het hoofdmenu of het pauzemenu). Daar sta je meteen op de goede plek en zit je zo nodig al op een fiets of in een auto:
   Welcome Ride ($100), Pizza Panic ($250), Street Sprint ($300), Joyride Return ($400), The Big Giveaway ($750), Park Run (te voet, $200), Taxi Rush ($350), Alley Shortcut ($350), Cop Dodge ($400) en Grand Tour ($500).
   Speel je een missie opnieuw, dan krijg je de halve beloning.
-- **Politie en sterren**: rijd je iemand aan of steel je een auto uit het verkeer, dan krijg je een ster (maximaal 3). Per ster komt er een politieauto met zwaailicht achter je aan, die ook op de minimap staat. Blijf 10 seconden ver weg van de politie, dan verlies je een ster. Sta je stil naast de politie, dan word je **BUSTED**: je betaalt een boete (10% van je geld, minstens $50) en begint opnieuw op het plein.
+- **Politie en sterren**: rijd je iemand aan of steel je een auto uit het verkeer, dan krijg je een ster (maximaal 3). Per ster komt er een politieauto met zwaailicht achter je aan, die ook op de minimap staat. Blijf 10 seconden ver weg van de politie, dan verlies je een ster. Sta je ongewapend (of in een auto) stil naast de politie, dan word je **BUSTED**. Met een wapen in de hand arresteren ze je niet, maar schieten ze: je betaalt een boete (10% van je geld, minstens $50) en begint opnieuw op het plein.
 - **Health bar** onder je geld. Je verliest health door harde botsingen, door aangereden te worden en als de politie je ramt. Na 5 seconden zonder schade herstelt je health vanzelf. Is je health op, dan ben je **KNOCKED OUT** en begin je opnieuw op het plein.
 - **PEGI 18: wapens en een bankoverval.** Alles in dezelfde blokkerige stijl, zonder bloed. Wie geraakt wordt, valt om.
   - **BLOCK ARMS** (rode marker, in de winkelstraat naast het plein): loop naar binnen en je kunt kopen:
@@ -55,6 +55,28 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
   - **Missie 11: THE BIG HEIST** ($5000, je hebt een wapen nodig):
     1. Ga naar de kluisdeur achter de bank en blijf 15 seconden staan terwijl de kluis wordt opengeboord. Bovenin zie je een balk. Het alarm gaat meteen af, met 3 sterren, en de politie komt, ook te voet.
     2. Schud de politie af en breng het geld naar de garage, je schuilplaats.
+- **Auto's kopen en tunen.**
+  - **GIVEAWAY MOTORS** is een autodealer met een oranje marker. Hij staat op het terrein links van de winkelstraat, met 3 auto's in de etalage. Loop erin en je kunt kopen:
+
+    | Auto | Prijs | Topsnelheid |
+    |---|---|---|
+    | CITY HATCH | $1.500 | 68 km/h |
+    | RHINO V8 (muscle car) | $6.000 | 90 km/h |
+    | VORTEX GT (sportwagen) | $9.000 | 100 km/h |
+    | BOLT X (supercar) | $20.000 | 122 km/h |
+
+    Gekochte auto's zijn van jou. Ze worden bewaard en staan op het terrein van de dealer. Er passen maximaal 4 in je garage.
+  - **BLOCK CUSTOMS** heeft een blauwe marker en is de linker deur van de garage bij het tankstation. Rijd er langzaam in met een auto en je kunt aanpassen:
+
+    | Onderdeel | Prijs | Wat het doet |
+    |---|---|---|
+    | Lak | $200 | 10 kleuren |
+    | Motor | $1.000 / $2.500 / $5.000 (3 niveaus) | +8% topsnelheid en +15% acceleratie per niveau |
+    | Handling | $800 / $1.600 / $3.200 (3 niveaus) | beter sturen en remmen |
+    | Neon onder de auto | $500 | 5 kleuren |
+    | Spoiler | $400 | |
+
+    Op je eigen auto blijft alles bewaard. In de test haalde de BOLT X 123 km/h, en na de motor op niveau 3 153 km/h.
 - **REAL NL (aparte modus, knop in het hoofdmenu):** rijd door het echte Nederland.
   - **Ingebouwd en offline: heel Heemskerk en Beverwijk**, inclusief Wijk aan Zee, de duinen en het strand. Dat zijn 58.107 gebouwen met hun echte hoogte (3D BAG), alle wegen met straatnamen, water, groen en 1.897 postcodes, samen maar 2 MB in de app (`Resources/nl_hb.pak`). Je start via de knoppen rechts (Beverwijk centrum, de stations, Heemskerk centrum, Wijk aan Zee, de Bazaar) of je typt een postcode uit die gemeentes. Daar is geen internet voor nodig.
   - **Streaming terwijl je rijdt:** de wereld bestaat uit tegels van 250 √ó 250 m. Rondom je liggen er altijd 3 √ó 3 klaar. Komt er een nieuwe tegel in beeld, dan laadt een achtergrond-thread die, zodat het spel niet hapert. Binnen Heemskerk/Beverwijk komt de tegel uit de ingebouwde kaart. Daarbuiten komt hij uit je downloads, of anders van internet (3D BAG en PDOK), en wordt hij daarna bewaard. Zonder internet zie je buiten de regio "NO MAP DATA HERE".
