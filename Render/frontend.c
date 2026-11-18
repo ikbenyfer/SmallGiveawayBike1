@@ -124,7 +124,22 @@ static void rep(const char *fmt, ...) {
 }
 
 static void ui_star(float cx, float cy, float rad, float cr, float cg, float cb, float ca);
-static void set_state(int s) { F.prevState = F.state; F.state = s; F.st = 0; F.pressed = 0; }
+/* Alle besturing loslaten (sticks terug, knoppen los). Nodig als er een menu opengaat terwijl je
+ * de joystick vasthoudt: het loslaten komt dan bij het menu binnen en de stick zou blijven hangen. */
+static void reset_controls(void) {
+    int i;
+    for (i = 0; i < NTOUCH; i++) if (F.ts[i].used) F.ts[i].ctl = CTL_UI;
+    F.lOn = F.rOn = 0;
+    F.lbx = 150; F.lby = F.R.H - 150.0f;
+    F.rbx = F.R.W - 170.0f; F.rby = F.R.H - 150.0f;
+    F.jumpEdge = F.actionEdge = F.switchEdge = 0;
+    memset(&F.in, 0, sizeof(F.in));
+}
+
+static void set_state(int s) {
+    if (s != F.state && (F.state == ST_GAME || s != ST_GAME)) reset_controls();
+    F.prevState = F.state; F.state = s; F.st = 0; F.pressed = 0;
+}
 
 static void apply_settings(void) {
     static const float sens[3] = {0.6f, 1.0f, 1.5f};
