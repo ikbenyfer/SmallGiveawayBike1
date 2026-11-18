@@ -453,7 +453,7 @@ static void raster_poly(BCtx *b, const float *x, const float *z, int n, int r, i
             if (x1 >= R) x1 = R - 1;
             for (px = x0; px <= x1; px++) {
                 uint8_t *p = &img[(y * R + px) * 4];
-                p[0] = (uint8_t)r; p[1] = (uint8_t)g; p[2] = (uint8_t)bl; p[3] = 235;
+                p[0] = (uint8_t)r; p[1] = (uint8_t)g; p[2] = (uint8_t)bl; p[3] = 255;
             }
         }
     }
@@ -474,7 +474,7 @@ static void raster_line(BCtx *b, float x0, float z0, float x1, float z1, float w
                 uint8_t *p;
                 if (ix < 0 || iz < 0 || ix >= R || iz >= R || dx * dx + dz * dz > rad * rad + 0.25f) continue;
                 p = &b->tb->raster[(iz * R + ix) * 4];
-                p[0] = (uint8_t)r; p[1] = (uint8_t)g; p[2] = (uint8_t)bl; p[3] = 235;
+                p[0] = (uint8_t)r; p[1] = (uint8_t)g; p[2] = (uint8_t)bl; p[3] = 255;
             }
     }
 }
@@ -639,7 +639,7 @@ void tb_build(const TileData *td, float wx0, float wzS, TileBuilt *out) {
     b.wzN = wzS - TILE_M;
     out->raster = (uint8_t *)malloc(TILE_RASTER * TILE_RASTER * 4);
     for (i = 0; i < TILE_RASTER * TILE_RASTER; i++) {
-        out->raster[i * 4] = 128; out->raster[i * 4 + 1] = 136; out->raster[i * 4 + 2] = 116; out->raster[i * 4 + 3] = 235;
+        out->raster[i * 4] = 128; out->raster[i * 4 + 1] = 136; out->raster[i * 4 + 2] = 116; out->raster[i * 4 + 3] = 255;
     }
     for (i = 0; i < td->nt; i++) {
         int n = to_world(&b, &td->t[i], 1);

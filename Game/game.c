@@ -1084,7 +1084,7 @@ void game_update(Game *g, const Input *in, float dt) {
         update_player_foot(g, in, dt);
     }
 
-    if (g->nl) {   /* niet van de echte kaart af */
+    if (g->nl && g->w->realSize > 0) {   /* niet van de echte kaart af (alleen bij een vaste kaart) */
         float lo = -30.0f, hi = g->w->realSize + 30.0f;
         if (g->p.veh >= 0) {
             Vehicle *v = &g->veh[g->p.veh];

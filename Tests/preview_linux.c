@@ -108,7 +108,7 @@ long plat_memory_kb(void) {
 }
 
 /* netwerk: synchroon via curl (alleen voor de CI-test) */
-static struct { char *data; long len; int ok; } NET[64];
+static struct { char *data; long len; int ok; } NET[8192];
 static int netn;
 
 int plat_http_start(const char *url) {
@@ -117,7 +117,7 @@ int plat_http_start(const char *url) {
     char *buf = NULL;
     long len = 0, cap = 0;
     int id;
-    if (netn >= 63) return -1;
+    if (netn >= 8191) return -1;
     id = ++netn;
     snprintf(cmd, sizeof(cmd), "curl -s -f -m 90 -A SGB-CI '%s'", url);
     p = popen(cmd, "r");
