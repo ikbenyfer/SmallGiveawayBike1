@@ -8,3 +8,6 @@ device_results/shots_tmp/
 /*.ipa
 build-ipa/
 tools/cache/
+device_results/
+device_log_console.txt
+tools/*.log
