@@ -5,7 +5,7 @@ De game is geschreven in C en Objective-C met **OpenGL ES 2.0** (GLKit). Hij wer
 
 > **Status (18-11-2026):**
 > - **Versie 1** (stad, fiets, auto, 5 missies, menu) is op de echte iPad 2 getest met de automatische test. Resultaat: **stabiel 30 FPS** op laag, midden en hoog, laden in 0,3 s, 21-31 MB geheugen, geen crash. Zie de tabel onderaan.
-> - **Versie 2** voegt politie, sterren, een health bar, 10 missies en een missiekeuzescherm toe. Die versie is gebouwd en slaagt voor de Linux-test, maar is **nog niet op de iPad getest**.
+> - **Versie 2** voegt politie, sterren, een health bar, 10 missies en een missiekeuzescherm toe. Hij voegt ook de **REAL NL-modus** toe: je typt een postcode en rijdt dan door de echte straten met de echte gebouwen. Deze versie is gebouwd en slaagt voor de Linux-test, maar is **nog niet op de iPad getest**. Vooral of het downloaden op iOS 9 lukt, moet de iPad nog laten zien.
 
 ## Bestanden
 | Wat | Waar |
@@ -37,6 +37,18 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph�
   Speel je een missie opnieuw, dan krijg je de halve beloning.
 - **Politie en sterren**: rijd je iemand aan of steel je een auto uit het verkeer, dan krijg je een ster (maximaal 3). Per ster komt er een politieauto met zwaailicht achter je aan, die ook op de minimap staat. Blijf 10 seconden ver weg van de politie, dan verlies je een ster. Sta je stil naast de politie, dan word je **BUSTED**: je betaalt een boete (10% van je geld, minstens $50) en begint opnieuw op het plein.
 - **Health bar** onder je geld. Je verliest health door harde botsingen, door aangereden te worden en als de politie je ramt. Na 5 seconden zonder schade herstelt je health vanzelf. Is je health op, dan ben je **KNOCKED OUT** en begin je opnieuw op het plein.
+- **REAL NL (aparte modus, knop in het hoofdmenu):** typ een Nederlandse postcode op het eigen toetsenbord, bijvoorbeeld 1012 JS. De app haalt dan een gebied van 500 × 500 m rond die postcode op:
+  - **Gebouwen met hun echte hoogte** uit de 3D BAG (TU Delft/3DGI, LoD 1.2).
+  - **Straten met straatnamen, water en landgebruik** uit PDOK TOP10NL (Kadaster). Fietspaden zijn rood.
+  - De postcode wordt opgezocht via de PDOK Locatieserver.
+
+  Je loopt, fietst of rijdt erdoorheen. Bovenaan zie je de straat waar je bent, en de minimap is gemaakt uit dezelfde data. Er zijn hier geen missies, politie of verkeer: het is vrij rondrijden.
+
+  De eerste keer heb je **Wi-Fi** nodig. Daarna staat het gebied op de iPad, in `Documents/nl/`, en werkt het ook offline. Onder RECENT staan de laatste 5 postcodes.
+
+  iOS 9 vertrouwt het certificaat van de 3D BAG-server niet zelf, omdat het de nieuwere Let's Encrypt-root niet kent. Daarom zitten de officiële rootcertificaten in de app: ISRG Root X1/X2 en DigiCert Global Root G2, met gecontroleerde SHA-256-vingerafdruk. Ze worden alleen als **extra** vertrouwensanker gebruikt. De systeemcontrole en de hostnaamcontrole blijven gewoon aan. Lukt de 3D BAG toch niet, dan valt de app terug op BAG-plattegronden van PDOK met **geschatte** hoogtes. Dat zie je dan ook in beeld staan.
+
+  Bronvermelding: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, via PDOK). Alles valt onder CC BY 4.0.
 - **Geld** verdien je met missies en met 18 stapels geld op de stoep, die na 2 minuten terugkomen. Je geld en je voortgang worden bewaard.
 - **Minimap** linksboven. Die draait mee met de camera en toont missiepunten en fietsen.
 - **Besturing:** een linker joystick om te bewegen of te sturen, een rechter joystick voor de camera, en de knoppen JUMP, RIDE/DRIVE/EXIT, GAS en BRAKE.
@@ -62,7 +74,9 @@ In de Linux-test tekent een frame **ongeveer 50-90 draw calls en 11-26 duizend d
 Verder: laden 0,3 s, geheugen ongeveer 21-31 MB, geen crash. In-, uitstappen en springen werkten. Screenshots staan in `device_results/`.
 Wat er na de iPad-test is aangepast: muren aan de schaduwkant waren bijna zwart, dus er is meer omgevingslicht. **De touch-besturing met je vingers is nog niet door een mens getest.**
 
-**Linux-CI (Mesa, geen iPad), versie 2:** alles compileert zonder waarschuwingen en AddressSanitizer vindt niets. De autotest doorloopt:
+**Linux-CI (Mesa, geen iPad), versie 2:** alles compileert zonder waarschuwingen en AddressSanitizer vindt niets. De autotest doorloopt onder meer de REAL NL-modus met postcode 1012JS: dat geeft 703 gebouwen met echte hoogtes (de hoogste is 35 m), 179 wegen en grachten, laden en bouwen in 2,7 s, en tijdens het rijden de straatnaam "Warmoesstraat". Het gebied heeft wel ongeveer 290 duizend vertices, veel meer dan de verzonnen stad. Of de iPad 2 dat op 30 FPS haalt, moet de iPad-test nog uitwijzen.
+
+Verder doorloopt de autotest:
 - lopen, fiets en auto, en missie 1 (gehaald)
 - 2 sterren: er komen 2 politieauto's
 - schade: health gaat van 100 naar 70
