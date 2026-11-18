@@ -1,7 +1,23 @@
+#define _POSIX_C_SOURCE 200809L
 #include "frontend.h"
 #include "render.h"
 #include "../Game/nlmap.h"
 #include <stdlib.h>
+
+#define NL_MAX_AREAS 64
+
+typedef struct {
+    char pc[8];
+    int active, step, err, bagPdok, keep;
+    int req[6], done[6], cached[6];
+    char *buf[6]; long len[6];
+    NLGeo geo;
+    char msg[128];
+    double t0;
+    long bytes;
+} NLJob;
+
+typedef struct { char pc[8]; char name[96]; long kb; int heights; } NLArea;
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -51,18 +67,15 @@ static struct {
     Game Gcity;
     World WNL;
     char pcIn[8]; int pcLen;
-    char nlPc[8];
-    int nlStep, nlErr, nlBagPdok, nlFrom, nlInFrom;
-    char nlErrMsg[128];
-    char nlStatus[6][110];
-    int nlReq[6], nlDone[6], nlCached[6];
-    char *nlBuf[6]; long nlLen[6];
-    NLGeo nlGeo;
+    int nlFrom, nlInFrom, nlOffline;
+    NLJob job, dl;
+    NLArea areas[NL_MAX_AREAS]; int nAreas, areaPage, delArm;
+    char queue[8][8]; int nQueue;
+    char dlLast[128];
     NLStats nlStats;
-    double nlT0;
     float nlBuildSecs, nlTotalSecs, streetT, atNlT;
     char street[96];
-    char nlRecent[5][8]; int nlRecentN;
+    int atDlPhase;
     long savedMoney; int savedDone;
     /* stof */
     float dust[40][4];
@@ -675,35 +688,246 @@ static void ui_star(float cx, float cy, float rad, float cr, float cg, float cb,
     }
 }
 
-/* ------------------------------------------------------------------ echte NL-kaart: postcode-scherm en laden */
+/* ------------------------------------------------------------------ echte NL-kaart: downloaden, offline opslaan, spelen
+ * Een NLJob haalt de 5 bestanden van een postcode (uit de cache of van internet) en bewaart ze in Documents/nl/.
+ * F.job = de job om te spelen (houdt de data vast om de wijk te bouwen),
+ * F.dl  = de download-job op de achtergrond (bewaart alleen, voor offline spelen). */
 
-static const char *NL_FILES[5] = {"geo", "bag", "roads", "water", "terrain"};
+static const char *NL_FILES[6] = {"geo", "bag", "roads", "water", "terrain", "bagp"};
 
-static void nl_free_bufs(void) {
+static void job_reset(NLJob *J) {
     int i;
-    for (i = 0; i < 6; i++) { free(F.nlBuf[i]); F.nlBuf[i] = NULL; F.nlLen[i] = 0; F.nlReq[i] = 0; F.nlDone[i] = 0; }
+    for (i = 0; i < 6; i++) { free(J->buf[i]); J->buf[i] = NULL; J->len[i] = 0; J->req[i] = 0; J->done[i] = 0; J->cached[i] = 0; }
+    J->active = 0; J->step = 0; J->err = 0; J->msg[0] = 0; J->bagPdok = 0; J->bytes = 0;
 }
 
-static void nl_status(int line, const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(F.nlStatus[line], sizeof(F.nlStatus[line]), fmt, ap);
-    va_end(ap);
+static void job_begin(NLJob *J, const char *pc, int keep) {
+    job_reset(J);
+    snprintf(J->pc, sizeof(J->pc), "%s", pc);
+    J->keep = keep;
+    J->active = 1;
+    J->t0 = plat_time();
 }
 
-static void nl_error(const char *msg) {
-    snprintf(F.nlErrMsg, sizeof(F.nlErrMsg), "%s", msg);
-    F.nlErr = 1;
-    plat_log("SGB-NL fout: %s", msg);
+static void job_error(NLJob *J, const char *msg) {
+    snprintf(J->msg, sizeof(J->msg), "%s", msg);
+    J->err = 1;
+    J->active = 0;
+    plat_log("SGB-NL fout (%s): %s", J->pc, msg);
 }
+
+static void job_start(NLJob *J, int i) {
+    char url[700], name[64];
+    snprintf(name, sizeof(name), "nl/%s_%s.json", J->pc, NL_FILES[i]);
+    if (plat_read_file(name, &J->buf[i], &J->len[i])) {
+        J->done[i] = 1; J->cached[i] = 1; J->bytes += J->len[i];
+        if (!J->keep && i != 0) { free(J->buf[i]); J->buf[i] = NULL; }
+        return;
+    }
+    J->cached[i] = 0;
+    if (i == 0) nl_url_geocode(url, sizeof(url), J->pc);
+    else if (i == 1) nl_url_bag3d(url, sizeof(url), J->geo.cx, J->geo.cy);
+    else if (i == 2) nl_url_top10(url, sizeof(url), "wegdeel_hartlijn", J->geo.cx, J->geo.cy);
+    else if (i == 3) nl_url_top10(url, sizeof(url), "waterdeel_vlak", J->geo.cx, J->geo.cy);
+    else if (i == 4) nl_url_top10(url, sizeof(url), "terrein_vlak", J->geo.cx, J->geo.cy);
+    else nl_url_bagpdok(url, sizeof(url), J->geo.cx, J->geo.cy);
+    J->req[i] = plat_http_start(url);
+    if (J->req[i] <= 0) J->done[i] = -1;
+}
+
+static void job_poll(NLJob *J, int i) {
+    int r;
+    if (J->done[i] || J->req[i] <= 0) return;
+    r = plat_http_poll(J->req[i], &J->buf[i], &J->len[i]);
+    if (r == 0) return;
+    J->done[i] = r > 0 ? 1 : -1;
+    if (r > 0) {
+        if (!(i == 0 && strstr(J->buf[0], "\"numFound\":0"))) {
+            char name[64];
+            snprintf(name, sizeof(name), "nl/%s_%s.json", J->pc, NL_FILES[i]);
+            plat_write_file(name, J->buf[i], J->len[i]);
+        }
+        J->bytes += J->len[i];
+        if (!J->keep && i != 0) { free(J->buf[i]); J->buf[i] = NULL; }
+    }
+}
+
+static const char *job_txt(const NLJob *J, int i, char *b, int n) {
+    if (J->done[i] == 1) snprintf(b, n, "%s %.0f kB", J->cached[i] ? "OK (offline)" : "OK", J->len[i] / 1024.0);
+    else if (J->done[i] == -1) snprintf(b, n, "FAILED");
+    else if (J->req[i]) snprintf(b, n, "downloading...");
+    else snprintf(b, n, "-");
+    return b;
+}
+
+static int job_complete(const NLJob *J) {
+    return J->done[0] == 1 && (J->done[1] == 1 || J->done[5] == 1) && J->done[2] == 1 && J->done[3] == 1 && J->done[4] == 1;
+}
+
+/* 1 = klaar met downloaden (step 3), 0 = bezig; fout -> J->err */
+static int job_tick(NLJob *J) {
+    int i;
+    if (!J->active) return 0;
+    switch (J->step) {
+    case 0:
+        job_start(J, 0);
+        J->step = 1;
+        return 0;
+    case 1:
+        job_poll(J, 0);
+        if (J->done[0] == -1) { job_error(J, "No connection with PDOK (postcode lookup). Is Wi-Fi on?"); return 0; }
+        if (J->done[0] == 1) {
+            char *copy = (char *)malloc((size_t)J->len[0] + 1);
+            int ok;
+            if (!copy) { job_error(J, "Out of memory"); return 0; }
+            memcpy(copy, J->buf[0], (size_t)J->len[0] + 1);
+            ok = nl_parse_geocode(copy, J->len[0], &J->geo);
+            free(copy);
+            if (!ok) {
+                char name[64];
+                snprintf(name, sizeof(name), "nl/%s_geo.json", J->pc);
+                plat_delete_file(name);
+                job_error(J, "Postcode not found.");
+                return 0;
+            }
+            plat_log("SGB-NL %s -> RD %.0f %.0f (%s)", J->pc, J->geo.cx, J->geo.cy, J->geo.name);
+            for (i = 1; i <= 4; i++) job_start(J, i);
+            J->step = 2;
+        }
+        return 0;
+    case 2: {
+        int pending = 0;
+        for (i = 1; i <= 5; i++) job_poll(J, i);
+        if (J->done[1] == -1 && !J->req[5] && !J->done[5]) {
+            plat_log("SGB-NL 3D BAG niet bereikbaar, reserve: PDOK BAG zonder hoogtes");
+            J->bagPdok = 1;
+            job_start(J, 5);
+        }
+        for (i = 1; i <= 4; i++) if (!J->done[i]) pending = 1;
+        if (J->bagPdok && !J->done[5]) pending = 1;
+        if (pending) return 0;
+        J->step = 3;
+        return 1;
+    }
+    default:
+        return 1;
+    }
+}
+
+/* ---- lijst met gedownloade gebieden (Documents/nl/index.txt) */
+
+static void idx_save(void) {
+    char buf[64 * 200];
+    int i, n = 0;
+    buf[0] = 0;
+    for (i = 0; i < F.nAreas; i++)
+        n += snprintf(buf + n, sizeof(buf) - (size_t)n, "%s\t%ld\t%d\t%s\n", F.areas[i].pc, F.areas[i].kb, F.areas[i].heights, F.areas[i].name);
+    plat_write_file("nl/index.txt", buf, (long)n);
+}
+
+static void idx_load(void) {
+    char *d = NULL, *line, *save = NULL;
+    long len = 0;
+    F.nAreas = 0;
+    if (!plat_read_file("nl/index.txt", &d, &len)) return;
+    for (line = strtok_r(d, "\n", &save); line && F.nAreas < NL_MAX_AREAS; line = strtok_r(NULL, "\n", &save)) {
+        NLArea *a = &F.areas[F.nAreas];
+        char *p1 = strchr(line, '\t'), *p2, *p3;
+        if (!p1) continue;
+        *p1 = 0; p2 = strchr(p1 + 1, '\t');
+        if (!p2) continue;
+        *p2 = 0; p3 = strchr(p2 + 1, '\t');
+        if (!p3) continue;
+        *p3 = 0;
+        if (strlen(line) != 6) continue;
+        snprintf(a->pc, sizeof(a->pc), "%s", line);
+        a->kb = atol(p1 + 1);
+        a->heights = atoi(p2 + 1);
+        snprintf(a->name, sizeof(a->name), "%s", p3 + 1);
+        F.nAreas++;
+    }
+    free(d);
+}
+
+static int idx_find(const char *pc) {
+    int i;
+    for (i = 0; i < F.nAreas; i++) if (strcmp(F.areas[i].pc, pc) == 0) return i;
+    return -1;
+}
+
+static void idx_add(const NLJob *J) {
+    int i = idx_find(J->pc);
+    NLArea a;
+    if (!job_complete(J)) return;
+    memset(&a, 0, sizeof(a));
+    snprintf(a.pc, sizeof(a.pc), "%s", J->pc);
+    snprintf(a.name, sizeof(a.name), "%s", J->geo.name[0] ? J->geo.name : J->pc);
+    a.kb = (J->bytes + 1023) / 1024;
+    a.heights = J->done[1] == 1;
+    if (i >= 0) memmove(&F.areas[1], &F.areas[0], sizeof(NLArea) * (size_t)i);   /* naar boven */
+    else {
+        if (F.nAreas >= NL_MAX_AREAS) F.nAreas = NL_MAX_AREAS - 1;
+        memmove(&F.areas[1], &F.areas[0], sizeof(NLArea) * (size_t)F.nAreas);
+        F.nAreas++;
+    }
+    F.areas[0] = a;
+    idx_save();
+}
+
+static void idx_delete(int i) {
+    int k;
+    char name[64];
+    if (i < 0 || i >= F.nAreas) return;
+    for (k = 0; k < 6; k++) {
+        snprintf(name, sizeof(name), "nl/%s_%s.json", F.areas[i].pc, NL_FILES[k]);
+        plat_delete_file(name);
+    }
+    plat_log("SGB-NL %s verwijderd", F.areas[i].pc);
+    memmove(&F.areas[i], &F.areas[i + 1], sizeof(NLArea) * (size_t)(F.nAreas - i - 1));
+    F.nAreas--;
+    idx_save();
+}
+
+/* ---- download-wachtrij (loopt op de achtergrond, in elk scherm) */
+
+static void dl_enqueue(const char *pc) {
+    int i;
+    if (F.dl.active && strcmp(F.dl.pc, pc) == 0) return;
+    for (i = 0; i < F.nQueue; i++) if (strcmp(F.queue[i], pc) == 0) return;
+    if (F.nQueue >= 8) return;
+    snprintf(F.queue[F.nQueue++], 8, "%s", pc);
+    snprintf(F.dlLast, sizeof(F.dlLast), "%s added to the download list", pc);
+}
+
+static void dl_tick(void) {
+    if (!F.dl.active) {
+        if (F.nQueue == 0) return;
+        job_begin(&F.dl, F.queue[0], 0);
+        memmove(F.queue[0], F.queue[1], sizeof(F.queue[0]) * (size_t)(F.nQueue - 1));
+        F.nQueue--;
+        return;
+    }
+    if (job_tick(&F.dl)) {
+        if (job_complete(&F.dl)) {
+            idx_add(&F.dl);
+            snprintf(F.dlLast, sizeof(F.dlLast), "Saved %s (%.1f MB) - plays offline now", F.dl.pc, F.dl.bytes / 1048576.0);
+            plat_log("SGB-NL download klaar: %s, %ld kB, %.1f s, hoogtes %s", F.dl.pc, F.dl.bytes / 1024, plat_time() - F.dl.t0, F.dl.done[1] == 1 ? "echt" : "geschat");
+        } else {
+            snprintf(F.dlLast, sizeof(F.dlLast), "%s: download incomplete (no connection?) - try again", F.dl.pc);
+        }
+        F.dl.active = 0;
+        job_reset(&F.dl);
+    } else if (F.dl.err) {
+        snprintf(F.dlLast, sizeof(F.dlLast), "%s: %s", F.dl.pc, F.dl.msg);
+        job_reset(&F.dl);
+    }
+}
+
+/* ---- spelen: wijk bouwen en NL-modus in */
 
 static void nl_begin(const char *pc, int from) {
-    nl_free_bufs();
-    memset(F.nlStatus, 0, sizeof(F.nlStatus));
-    snprintf(F.nlPc, sizeof(F.nlPc), "%s", pc);
-    F.nlStep = 0; F.nlErr = 0; F.nlErrMsg[0] = 0; F.nlBagPdok = 0;
+    job_begin(&F.job, pc, 1);
     F.nlFrom = from;
-    F.nlT0 = plat_time();
     set_state(ST_NLLOAD);
 }
 
@@ -715,161 +939,77 @@ static void nl_exit_to_city(void) {
     apply_settings();
 }
 
-static void nl_save_recent(const char *pc) {
-    char *old = NULL, out[64];
-    long len = 0;
-    int n = 0;
-    snprintf(out, sizeof(out), "%s\n", pc);
-    if (plat_read_file("nl/recent.txt", &old, &len)) {
-        char *line = strtok(old, "\n");
-        while (line && n < 4) {
-            if (strcmp(line, pc) != 0 && strlen(line) == 6) { strncat(out, line, sizeof(out) - strlen(out) - 2); strcat(out, "\n"); n++; }
-            line = strtok(NULL, "\n");
-        }
-        free(old);
-    }
-    plat_write_file("nl/recent.txt", out, (long)strlen(out));
-}
-
-static void nl_load_recent(void) {
-    char *d = NULL;
-    long len = 0;
-    F.nlRecentN = 0;
-    if (plat_read_file("nl/recent.txt", &d, &len)) {
-        char *line = strtok(d, "\n");
-        while (line && F.nlRecentN < 5) {
-            if (strlen(line) == 6) snprintf(F.nlRecent[F.nlRecentN++], 8, "%s", line);
-            line = strtok(NULL, "\n");
-        }
-        free(d);
-    }
-}
-
-/* index: 0 geo, 1 bag (3D BAG), 2 wegen, 3 water, 4 terrein, 5 bag-reserve (PDOK) */
-static void nl_start(int i) {
-    char url[700], name[64];
-    if (i < 5) {
-        snprintf(name, sizeof(name), "nl/%s_%s.json", F.nlPc, NL_FILES[i]);
-        if (plat_read_file(name, &F.nlBuf[i], &F.nlLen[i])) { F.nlDone[i] = 1; F.nlCached[i] = 1; return; }
-    }
-    F.nlCached[i] = 0;
-    if (i == 0) nl_url_geocode(url, sizeof(url), F.nlPc);
-    else if (i == 1) nl_url_bag3d(url, sizeof(url), F.nlGeo.cx, F.nlGeo.cy);
-    else if (i == 2) nl_url_top10(url, sizeof(url), "wegdeel_hartlijn", F.nlGeo.cx, F.nlGeo.cy);
-    else if (i == 3) nl_url_top10(url, sizeof(url), "waterdeel_vlak", F.nlGeo.cx, F.nlGeo.cy);
-    else if (i == 4) nl_url_top10(url, sizeof(url), "terrein_vlak", F.nlGeo.cx, F.nlGeo.cy);
-    else nl_url_bagpdok(url, sizeof(url), F.nlGeo.cx, F.nlGeo.cy);
-    F.nlReq[i] = plat_http_start(url);
-    if (F.nlReq[i] <= 0) F.nlDone[i] = -1;
-}
-
-static void nl_poll(int i) {
-    int r;
-    if (F.nlDone[i] || F.nlReq[i] <= 0) return;
-    r = plat_http_poll(F.nlReq[i], &F.nlBuf[i], &F.nlLen[i]);
-    if (r == 0) return;
-    F.nlDone[i] = r > 0 ? 1 : -1;
-    if (r > 0 && i < 5 && !(i == 0 && strstr(F.nlBuf[0], "\"numFound\":0"))) {
-        char name[64];
-        snprintf(name, sizeof(name), "nl/%s_%s.json", F.nlPc, NL_FILES[i]);
-        plat_write_file(name, F.nlBuf[i], F.nlLen[i]);
-    }
-}
-
-static const char *nl_state_txt(int i) {
-    static char b[6][48];
-    if (F.nlDone[i] == 1) snprintf(b[i], sizeof(b[i]), "%s %.0f kB", F.nlCached[i] ? "OK (saved)" : "OK", F.nlLen[i] / 1024.0);
-    else if (F.nlDone[i] == -1) snprintf(b[i], sizeof(b[i]), "FAILED");
-    else snprintf(b[i], sizeof(b[i]), "downloading...");
-    return b[i];
-}
-
 static void nl_tick(void) {
-    int i;
-    if (F.nlErr) return;
-    switch (F.nlStep) {
-    case 0:
-        nl_status(0, "Looking up postcode %s ...", F.nlPc);
-        nl_start(0);
-        F.nlStep = 1;
-        break;
-    case 1:
-        nl_poll(0);
-        if (F.nlDone[0] == -1) { nl_error("No connection with PDOK (postcode lookup). Is Wi-Fi on?"); break; }
-        if (F.nlDone[0] == 1) {
-            if (!nl_parse_geocode(F.nlBuf[0], F.nlLen[0], &F.nlGeo)) { nl_error("Postcode not found."); break; }
-            nl_status(0, "Postcode: %s", F.nlGeo.name);
-            plat_log("SGB-NL %s -> RD %.0f %.0f (%s)", F.nlPc, F.nlGeo.cx, F.nlGeo.cy, F.nlGeo.name);
-            for (i = 1; i <= 4; i++) nl_start(i);
-            F.nlStep = 2;
+    NLJob *J = &F.job;
+    if (J->err) return;
+    if (J->step < 3) { job_tick(J); return; }
+    if (J->step == 3) { J->step = 4; return; }   /* een frame "bouwen..." laten zien */
+    if (J->step == 4) {
+        int b = J->done[1] == 1 ? 1 : 5;
+        double t0 = plat_time(), t1;
+        int ok;
+        idx_add(J);   /* alles binnen -> ook offline beschikbaar */
+        ok = nl_build_world(&F.WNL, J->geo.cx, J->geo.cy,
+                            J->done[b] == 1 ? J->buf[b] : NULL, J->len[b], b == 5,
+                            J->done[2] == 1 ? J->buf[2] : NULL, J->len[2],
+                            J->done[3] == 1 ? J->buf[3] : NULL, J->len[3],
+                            J->done[4] == 1 ? J->buf[4] : NULL, J->len[4], &F.nlStats);
+        t1 = plat_time();
+        F.nlOffline = J->cached[0] && (J->cached[1] || J->cached[5]) && J->cached[2] && J->cached[3] && J->cached[4];
+        J->step = 5;
+        {
+            NLGeo g = J->geo;
+            job_reset(J);
+            J->geo = g;
         }
-        break;
-    case 2: {
-        int pending = 0;
-        for (i = 1; i <= 5; i++) nl_poll(i);
-        if (F.nlDone[1] == -1 && !F.nlReq[5] && !F.nlDone[5]) {
-            plat_log("SGB-NL 3D BAG niet bereikbaar, reserve: PDOK BAG zonder hoogtes");
-            F.nlBagPdok = 1;
-            nl_start(5);
-        }
-        nl_status(1, "Buildings + heights (3D BAG): %s", nl_state_txt(1));
-        if (F.nlBagPdok) nl_status(2, "Backup buildings (PDOK BAG, no heights): %s", nl_state_txt(5));
-        else F.nlStatus[2][0] = 0;
-        nl_status(3, "Streets (PDOK TOP10NL): %s", nl_state_txt(2));
-        nl_status(4, "Water + land use (TOP10NL): %s / %s", nl_state_txt(3), nl_state_txt(4));
-        for (i = 1; i <= 4; i++) if (!F.nlDone[i]) pending = 1;
-        if (F.nlBagPdok && !F.nlDone[5]) pending = 1;
-        if (!pending) { F.nlStep = 3; nl_status(5, "Building the 3D neighbourhood..."); }
-        break;
-    }
-    case 3:
-        F.nlStep = 4;   /* een frame met de melding laten zien */
-        break;
-    case 4: {
-        int b = F.nlBagPdok ? 5 : 1;
-        double t0 = plat_time();
-        int ok = nl_build_world(&F.WNL, F.nlGeo.cx, F.nlGeo.cy,
-                                F.nlDone[b] == 1 ? F.nlBuf[b] : NULL, F.nlLen[b], F.nlBagPdok,
-                                F.nlDone[2] == 1 ? F.nlBuf[2] : NULL, F.nlLen[2],
-                                F.nlDone[3] == 1 ? F.nlBuf[3] : NULL, F.nlLen[3],
-                                F.nlDone[4] == 1 ? F.nlBuf[4] : NULL, F.nlLen[4], &F.nlStats);
-        double t1 = plat_time();
-        nl_free_bufs();
-        if (!ok) { nl_error("No map data received for this place."); break; }
+        if (!ok) { job_error(J, "No map data for this place (no connection?)."); return; }
         r_upload_world(&F.R, &F.WNL, 1);
-        plat_log("SGB-NL gebouwd: %d gebouwen (hoogtes %s, max %.0f m), %d wegen, %d water, %d terrein, %d vertices, %d muren; bouwen %.2f s, totaal %.1f s, geheugen %ld kB",
+        plat_log("SGB-NL gebouwd: %d gebouwen (hoogtes %s, max %.0f m), %d wegen, %d water, %d terrein, %d vertices, %d muren; bouwen %.2f s, totaal %.1f s, %s, geheugen %ld kB",
                  F.nlStats.buildings, F.nlStats.heightsReal ? "echt" : "geschat", F.nlStats.maxH, F.nlStats.roads, F.nlStats.water,
-                 F.nlStats.terrain, F.nlStats.verts, F.nlStats.segs, t1 - t0, t1 - F.nlT0, plat_memory_kb());
+                 F.nlStats.terrain, F.nlStats.verts, F.nlStats.segs, t1 - t0, t1 - F.job.t0, F.nlOffline ? "OFFLINE uit opslag" : "online",
+                 plat_memory_kb());
         F.nlBuildSecs = (float)(t1 - t0);
-        F.nlTotalSecs = (float)(t1 - F.nlT0);
+        F.nlTotalSecs = (float)(t1 - F.job.t0);
         if (F.mode == 0) memcpy(&F.Gcity, &F.G, sizeof(Game));
         game_init(&F.G, &F.WNL);
         F.mode = 1;
         F.R.cur = 1;
         apply_settings();
         snprintf(F.G.banner, sizeof(F.G.banner), "REAL NL");
-        snprintf(F.G.sub, sizeof(F.G.sub), "%s", F.nlGeo.name);
+        snprintf(F.G.sub, sizeof(F.G.sub), "%s%s", J->geo.name, F.nlOffline ? "  (offline)" : "");
         F.G.bannerT = 5.0f; F.G.bannerGood = 1;
-        nl_save_recent(F.nlPc);
         set_state(ST_GAME);
         F.fade = 1.0f;
-        break;
     }
-    default: break;
+}
+
+static void draw_job_lines(const NLJob *J, float x, float y, float size, float gap) {
+    Renderer *R = &F.R;
+    char a[48], b[48], c[48], line[160];
+    if (J->geo.name[0]) snprintf(line, sizeof(line), "Postcode %s: %s", J->pc, J->geo.name);
+    else snprintf(line, sizeof(line), "Postcode %s: looking up...", J->pc);
+    ui_text(R, line, x, y, size, 1, 1, 1, 1, 0);
+    if (J->step < 2) return;
+    snprintf(line, sizeof(line), "Buildings + heights (3D BAG): %s", job_txt(J, 1, a, sizeof(a)));
+    ui_text(R, line, x, y + gap, size, 1, 1, 1, 1, 0);
+    if (J->bagPdok) {
+        snprintf(line, sizeof(line), "Backup buildings (PDOK, no heights): %s", job_txt(J, 5, a, sizeof(a)));
+        ui_text(R, line, x, y + gap * 2, size, 1, 0.85f, 0.5f, 1, 0);
     }
+    snprintf(line, sizeof(line), "Streets: %s   Water: %s   Land: %s", job_txt(J, 2, a, sizeof(a)), job_txt(J, 3, b, sizeof(b)), job_txt(J, 4, c, sizeof(c)));
+    ui_text(R, line, x, y + gap * (J->bagPdok ? 3 : 2), size, 1, 1, 1, 1, 0);
 }
 
 static void draw_nl_load(void) {
     Renderer *R = &F.R;
-    int i;
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
     draw_backdrop(0.25f, 0.0f, F.t);
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.55f);
     ui_text(R, "REAL NETHERLANDS", R->W * 0.5f, 60, 54, 1, 1, 1, 1, 1);
-    for (i = 0; i < 6; i++)
-        if (F.nlStatus[i][0]) ui_text(R, F.nlStatus[i], 130, 190.0f + i * 50.0f, 26, 1, 1, 1, 1, 0);
-    if (F.nlErr) {
-        ui_text(R, F.nlErrMsg, R->W * 0.5f, 520, 28, 1.0f, 0.4f, 0.4f, 1, 1);
+    draw_job_lines(&F.job, 110, 200, 26, 50);
+    if (F.job.step >= 3 && !F.job.err) ui_text(R, "Building the 3D neighbourhood...", 110, 420, 26, 1, 0.85f, 0.4f, 1, 0);
+    if (F.job.err) {
+        ui_text(R, F.job.msg, R->W * 0.5f, 520, 28, 1.0f, 0.4f, 0.4f, 1, 1);
         ui_text(R, "TAP TO GO BACK", R->W * 0.5f, 600, 34, 1, 1, 1, 0.6f + 0.4f * sinf(F.t * 4), 1);
     } else {
         int k;
@@ -881,17 +1021,22 @@ static void draw_nl_load(void) {
     ui_text(R, "Map data: 3D BAG (TU Delft / 3DGI), BAG + TOP10NL (Kadaster, PDOK) - CC BY 4.0", R->W * 0.5f, R->H - 40.0f, 16, 0.8f, 0.8f, 0.8f, 1, 1);
 }
 
-/* toetsenbord */
+/* ---- het REAL NL-scherm: links postcode typen, rechts de offline lijst */
+
 #define KEY_DEL 1
-#define KEY_GO 2
+#define KEY_PLAY 2
 #define KEY_BACK 3
+#define KEY_DL 4
+#define KEY_PGUP 5
+#define KEY_PGDN 6
+#define AREA_ROWS 8
 static const char *KROWS[4] = {"1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"};
 
 static void key_rect(int row, int col, float *x, float *y, float *w, float *h) {
-    float x0[4] = {92, 92, 134, 176};
-    *w = 76; *h = 64;
-    *x = x0[row] + col * 84.0f;
-    *y = 250.0f + row * 80.0f;
+    float x0[4] = {34, 34, 61, 88};
+    *w = 48; *h = 52;
+    *x = x0[row] + col * 54.0f;
+    *y = 182.0f + row * 60.0f;
 }
 
 static int nl_key_at(float px, float py) {
@@ -903,35 +1048,45 @@ static int nl_key_at(float px, float py) {
             if (px >= x && px < x + w && py >= y && py < y + h) return KROWS[r][c];
         }
     key_rect(3, 7, &x, &y, &w, &h);
-    if (px >= x && px < x + 160 && py >= y && py < y + h) return KEY_DEL;
-    if (px >= 392 && px < 632 && py >= 572 && py < 646) return KEY_GO;
-    if (px >= 20 && px < 220 && py >= 670 && py < 740) return KEY_BACK;
-    for (r = 0; r < F.nlRecentN; r++) {
-        float rx = 380.0f + r * 125.0f;
-        if (px >= rx && px < rx + 115 && py >= 672 && py < 722) return 200 + r;
+    if (px >= x && px < x + 108 && py >= y && py < y + h) return KEY_DEL;
+    if (px >= 34 && px < 294 && py >= 430 && py < 500) return KEY_PLAY;
+    if (px >= 314 && px < 574 && py >= 430 && py < 500) return KEY_DL;
+    if (px >= 20 && px < 220 && py >= 680 && py < 745) return KEY_BACK;
+    for (r = 0; r < AREA_ROWS; r++) {
+        int i = F.areaPage * AREA_ROWS + r;
+        float ry = 140.0f + r * 64.0f;
+        if (i >= F.nAreas) break;
+        if (py >= ry && py < ry + 58) {
+            if (px >= 950 && px < 1004) return 400 + i;
+            if (px >= 610 && px < 948) return 300 + i;
+        }
+    }
+    if (py >= 662 && py < 712) {
+        if (px >= 690 && px < 790) return KEY_PGUP;
+        if (px >= 820 && px < 920) return KEY_PGDN;
     }
     return 0;
 }
 
 static void draw_nl_input(void) {
     Renderer *R = &F.R;
-    int r, c, valid;
-    char shown[16], norm[8];
-    float x, y, w, h;
+    int r, c, valid, i;
+    char shown[16], norm[8], line[160];
+    float x, y, w, h, totalMB = 0;
     if (F.nlInFrom == ST_PAUSE) {
         ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0.02f, 0.02f, 0.03f, 1);
     } else {
         ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
         draw_backdrop(0.3f, 0.0f, F.t);
-        ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.55f);
+        ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.6f);
     }
-    ui_text(R, "REAL NETHERLANDS", R->W * 0.5f, 18, 50, 1, 1, 1, 1, 1);
-    ui_text(R, "Type a Dutch postcode and explore the real streets and buildings in 3D", R->W * 0.5f, 84, 20, 0.85f, 0.85f, 0.85f, 1, 1);
-    ui_rect(R, 312, 128, 400, 96, 0, 0, 0, 0.7f);
+    ui_text(R, "REAL NETHERLANDS", R->W * 0.5f, 10, 44, 1, 1, 1, 1, 1);
+    /* links: postcode */
+    ui_rect(R, 64, 84, 480, 84, 0, 0, 0, 0.7f);
     if (F.pcLen > 4) snprintf(shown, sizeof(shown), "%.4s %s", F.pcIn, F.pcIn + 4);
     else snprintf(shown, sizeof(shown), "%s", F.pcIn);
-    if (F.pcLen == 0) ui_text(R, "1234 AB", 512, 138, 64, 0.5f, 0.5f, 0.5f, 0.6f, 1);
-    else ui_text(R, shown, 512, 138, 64, 1, 1, 1, 1, 1);
+    if (F.pcLen == 0) ui_text(R, "1234 AB", 304, 92, 56, 0.5f, 0.5f, 0.5f, 0.6f, 1);
+    else ui_text(R, shown, 304, 92, 56, 1, 1, 1, 1, 1);
     for (r = 0; r < 4; r++)
         for (c = 0; KROWS[r][c]; c++) {
             int ch = KROWS[r][c], ok = (r == 0) ? (F.pcLen < 4 && !(F.pcLen == 0 && ch == '0')) : (F.pcLen >= 4 && F.pcLen < 6);
@@ -939,25 +1094,65 @@ static void draw_nl_input(void) {
             int pr = F.pressed == ch;
             key_rect(r, c, &x, &y, &w, &h);
             ui_rect(R, x, y, w, h, pr ? 0.7f : 0.12f, pr ? 0.1f : 0.12f, pr ? 0.1f : 0.14f, ok ? 0.9f : 0.4f);
-            ui_text(R, lab, x + w * 0.5f, y + 8, 40, 1, 1, 1, ok ? 1.0f : 0.35f, 1);
+            ui_text(R, lab, x + w * 0.5f, y + 8, 34, 1, 1, 1, ok ? 1.0f : 0.35f, 1);
         }
     key_rect(3, 7, &x, &y, &w, &h);
-    ui_rect(R, x, y, 160, h, F.pressed == KEY_DEL ? 0.7f : 0.3f, 0.08f, 0.08f, 0.9f);
-    ui_text(R, "DELETE", x + 80, y + 14, 30, 1, 1, 1, 1, 1);
+    ui_rect(R, x, y, 108, h, F.pressed == KEY_DEL ? 0.7f : 0.3f, 0.08f, 0.08f, 0.9f);
+    ui_text(R, "DELETE", x + 54, y + 12, 26, 1, 1, 1, 1, 1);
     valid = nl_normalize_postcode(F.pcIn, norm);
-    ui_rect(R, 392, 572, 240, 74, valid ? (F.pressed == KEY_GO ? 0.9f : 0.75f) : 0.2f, valid ? 0.12f : 0.2f, valid ? 0.12f : 0.2f, 0.95f);
-    ui_text(R, "GO!", 512, 580, 50, 1, 1, 1, valid ? 1.0f : 0.4f, 1);
-    big_button("BACK", 120, 704, 40, F.pressed == KEY_BACK, 1);
-    if (F.nlRecentN > 0) {
-        ui_text(R, "RECENT:", 370, 682, 24, 0.85f, 0.85f, 0.85f, 1, 2);
-        for (r = 0; r < F.nlRecentN; r++) {
-            float rx = 380.0f + r * 125.0f;
-            ui_rect(R, rx, 672, 115, 50, F.pressed == 200 + r ? 0.6f : 0.1f, 0.12f, 0.16f, 0.9f);
-            ui_text(R, F.nlRecent[r], rx + 57, 680, 28, 1.0f, 0.85f, 0.4f, 1, 1);
-        }
+    ui_rect(R, 34, 430, 260, 70, valid ? (F.pressed == KEY_PLAY ? 0.9f : 0.75f) : 0.2f, valid ? 0.12f : 0.2f, valid ? 0.12f : 0.2f, 0.95f);
+    ui_text(R, "PLAY", 164, 440, 46, 1, 1, 1, valid ? 1.0f : 0.4f, 1);
+    ui_rect(R, 314, 430, 260, 70, valid ? 0.1f : 0.2f, valid ? (F.pressed == KEY_DL ? 0.6f : 0.45f) : 0.2f, valid ? 0.75f : 0.2f, 0.95f);
+    ui_text(R, "DOWNLOAD", 444, 444, 38, 1, 1, 1, valid ? 1.0f : 0.4f, 1);
+    ui_text(R, "PLAY = go there now.  DOWNLOAD = save it for offline play.", 304, 510, 16, 0.8f, 0.8f, 0.8f, 1, 1);
+    /* downloadstatus */
+    ui_rect(R, 34, 538, 540, 128, 0, 0, 0, 0.55f);
+    if (F.dl.active) {
+        ui_text(R, "DOWNLOADING", 46, 544, 20, 0.5f, 0.8f, 1.0f, 1, 0);
+        draw_job_lines(&F.dl, 46, 568, 15, 22);
+    } else {
+        ui_text(R, F.dlLast[0] ? F.dlLast : "No downloads running.", 46, 552, 17, 0.9f, 0.9f, 0.9f, 1, 0);
     }
-    ui_text(R, "Needs Wi-Fi the first time; visited places are saved on the iPad.  Data: 3D BAG, PDOK/Kadaster (CC BY 4.0)",
-            R->W * 0.5f, R->H - 26.0f, 14, 0.75f, 0.75f, 0.75f, 1, 1);
+    if (F.nQueue > 0) {
+        snprintf(line, sizeof(line), "Waiting: %d more", F.nQueue);
+        ui_text(R, line, 562, 544, 16, 1, 0.85f, 0.4f, 1, 2);
+    }
+    big_button("BACK", 120, 712, 40, F.pressed == KEY_BACK, 1);
+    /* rechts: gedownloade gebieden */
+    for (i = 0; i < F.nAreas; i++) totalMB += F.areas[i].kb / 1024.0f;
+    ui_text(R, "DOWNLOADED (OFFLINE)", 610, 82, 26, 1.0f, 0.85f, 0.4f, 1, 0);
+    snprintf(line, sizeof(line), "%d areas, %.1f MB on this iPad", F.nAreas, totalMB);
+    ui_text(R, line, 610, 112, 16, 0.85f, 0.85f, 0.85f, 1, 0);
+    if (F.nAreas == 0) ui_text(R, "Nothing saved yet. Type a postcode and tap DOWNLOAD.", 610, 150, 16, 0.8f, 0.8f, 0.8f, 1, 0);
+    for (r = 0; r < AREA_ROWS; r++) {
+        int idx = F.areaPage * AREA_ROWS + r;
+        float ry = 140.0f + r * 64.0f, nw, ns;
+        NLArea *a;
+        if (idx >= F.nAreas) break;
+        a = &F.areas[idx];
+        ui_rect(R, 610, ry, 338, 58, F.pressed == 300 + idx ? 0.55f : 0.08f, F.pressed == 300 + idx ? 0.1f : 0.08f, 0.1f, 0.85f);
+        snprintf(line, sizeof(line), "%.4s %s", a->pc, a->pc + 4);
+        ui_text(R, line, 622, ry + 2, 28, 1, 1, 1, 1, 0);
+        snprintf(line, sizeof(line), "%.1f MB%s", a->kb / 1024.0f, a->heights ? "" : " *");
+        ui_text(R, line, 938, ry + 8, 16, 0.6f, 1.0f, 0.6f, 1, 2);
+        nw = ui_text_w(R, a->name, 15);
+        ns = nw > 316 ? 15.0f * 316.0f / nw : 15.0f;
+        ui_text(R, a->name, 622, ry + 36, ns, 0.85f, 0.85f, 0.85f, 1, 0);
+        ui_rect(R, 950, ry, 54, 58, F.delArm == idx + 1 ? 0.9f : (F.pressed == 400 + idx ? 0.7f : 0.35f), 0.08f, 0.08f, 0.9f);
+        ui_text(R, F.delArm == idx + 1 ? "?" : "X", 977, ry + 10, 32, 1, 1, 1, 1, 1);
+    }
+    if (F.nAreas > AREA_ROWS) {
+        int pages = (F.nAreas + AREA_ROWS - 1) / AREA_ROWS;
+        snprintf(line, sizeof(line), "%d/%d", F.areaPage + 1, pages);
+        ui_rect(R, 690, 662, 100, 50, 0.15f, 0.15f, 0.18f, 0.9f);
+        ui_text(R, "<", 740, 666, 36, 1, 1, 1, F.areaPage > 0 ? 1.0f : 0.3f, 1);
+        ui_text(R, line, 805, 676, 18, 1, 1, 1, 1, 1);
+        ui_rect(R, 820, 662, 100, 50, 0.15f, 0.15f, 0.18f, 0.9f);
+        ui_text(R, ">", 870, 666, 36, 1, 1, 1, F.areaPage + 1 < pages ? 1.0f : 0.3f, 1);
+    }
+    if (F.delArm) ui_text(R, "Tap ? again to delete that area", 807, 720, 16, 1, 0.5f, 0.5f, 1, 1);
+    else if (F.nAreas > 0) ui_text(R, "Tap an area to play it (works without Wi-Fi). * = heights estimated", 807, 720, 13, 0.75f, 0.75f, 0.75f, 1, 1);
+    ui_text(R, "Data: 3D BAG (TU Delft/3DGI), PDOK/Kadaster - CC BY 4.0", R->W * 0.5f, R->H - 20.0f, 13, 0.7f, 0.7f, 0.7f, 1, 1);
 }
 
 static void nl_input_tap(float x, float y, int phase) {
@@ -965,26 +1160,38 @@ static void nl_input_tap(float x, float y, int phase) {
     char norm[8];
     if (phase != TOUCH_END) { F.pressed = k; return; }
     F.pressed = 0;
+    if (k < 400 || k >= 400 + NL_MAX_AREAS) { if (k != 0) F.delArm = 0; }
     if (k >= '0' && k <= '9') {
         if (F.pcLen < 4 && !(F.pcLen == 0 && k == '0')) { F.pcIn[F.pcLen++] = (char)k; F.pcIn[F.pcLen] = 0; }
     } else if (k >= 'A' && k <= 'Z') {
         if (F.pcLen >= 4 && F.pcLen < 6) { F.pcIn[F.pcLen++] = (char)k; F.pcIn[F.pcLen] = 0; }
     } else if (k == KEY_DEL) {
         if (F.pcLen > 0) F.pcIn[--F.pcLen] = 0;
-    } else if (k == KEY_GO) {
+    } else if (k == KEY_PLAY) {
         if (nl_normalize_postcode(F.pcIn, norm)) nl_begin(norm, F.nlInFrom);
+    } else if (k == KEY_DL) {
+        if (nl_normalize_postcode(F.pcIn, norm)) { dl_enqueue(norm); F.pcLen = 0; F.pcIn[0] = 0; }
     } else if (k == KEY_BACK) {
         set_state(F.nlInFrom == ST_PAUSE ? ST_PAUSE : ST_MENU);
-    } else if (k >= 200 && k < 200 + F.nlRecentN) {
-        snprintf(F.pcIn, sizeof(F.pcIn), "%s", F.nlRecent[k - 200]);
-        F.pcLen = 6;
-        nl_begin(F.pcIn, F.nlInFrom);
+    } else if (k == KEY_PGUP) {
+        if (F.areaPage > 0) F.areaPage--;
+    } else if (k == KEY_PGDN) {
+        if ((F.areaPage + 1) * AREA_ROWS < F.nAreas) F.areaPage++;
+    } else if (k >= 300 && k < 300 + NL_MAX_AREAS) {
+        nl_begin(F.areas[k - 300].pc, F.nlInFrom);
+    } else if (k >= 400 && k < 400 + NL_MAX_AREAS) {
+        if (F.delArm == k - 400 + 1) {
+            idx_delete(k - 400);
+            F.delArm = 0;
+            if (F.areaPage * AREA_ROWS >= F.nAreas && F.areaPage > 0) F.areaPage--;
+        } else F.delArm = k - 400 + 1;
     }
 }
 
 static void open_nl_input(int from) {
     F.nlInFrom = from;
-    nl_load_recent();
+    F.delArm = 0;
+    idx_load();
     set_state(ST_NLINPUT);
 }
 
@@ -1070,7 +1277,7 @@ static void menu_tap(float x, float y, int phase) {
     }
     if (F.state == ST_NLINPUT) { nl_input_tap(x, y, phase); return; }
     if (F.state == ST_NLLOAD) {
-        if (F.nlErr && phase == TOUCH_END) open_nl_input(F.nlFrom);
+        if (F.job.err && phase == TOUCH_END) open_nl_input(F.nlFrom);
         return;
     }
     if (F.state == ST_MISSIONS) {
@@ -1377,6 +1584,36 @@ static void autotest_tick(float dt) {
             F.atStep++;
         }
         else if (F.atStep == 49) {
+            /* downloadmodus: 9711LM (Groningen) downloaden, dan offline spelen */
+            rep("Downloadmodus: 9711LM in de wachtrij");
+            idx_load();
+            {
+                int k = idx_find("9711LM");
+                if (k >= 0) idx_delete(k);   /* schone start */
+            }
+            dl_enqueue("9711LM");
+            F.atDlPhase = 1;
+            F.atStep++;
+            open_nl_input(ST_MENU);
+            return;
+        }
+        else if (F.atStep == 50 && F.mode == 1) {
+            rep("Offline gespeeld: %s, %d gebouwen, %d wegen (alles uit opslag: %s)", F.G.sub, F.nlStats.buildings, F.nlStats.roads, F.nlOffline ? "JA" : "NEE");
+            F.atNlT = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 51 && t > F.atNlT + 2.0f) { at_shot("20_nl_offline"); F.atStep++; }
+        else if (F.atStep == 52 && t > F.atNlT + 3.0f) {
+            int k;
+            nl_exit_to_city();
+            idx_load();
+            k = idx_find("9711LM");
+            if (k >= 0) idx_delete(k);
+            idx_load();
+            rep("Verwijderd: 9711LM nog in lijst=%d, gebieden over=%d", idx_find("9711LM") >= 0, F.nAreas);
+            F.atStep++;
+        }
+        else if (F.atStep == 53) {
             int i;
             rep("---- FPS per onderdeel (echte tijd; frames met screenshot niet meegeteld) ----");
             for (i = 0; i < F.nseg; i++) {
@@ -1416,7 +1653,7 @@ static void autotest_tick(float dt) {
     if (t > 16.0f && t < 22.5f) { in->gas = 1; in->mx = 0.4f * sinf(t * 0.7f); }
     if (t > 22.5f && t < 24.2f) in->brake = 1;
     if (t > 36.0f && t < 58.0f) { in->lx = 0.35f; in->my = 0.0f; }
-    if (F.mode == 1 && F.atNlT > 0 && t > F.atNlT + 2.6f && t < F.atNlT + 8.5f) { in->gas = 1; in->mx = 0.15f; }
+    if (F.mode == 1 && F.atStep < 50 && F.atNlT > 0 && t > F.atNlT + 2.6f && t < F.atNlT + 8.5f) { in->gas = 1; in->mx = 0.15f; }
     if (F.mode == 1 && F.atNlT > 0 && t > F.atNlT + 1.5f && t < F.atNlT + 2.0f) { in->lx = 0.0f; }
     s = seg_cur();
     if (F.skipStat > 0) { F.skipStat--; s = NULL; }  /* frames rond een screenshot niet meetellen */
@@ -1452,6 +1689,7 @@ void fe_frame(double now) {
     }
 
     R->drawCalls = 0;
+    if (F.loadDone) dl_tick();
     glViewport(0, 0, R->W, R->H);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1492,16 +1730,24 @@ void fe_frame(double now) {
         break;
     case ST_NLINPUT:
         ui_begin(R); draw_nl_input(); ui_flush(R);
+        if (F.at && F.atDlPhase == 1 && !F.dl.active && F.nQueue == 0 && F.st > 1.0f) {
+            int k = idx_find("9711LM");
+            rep("Download klaar: '%s' in lijst=%d (%s)", F.dlLast, k >= 0, k >= 0 ? F.areas[k].name : "-");
+            at_shot("19_nl_downloads");
+            F.atDlPhase = 2;
+            if (k >= 0) nl_begin("9711LM", ST_MENU);
+            else { set_state(ST_GAME); F.atStep = 53; }
+        }
         break;
     case ST_NLLOAD:
         nl_tick();
         if (F.state == ST_NLLOAD) {
             ui_begin(R); draw_nl_load(); ui_flush(R);
-            if (F.at && F.nlErr) {
-                rep("NL-modus MISLUKT: %s", F.nlErrMsg);
+            if (F.at && F.job.err) {
+                rep("NL-modus MISLUKT: %s", F.job.msg);
                 plat_screenshot("17_nl_area", R->W, R->H);
                 set_state(ST_GAME);
-                F.atStep = 49;
+                F.atStep = F.atStep < 49 ? 53 : 53;
             }
         }
         break;

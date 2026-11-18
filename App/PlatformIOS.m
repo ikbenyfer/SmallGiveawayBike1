@@ -287,3 +287,9 @@ int plat_write_file(const char *name, const char *data, long len) {
         return [[NSData dataWithBytes:data length:(NSUInteger)len] writeToFile:p atomically:YES] ? 1 : 0;
     }
 }
+
+void plat_delete_file(const char *name) {
+    @autoreleasepool {
+        [[NSFileManager defaultManager] removeItemAtPath:[docs() stringByAppendingPathComponent:[NSString stringWithUTF8String:name]] error:nil];
+    }
+}

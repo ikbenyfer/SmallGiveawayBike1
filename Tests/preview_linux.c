@@ -174,6 +174,12 @@ int plat_write_file(const char *name, const char *data, long len) {
     return 1;
 }
 
+void plat_delete_file(const char *name) {
+    char p[512];
+    snprintf(p, sizeof(p), "%s/docs/%s", OUT, name);
+    remove(p);
+}
+
 int main(void) {
     const int W = 1024, H = 768;
     EGLDisplay dpy;
@@ -220,7 +226,7 @@ int main(void) {
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { printf("FBO niet compleet\n"); return 2; }
 
     fe_init(W, H);
-    for (frame = 0; frame < 30 * 200; frame++) {
+    for (frame = 0; frame < 30 * 260; frame++) {
         t += 1.0 / 30.0;
         fe_frame(t);
         if (frame == 25) plat_screenshot("00a_logo_fadein", W, H);
