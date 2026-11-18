@@ -14,7 +14,7 @@ jobs:
       - name: Pakketten
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc libegl-dev libgles-dev libegl-mesa0 libgl1-mesa-dri mesa-utils fonts-dejavu-core python3-pil
+          sudo apt-get install -y gcc libegl-dev libgles-dev libegl-mesa0 libgl1-mesa-dri mesa-utils fonts-dejavu-core python3-pil xvfb
 
       - name: Plaatjes en lettertype voor Linux
         run: python3 tools/linux_assets.py preview_assets
@@ -33,7 +33,7 @@ jobs:
           ASAN_OPTIONS: detect_leaks=0
         run: |
           mkdir -p preview_out
-          ./preview | tee preview_out/run.log
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1024x768x24' ./preview | tee preview_out/run.log
           cat preview_out/autotest_report.txt
 
       - name: PPM naar PNG

@@ -116,13 +116,25 @@ int main(void) {
     GLuint fbo, color, depth;
     int frame;
     double t = 0;
-    setenv("EGL_PLATFORM", "surfaceless", 1);
     mkdir(OUT, 0755);
-    dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (dpy == EGL_NO_DISPLAY || !eglInitialize(dpy, &maj, &min)) { printf("EGL init mislukt\n"); return 2; }
     {
+        PFNEGLGETPLATFORMDISPLAYEXTPROC gpd = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
         EGLint attr[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT, EGL_NONE};
-        if (!eglChooseConfig(dpy, attr, &cfg, 1, &n) || n < 1) { printf("geen EGL-config\n"); return 2; }
+        int pass;
+        n = 0;
+        for (pass = 0; pass < 2 && n < 1; pass++) {
+            dpy = EGL_NO_DISPLAY;
+            if (pass == 0 && gpd) dpy = gpd(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
+            if (pass == 1) dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+            if (dpy == EGL_NO_DISPLAY || !eglInitialize(dpy, &maj, &min)) { printf("EGL poging %d: geen display
+", pass); continue; }
+            printf("EGL poging %d: %s
+", pass, eglQueryString(dpy, EGL_VENDOR));
+            if (!eglChooseConfig(dpy, attr, &cfg, 1, &n)) n = 0;
+            if (n < 1) eglGetConfigs(dpy, &cfg, 1, &n);
+        }
+        if (n < 1) { printf("geen EGL-config
+"); return 2; }
     }
     eglBindAPI(EGL_OPENGL_ES_API);
     {
