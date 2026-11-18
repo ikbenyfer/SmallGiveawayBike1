@@ -21,6 +21,16 @@ enum { SFX_CLICK = 0, SFX_PISTOL, SFX_SMG, SFX_SHOTGUN, SFX_COPSHOT, SFX_EMPTY, 
        SFX_DOOR, SFX_JUMP, SFX_CASH, SFX_CHECK, SFX_PASS, SFX_FAIL, SFX_ALARM, SFX_BUY, SFX_COUNT };
 enum { LOOP_ENGINE = 0, LOOP_BIKE, LOOP_SIREN, LOOP_COUNT };
 #define MAX_SFXQ 24
+#define MAX_REMOTE 3
+
+/* een andere speler (multiplayer); positie komt van het netwerk */
+typedef struct {
+    int active, id, fresh;
+    char name[16];
+    float x, y, z, h, tx, ty, tz, th, speed, anim, animLocal, health, flash;
+    int mode, vmodel, vpaint, vcustom, vvariant, weapon, shots, shotsSeen;
+    double seen;
+} RemotePlayer;
 
 typedef struct {
     float mx, my;          /* linker stick: -1..1, my>0 = vooruit */
@@ -106,6 +116,9 @@ typedef struct {
     float lastCopSpawn;
     int sfxq[MAX_SFXQ]; float sfxx[MAX_SFXQ], sfxz[MAX_SFXQ]; int nsfx;
     float screamCool, hurtSndCool;
+    RemotePlayer remote[MAX_REMOTE];
+    struct { int target; float dmg; } hitq[8];
+    int nhit;
     struct GarageCar { int exists, model, paint, eng, hand, neon, spoiler; } garage[MAX_OWNED];
     int dealerOpen, inDealer, customsOpen, inCustoms;
     int wanted;

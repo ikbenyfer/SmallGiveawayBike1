@@ -23,6 +23,7 @@ int ns_ready_at(float x, float z);      /* tegel onder dit punt klaar (of zeker 
 int ns_busy(void);                      /* aantal tegels dat nog laadt */
 int ns_offline_hole(float x, float z);  /* tegel heeft geen data (geen internet / niet gedownload) */
 void ns_to_rd(float x, float z, double *rx, double *ry);
+void ns_origin(double *ox, double *oy);
 void ns_from_rd(double rx, double ry, float *x, float *z);
 int ns_find_road(float x, float z, float *ox, float *oz, float *heading);
 void ns_stats(int *tiles, int *buildings, int *verts, int *fromPack, int *fromCache, int *fromNet);

@@ -22,5 +22,7 @@ int fe_text_wanted(void);
 void fe_text_char(int c);
 void fe_key_command(int cmd);
 void fe_resize_viewport(int w, int h);
+void fe_set_mptest(int mode);   /* 1 = host, 2 = meedoen (test met twee vensters) */
+int fe_should_quit(void);
 
 #endif

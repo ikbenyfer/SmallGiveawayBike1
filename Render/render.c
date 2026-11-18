@@ -542,6 +542,34 @@ void r_draw_scene(Renderer *r, Game *g) {
             shadows[nsh] = v3(p->x, p->y, p->z); shs[nsh][0] = 0.45f; shs[nsh][1] = 0.45f; shs[nsh][2] = 0; nsh++;
         }
     }
+    /* andere spelers (multiplayer) */
+    for (i = 0; i < MAX_REMOTE; i++) {
+        static const int shirt[4] = {6, 1, 2, 3};
+        RemotePlayer *rp = &g->remote[i];
+        M4 m;
+        if (!rp->active) continue;
+        if (!sphere_visible(r, rp->x, rp->y + 1.0f, rp->z, 3.0f, fogEnd)) continue;
+        m = m4_trs_y(rp->x, rp->y, rp->z, rp->h);
+        if (rp->mode == 2) {
+            if (rp->vcustom) {
+                Col pc = paint_color(rp->vpaint);
+                tint(r, pc.r / 255.0f, pc.g / 255.0f, pc.b / 255.0f);
+                draw_mesh(r, &r->carBody[rp->vmodel % CAR_MODELS], &m);
+                tint(r, 1, 1, 1);
+                draw_mesh(r, &r->carDetail[rp->vmodel % CAR_MODELS], &m);
+            } else draw_mesh(r, &r->car[rp->vvariant % CAR_VARIANTS], &m);
+        } else if (rp->mode == 1) {
+            draw_mesh(r, &r->bike[rp->vvariant % BIKE_VARIANTS], &m);
+            draw_char(r, shirt[rp->id & 3], m, rp->animLocal * 2.0f, 1, 0, 0);
+        } else {
+            draw_char(r, shirt[rp->id & 3], m, fabsf(rp->speed) > 0.2f ? rp->animLocal : 0, 0, rp->health <= 0 ? 1.0f : 0, rp->weapon != WP_NONE);
+        }
+        if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
+            shadows[nsh] = v3(rp->x, rp->y, rp->z);
+            shs[nsh][0] = rp->mode == 2 ? 1.15f : 0.45f; shs[nsh][1] = rp->mode == 2 ? 2.3f : 0.45f; shs[nsh][2] = rp->h;
+            nsh++;
+        }
+    }
     /* speler te voet */
     if (mode == MODE_FOOT) {
         M4 m = m4_trs_y(g->p.x, g->p.y, g->p.z, g->p.h);

@@ -342,13 +342,20 @@ int main(int argc, char **argv) {
     int i, running = 1, W = 1024, H = 768, fullscreen = 0;
     char exe[MAX_PATH], *slash;
     Input keys;
-    for (i = 1; i < argc; i++) if (strcmp(argv[i], "--autotest") == 0) g_autotest = 1;
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--autotest") == 0) g_autotest = 1;
+        if (strcmp(argv[i], "--mptest-host") == 0) fe_set_mptest(1);
+        if (strcmp(argv[i], "--mptest-join") == 0) fe_set_mptest(2);
+        if (strcmp(argv[i], "--appdata") == 0 && i + 1 < argc) snprintf(BASE, sizeof(BASE), "%s", argv[++i]);
+    }
     GetModuleFileNameA(NULL, exe, MAX_PATH);
     slash = strrchr(exe, '\\');
     if (slash) *slash = 0;
     snprintf(DATA, sizeof(DATA), "%s\\data", exe);
-    if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, BASE) != S_OK) snprintf(BASE, sizeof(BASE), "%s", exe);
-    strncat(BASE, "\\SmallGiveawayBike1", sizeof(BASE) - strlen(BASE) - 1);
+    if (!BASE[0]) {
+        if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, BASE) != S_OK) snprintf(BASE, sizeof(BASE), "%s", exe);
+        strncat(BASE, "\\SmallGiveawayBike1", sizeof(BASE) - strlen(BASE) - 1);
+    }
     CreateDirectoryA(BASE, NULL);
     settings_load();
 
@@ -453,6 +460,7 @@ int main(int argc, char **argv) {
         fe_frame(plat_time());
         SDL_GL_SwapWindow(win);
         if (g_autotestDone && g_autotest) { static int quitT; if (++quitT > 90) running = 0; }
+        if (fe_should_quit()) running = 0;
     }
     fe_background();
     Mix_CloseAudio();

@@ -1258,6 +1258,45 @@ static void update_weapons(Game *g, const Input *in, float dt) {
                 if (score < best) { best = score; bestVeh = g->firstPolice + i; bestPed = -1; }
             }
         }
+        /* andere spelers (multiplayer): als er geen politie gekozen is, gaan zij voor gewone mensen */
+        {
+            int bestRem = -1, onlyIfNoCop = !(bestVeh >= 0 || (bestPed >= 0 && g->ped[bestPed].cop));
+            float bestR = 1e9f;
+            for (i = 0; i < MAX_REMOTE && onlyIfNoCop; i++) {
+                RemotePlayer *rp = &g->remote[i];
+                float dx, dz, d, score;
+                if (!rp->active || rp->health <= 0) continue;
+                dx = rp->x - g->p.x; dz = rp->z - g->p.z; d = sqrtf(dx * dx + dz * dz);
+                if (d > wd->range || d < 0.3f) continue;
+                if (g->autoAim) {
+                    float ang = acosf(clampf((dx * cf.x + dz * cf.z) / d, -1, 1));
+                    if (ang > 0.55f) continue;
+                    score = ang * 10.0f + d * 0.1f;
+                } else {
+                    float along = dx * cf.x + dz * cf.z, lat = fabsf(dx * cf.z - dz * cf.x);
+                    if (along <= 0 || lat > 0.8f) continue;
+                    score = along;
+                }
+                if (!line_of_sight(g, muzzle, v3(rp->x, rp->y + 1.2f, rp->z))) continue;
+                if (score < bestR) { bestR = score; bestRem = i; }
+            }
+            if (bestRem >= 0 && (bestPed < 0 || (g->autoAim ? bestR <= best + 3.0f : bestR <= best))) {
+                RemotePlayer *rp = &g->remote[bestRem];
+                aim = v3(rp->x, rp->y + 1.2f, rp->z);
+                g->p.h = g->autoAim ? atan2f(aim.x - g->p.x, aim.z - g->p.z) : g->camYaw;
+                for (pel = 0; pel < wd->pellets; pel++) {
+                    float dist = v3len(v3sub(aim, muzzle)), hitP = 1.0f - wd->spread * (dist / wd->range) * 2.5f;
+                    if (rng_f(&g->rng) < hitP && g->nhit < 8) {
+                        g->hitq[g->nhit].target = rp->id;
+                        g->hitq[g->nhit].dmg = wd->damage * 0.4f;
+                        g->nhit++;
+                        g->statHits++;
+                    }
+                    add_tracer(g, v3add(muzzle, v3scale(fwd_of(g->p.h), 0.6f)), aim);
+                }
+                return;
+            }
+        }
         if (bestPed >= 0) aim = v3(g->ped[bestPed].x, g->ped[bestPed].y + 1.2f, g->ped[bestPed].z);
         else if (bestVeh >= 0) aim = v3(g->veh[bestVeh].x, 0.9f, g->veh[bestVeh].z);
         else aim = v3add(muzzle, v3scale(cf, wd->range));

@@ -177,7 +177,7 @@ jobs:
             Game/*.c Render/*.c Win/main_win.c Win/glload.c Win/app_res.o \
             -o SmallGiveawayBike1.exe \
             -L$SDL/lib -L$MIX/lib -lmingw32 -lSDL2main -lSDL2 -lSDL2_mixer \
-            -lopengl32 -lwinhttp -lpsapi -lshell32 -l:libz.a \
+            -lopengl32 -lwinhttp -lpsapi -lshell32 -lws2_32 -liphlpapi -l:libz.a \
             -static-libgcc -Wl,-Bstatic -lpthread -Wl,-Bdynamic -mwindows 2>&1 | tee win_compile.log
           test -f SmallGiveawayBike1.exe
           x86_64-w64-mingw32-objdump -p SmallGiveawayBike1.exe | grep "DLL Name"

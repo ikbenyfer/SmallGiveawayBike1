@@ -272,6 +272,7 @@ static struct {
 void ns_to_rd(float x, float z, double *rx, double *ry) { *rx = S.ox + x; *ry = S.oy - z; }
 void ns_from_rd(double rx, double ry, float *x, float *z) { *x = (float)(rx - S.ox); *z = (float)(S.oy - ry); }
 int ns_active(void) { return S.on; }
+void ns_origin(double *ox, double *oy) { *ox = S.ox; *oy = S.oy; }
 
 static int slot_alloc(void) {
     int i;

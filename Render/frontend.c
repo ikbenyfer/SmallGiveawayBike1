@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include "nlstream.h"
+#include "mp.h"
 #define NL_MAX_AREAS 64
 #define NL_DL_R 2
 
@@ -27,7 +28,7 @@ typedef struct { char pc[8]; char name[96]; long kb; double rx, ry; } NLArea;
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP };
 enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH };
 
 #define NTOUCH 10
@@ -207,6 +208,13 @@ void fe_init(int w, int h) {
     F.showFps = plat_load_int("showfps", 0);
     F.autoAim = plat_load_int("autoaim", 1);
     F.musicOn = plat_load_int("music", 1);
+    {
+        int id = plat_load_int("mpid", 0);
+        char nm[16];
+        if (id <= 0) { id = 1000 + (int)(fmod(plat_time() * 7919.0, 9000.0)); plat_save_int("mpid", id); plat_save_flush(); }
+        snprintf(nm, sizeof(nm), "Player %d", id);
+        mp_set_name(nm);
+    }
     F.sfxOn = plat_load_int("sfx", 1);
     {
         static const char *const sfx[SFX_COUNT] = {"click", "pistol", "smg", "shotgun", "copshot", "empty", "scream", "hurt", "crash",
@@ -400,8 +408,8 @@ static void draw_logo_and_load(void) {
     }
 }
 
-static const char *MENU_ITEMS[5] = {"PLAY", "MISSIONS", "REAL NL", "SETTINGS", "CREDITS"};
-#define MENU_X(i) (R->W * 0.5f + ((i) - 2.0f) * 198.0f)
+static const char *MENU_ITEMS[6] = {"PLAY", "MISSIONS", "REAL NL", "ONLINE", "SETTINGS", "CREDITS"};
+#define MENU_X(i) (R->W * 0.5f + ((i) - 2.5f) * 166.0f)
 
 static void draw_menu(void) {
     Renderer *R = &F.R;
@@ -411,10 +419,10 @@ static void draw_menu(void) {
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
     draw_backdrop(1, 1, F.t);
     bottom_band(1);
-    for (i = 0; i < 5; i++) {
+    for (i = 0; i < 6; i++) {
         float cx = MENU_X(i);
         float pulse = (i == 0) ? 0.04f * sinf(F.t * 3.0f) : 0;
-        big_button(MENU_ITEMS[i], cx, R->H - 74.0f, 38.0f * (1.0f + pulse), F.pressed == i + 1, a);
+        big_button(MENU_ITEMS[i], cx, R->H - 74.0f, 32.0f * (1.0f + pulse), F.pressed == i + 1, a);
     }
     for (i = 0; i < NMISSIONS; i++) done += F.G.completed[i];
     snprintf(line, sizeof(line), "$%ld   -   %d/%d MISSIONS", F.G.money, done, NMISSIONS);
@@ -685,6 +693,7 @@ static void draw_hud(void) {
         ui_text(R, "3D BAG + PDOK (CC BY 4.0)", 20, 246, 14, 0.9f, 0.9f, 0.9f, 0.8f, 0);
     }
     ui_text(R, g_desktop ? "M = MAP" : "TAP MAP", 116, 222, 14, 1, 1, 1, 0.55f, 1);
+    draw_mp_hud();
     /* missie-paneel */
     if (g->mission >= 0) {
         const MissionDef *m = &g->mdef[g->mission];
@@ -1627,6 +1636,224 @@ static void shop_tap(float x, float y, int phase) {
     }
 }
 
+/* ------------------------------------------------------------------ ONLINE multiplayer: scherm, HUD, test */
+
+static char mpCode[12];
+static int mpCodeLen, g_mptest;
+static double mptestT0;
+static int fe_quit;
+
+static void mp_host_here(void) {
+    if (F.mode == 1) { double ox, oy; ns_origin(&ox, &oy); mp_host(1, ox, oy, F.nlLabel); }
+    else mp_host(0, 0, 0, "Small Giveaway City");
+}
+
+static void mp_try_enter_world(void) {
+    int world;
+    double ox, oy;
+    char label[64];
+    if (!mp_take_world(&world, &ox, &oy, label, sizeof(label))) return;
+    mp_lan_listen(0);
+    if (world == 1) nl_play_at(ox, oy, label[0] ? label : "Online", ST_MENU);
+    else {
+        if (F.mode != 0) nl_exit_to_city();
+        start_game();
+    }
+    snprintf(F.G.banner, sizeof(F.G.banner), "ONLINE");
+    snprintf(F.G.sub, sizeof(F.G.sub), "Connected - you are playing together");
+    F.G.bannerT = 4.0f; F.G.bannerGood = 1;
+}
+
+static void mp_key_rect(int row, int col, float *x, float *y) {
+    float x0[4] = {548, 548, 570, 592};
+    *x = x0[row] + col * 44.0f;
+    *y = 330.0f + row * 52.0f;
+}
+
+static int mp_hit(float px, float py) {
+    int r, c;
+    float x, y;
+    if (px > 40 && px < 500 && py > 112 && py < 182) return 1001;
+    for (r = 0; r < 4; r++)
+        for (c = 0; KROWS[r][c]; c++) {
+            mp_key_rect(r, c, &x, &y);
+            if (px >= x && px < x + 40 && py >= y && py < y + 46) return KROWS[r][c];
+        }
+    mp_key_rect(3, 7, &x, &y);
+    if (px >= x && px < x + 108 && py >= y && py < y + 46) return 1003;
+    if (px > 548 && px < 988 && py > 548 && py < 610) return 1002;
+    if (px > 20 && px < 220 && py > 680 && py < 745) return 1004;
+    for (r = 0; r < mp_lan_count() && r < 4; r++) {
+        float ry = 360.0f + r * 64.0f;
+        if (px > 40 && px < 500 && py > ry && py < ry + 56) return 1100 + r;
+    }
+    return 0;
+}
+
+static void draw_mp_screen(void) {
+    Renderer *R = &F.R;
+    char b[200];
+    int r, c, i;
+    float x, y;
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
+    draw_backdrop(0.3f, 0.0f, F.t);
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.6f);
+    ui_text(R, "ONLINE MULTIPLAYER", R->W * 0.5f, 12, 46, 1, 1, 1, 1, 1);
+    snprintf(b, sizeof(b), "You are: %s   -   up to 4 players, peer to peer", mp_name());
+    ui_text(R, b, R->W * 0.5f, 66, 18, 0.85f, 0.85f, 0.85f, 1, 1);
+    /* links: hosten + LAN */
+    ui_rect(R, 40, 112, 460, 70, F.pressed == 1001 ? 0.9f : 0.75f, 0.12f, 0.12f, 0.95f);
+    ui_text(R, "HOST A GAME", 270, 124, 40, 1, 1, 1, 1, 1);
+    ui_text(R, "Starts the city. People on your Wi-Fi see it below;", 270, 192, 15, 0.85f, 0.85f, 0.85f, 1, 1);
+    ui_text(R, "over the internet they type your invite code.", 270, 210, 15, 0.85f, 0.85f, 0.85f, 1, 1);
+    ui_text(R, "Tip: host from the pause menu to play together in REAL NL.", 270, 228, 15, 0.85f, 0.85f, 0.85f, 1, 1);
+    ui_text(R, "GAMES ON YOUR WI-FI", 40, 320, 24, 1.0f, 0.85f, 0.4f, 1, 0);
+    if (mp_lan_count() == 0) ui_text(R, "Searching... (nobody is hosting on this network yet)", 40, 362, 16, 0.8f, 0.8f, 0.8f, 1, 0);
+    for (i = 0; i < mp_lan_count() && i < 4; i++) {
+        const MPLan *l = mp_lan(i);
+        float ry = 360.0f + i * 64.0f;
+        ui_rect(R, 40, ry, 460, 56, F.pressed == 1100 + i ? 0.6f : 0.1f, F.pressed == 1100 + i ? 0.1f : 0.3f, 0.12f, 0.9f);
+        snprintf(b, sizeof(b), "%s", l->name);
+        ui_text(R, b, 56, ry + 6, 26, 1, 1, 1, 1, 0);
+        snprintf(b, sizeof(b), "%d/4 players - %s - tap to JOIN", l->players, l->world ? "REAL NL" : "city");
+        ui_text(R, b, 56, ry + 34, 15, 0.85f, 0.85f, 0.85f, 1, 0);
+    }
+    /* rechts: code invoeren */
+    ui_text(R, "JOIN WITH A CODE", 548, 112, 24, 1.0f, 0.85f, 0.4f, 1, 0);
+    ui_text(R, "Ask the host for the invite code (10 letters/digits).", 548, 142, 15, 0.85f, 0.85f, 0.85f, 1, 0);
+    ui_rect(R, 548, 168, 440, 70, 0, 0, 0, 0.7f);
+    {
+        char shown[16];
+        if (mpCodeLen > 5) snprintf(shown, sizeof(shown), "%.5s-%s", mpCode, mpCode + 5);
+        else snprintf(shown, sizeof(shown), "%s", mpCode);
+        if (!mpCodeLen) ui_text(R, "XXXXX-XXXXX", 768, 178, 44, 0.5f, 0.5f, 0.5f, 0.6f, 1);
+        else ui_text(R, shown, 768, 178, 44, 1, 1, 1, 1, 1);
+    }
+    for (r = 0; r < 4; r++)
+        for (c = 0; KROWS[r][c]; c++) {
+            char lab[2] = {KROWS[r][c], 0};
+            mp_key_rect(r, c, &x, &y);
+            ui_rect(R, x, y, 40, 46, F.pressed == KROWS[r][c] ? 0.7f : 0.12f, 0.12f, 0.14f, 0.9f);
+            ui_text(R, lab, x + 20, y + 8, 28, 1, 1, 1, mpCodeLen < 10 ? 1.0f : 0.35f, 1);
+        }
+    mp_key_rect(3, 7, &x, &y);
+    ui_rect(R, x, y, 108, 46, F.pressed == 1003 ? 0.7f : 0.3f, 0.08f, 0.08f, 0.9f);
+    ui_text(R, "DELETE", x + 54, y + 12, 22, 1, 1, 1, 1, 1);
+    ui_rect(R, 548, 548, 440, 62, mpCodeLen == 10 ? (F.pressed == 1002 ? 0.6f : 0.15f) : 0.2f, mpCodeLen == 10 ? 0.45f : 0.2f, mpCodeLen == 10 ? 0.9f : 0.2f, 0.95f);
+    ui_text(R, "JOIN", 768, 556, 40, 1, 1, 1, mpCodeLen == 10 ? 1.0f : 0.4f, 1);
+    if (mp_status()[0]) ui_text(R, mp_status(), R->W * 0.5f, 632, 18, 1, 0.85f, 0.4f, 1, 1);
+    big_button("BACK", 120, 712, 40, F.pressed == 1004, 1);
+    ui_text(R, "Traffic, people and police are separate for each player.", R->W * 0.5f + 100, 724, 14, 0.7f, 0.7f, 0.7f, 1, 1);
+}
+
+static void mp_screen_tap(float x, float y, int phase) {
+    int k = mp_hit(x, y);
+    if (phase != TOUCH_END) { F.pressed = k; return; }
+    F.pressed = 0;
+    if (k == 1001) {
+        if (F.mode != 0) nl_exit_to_city();
+        mp_lan_listen(0);
+        start_game();
+        mp_host_here();
+        snprintf(F.G.banner, sizeof(F.G.banner), "HOSTING ONLINE");
+        snprintf(F.G.sub, sizeof(F.G.sub), "Friends can join now - the invite code is in the pause menu");
+        F.G.bannerT = 5.0f; F.G.bannerGood = 1;
+    } else if (k == 1002 && mpCodeLen == 10) {
+        uint32_t ip;
+        int port;
+        if (mp_code_decode(mpCode, &ip, &port)) mp_join(ip, port);
+    } else if (k == 1003) {
+        if (mpCodeLen > 0) mpCode[--mpCodeLen] = 0;
+    } else if (k == 1004) {
+        if (mp_mode() == MP_JOINING) mp_leave();
+        mp_lan_listen(0);
+        set_state(ST_MENU);
+    } else if (k >= 1100 && k < 1100 + MP_MAXLAN) {
+        const MPLan *l = mp_lan(k - 1100);
+        if (l) mp_join(l->ip, l->port);
+    } else if (((k >= 'A' && k <= 'Z') || (k >= '0' && k <= '9')) && mpCodeLen < 10) {
+        mpCode[mpCodeLen++] = (char)k; mpCode[mpCodeLen] = 0;
+    }
+}
+
+static void open_mp_screen(void) {
+    mp_lan_listen(1);
+    set_state(ST_MP);
+}
+
+/* naamlabels en lijst in de HUD */
+static void draw_mp_hud(void) {
+    Renderer *R = &F.R;
+    Game *g = &F.G;
+    char b[96];
+    int i, n = 0;
+    if (!mp_mode()) return;
+    for (i = 0; i < MAX_REMOTE; i++) {
+        RemotePlayer *rp = &g->remote[i];
+        const float *m = R->vp.m;
+        float px = rp->x, py = rp->y + 2.4f + (rp->mode == 2 ? 0.4f : 0.0f), pz = rp->z, cx, cy, cw;
+        if (!rp->active) continue;
+        n++;
+        cx = m[0] * px + m[4] * py + m[8] * pz + m[12];
+        cy = m[1] * px + m[5] * py + m[9] * pz + m[13];
+        cw = m[3] * px + m[7] * py + m[11] * pz + m[15];
+        if (cw > 0.5f && cw < 120.0f) {
+            float sx = (cx / cw * 0.5f + 0.5f) * R->W, sy = (0.5f - cy / cw * 0.5f) * R->H;
+            float tw = ui_text_w(R, rp->name, 18);
+            ui_rect(R, sx - tw * 0.5f - 8, sy - 4, tw + 16, 26, 0, 0, 0, 0.55f);
+            ui_text(R, rp->name, sx, sy - 1, 18, 0.6f, 0.9f, 1.0f, 1, 1);
+            ui_rect(R, sx - 24, sy + 23, 48, 4, 0.3f, 0, 0, 0.8f);
+            ui_rect(R, sx - 24, sy + 23, 48 * clampf(rp->health / 100.0f, 0, 1), 4, 0.3f, 1.0f, 0.3f, 0.9f);
+        }
+    }
+    snprintf(b, sizeof(b), "ONLINE %s - %d/4", mp_mode() == MP_HOST ? "HOST" : "PLAYER", n + 1);
+    ui_rect(R, 14, 268, 206, 24 + n * 20, 0, 0, 0, 0.5f);
+    ui_text(R, b, 22, 270, 17, 0.6f, 0.9f, 1.0f, 1, 0);
+    for (i = 0, n = 0; i < MAX_REMOTE; i++) if (g->remote[i].active) { ui_text(R, g->remote[i].name, 30, 292.0f + n * 20, 15, 1, 1, 1, 0.9f, 0); n++; }
+}
+
+void fe_set_mptest(int mode) { g_mptest = mode; }
+int fe_should_quit(void) { return fe_quit; }
+
+static void mptest_tick(void) {
+    char rep2[600];
+    int i, n;
+    if (!g_mptest || !F.loadDone) return;
+    if (mptestT0 == 0 && F.state == ST_MENU) {
+        mptestT0 = plat_time();
+        if (g_mptest == 1) {
+            mp_set_name("TestHost");
+            start_game();
+            mp_host_here();
+        } else {
+            mp_set_name("TestJoiner");
+            open_mp_screen();
+        }
+    }
+    if (mptestT0 == 0) return;
+    if (g_mptest == 2 && mp_mode() == MP_OFF && mp_lan_count() > 0) {
+        const MPLan *l = mp_lan(0);
+        plat_log("SGB-MP test: LAN-spel gevonden '%s', verbinden", l->name);
+        mp_join(l->ip, l->port);
+    }
+    /* rondjes lopen zodat de ander beweging ziet */
+    g_dk.my = 1.0f; g_dk.mx = g_mptest == 1 ? 0.6f : -0.6f;
+    if (plat_time() - mptestT0 > 30.0) {
+        n = snprintf(rep2, sizeof(rep2), "mptest %s: modus=%d, spelers=%d, status='%s', code-internet='%s', code-lan='%s'\n",
+                     g_mptest == 1 ? "host" : "join", mp_mode(), mp_players(), mp_status(), mp_code_internet(), mp_code_lan());
+        for (i = 0; i < MAX_REMOTE; i++) {
+            RemotePlayer *rp = &F.G.remote[i];
+            if (!rp->active) continue;
+            n += snprintf(rep2 + n, sizeof(rep2) - (size_t)n, "  ziet '%s' (id %d) op %.1f, %.1f, modus %d, gezondheid %.0f\n", rp->name, rp->id, rp->x, rp->z, rp->mode, rp->health);
+        }
+        plat_log("%s", rep2);
+        plat_write_text(g_mptest == 1 ? "mp_report_host.txt" : "mp_report_join.txt", rep2);
+        mp_leave();
+        fe_quit = 1;
+        g_mptest = 0;
+    }
+}
+
 static const char *CUSTOM_ITEMS[5] = {"PAINT", "ENGINE", "HANDLING", "NEON", "SPOILER"};
 static const char *PAINT_NAMES[NPAINTS] = {"RED", "BLUE", "YELLOW", "WHITE", "GREEN", "BLACK", "ORANGE", "PURPLE", "CYAN", "SILVER"};
 static const char *NEON_NAMES[NNEONS] = {"OFF", "RED", "BLUE", "GREEN", "PINK", "WHITE"};
@@ -1760,11 +1987,19 @@ static void customs_tap(float x, float y, int phase) {
 static void draw_pause(void) {
     Renderer *R = &F.R;
     int i;
-    const char *items[4] = {"RESUME", "MISSIONS", "SETTINGS", "MAIN MENU"};
+    const char *items[5] = {"RESUME", "MISSIONS", "HOST ONLINE", "SETTINGS", "MAIN MENU"};
     if (F.mode == 1) items[1] = "NEW POSTCODE";
+    if (mp_mode()) items[2] = "LEAVE ONLINE";
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.6f);
     ui_text(R, "PAUSED", R->W * 0.5f, 130, 70, 1, 1, 1, 1, 1);
-    for (i = 0; i < 4; i++) big_button(items[i], R->W * 0.5f, 290.0f + i * 100.0f, 48, F.pressed == i + 1, 1);
+    for (i = 0; i < 5; i++) big_button(items[i], R->W * 0.5f, 250.0f + i * 88.0f, 44, F.pressed == i + 1, 1);
+    if (mp_mode() == MP_HOST) {
+        char b[160];
+        ui_rect(R, 112, 676, 800, 84, 0, 0, 0, 0.7f);
+        snprintf(b, sizeof(b), "INVITE CODE (internet): %s      Wi-Fi code: %s", mp_code_internet()[0] ? mp_code_internet() : "looking up...", mp_code_lan());
+        ui_text(R, b, R->W * 0.5f, 684, 22, 1, 0.85f, 0.4f, 1, 1);
+        ui_text(R, mp_internet_note(), R->W * 0.5f, 718, 14, 0.85f, 0.85f, 0.85f, 1, 1);
+    }
 }
 
 /* ------------------------------------------------------------------ invoer */
@@ -1828,20 +2063,22 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_MENU) {
-        for (i = 0; i < 5; i++)
-            if (hit_text(x, y, MENU_ITEMS[i], MENU_X(i), R->H - 74.0f + 20, 38)) hit = i + 1;
+        for (i = 0; i < 6; i++)
+            if (hit_text(x, y, MENU_ITEMS[i], MENU_X(i), R->H - 74.0f + 18, 32)) hit = i + 1;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
         if (hit == 1) start_game();
         else if (hit == 2) { set_state(ST_MISSIONS); F.missionsFrom = ST_MENU; }
         else if (hit == 3) open_nl_input(ST_MENU);
-        else if (hit == 4) set_state(ST_SETTINGS);
-        else if (hit == 5) set_state(ST_CREDITS);
+        else if (hit == 4) open_mp_screen();
+        else if (hit == 5) set_state(ST_SETTINGS);
+        else if (hit == 6) set_state(ST_CREDITS);
         return;
     }
     if (F.state == ST_NLINPUT) { nl_input_tap(x, y, phase); return; }
     if (F.state == ST_BIGMAP) { bigmap_touch(x, y, phase); return; }
     if (F.state == ST_SHOP) { shop_tap(x, y, phase); return; }
+    if (F.state == ST_MP) { mp_screen_tap(x, y, phase); return; }
     if (F.state == ST_DEALER) { dealer_tap(x, y, phase); return; }
     if (F.state == ST_CUSTOMS) { customs_tap(x, y, phase); return; }
     if (F.state == ST_NLLOAD) {
@@ -1919,17 +2156,22 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_PAUSE) {
-        const char *pi[4] = {"RESUME", "MISSIONS", "SETTINGS", "MAIN MENU"};
+        const char *pi[5] = {"RESUME", "MISSIONS", "HOST ONLINE", "SETTINGS", "MAIN MENU"};
         if (F.mode == 1) pi[1] = "NEW POSTCODE";
-        for (i = 0; i < 4; i++)
-            if (hit_text(x, y, pi[i], R->W * 0.5f, 290.0f + i * 100.0f + 24, 48)) hit = i + 1;
+        if (mp_mode()) pi[2] = "LEAVE ONLINE";
+        for (i = 0; i < 5; i++)
+            if (hit_text(x, y, pi[i], R->W * 0.5f, 250.0f + i * 88.0f + 22, 44)) hit = i + 1;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
         if (hit == 1) set_state(ST_GAME);
         else if (hit == 2 && F.mode == 1) open_nl_input(ST_PAUSE);
         else if (hit == 2) { set_state(ST_MISSIONS); F.missionsFrom = ST_PAUSE; }
-        else if (hit == 3) { set_state(ST_SETTINGS); F.prevState = ST_PAUSE; }
-        else if (hit == 4) { save_all(); nl_exit_to_city(); set_state(ST_MENU); }
+        else if (hit == 3) {
+            if (mp_mode()) { mp_leave(); game_message(&F.G, "You left the online game", 2.0f); set_state(ST_GAME); }
+            else mp_host_here();
+        }
+        else if (hit == 4) { set_state(ST_SETTINGS); F.prevState = ST_PAUSE; }
+        else if (hit == 5) { save_all(); mp_leave(); nl_exit_to_city(); set_state(ST_MENU); }
     }
 }
 
@@ -2457,6 +2699,13 @@ void fe_frame(double now) {
 
     R->drawCalls = 0;
     if (F.loadDone) dl_tick();
+    if (F.loadDone) {
+        const char *ev;
+        mptest_tick();
+        mp_tick(&F.G, dt);
+        if (mp_mode() == MP_CLIENT) mp_try_enter_world();
+        if ((ev = mp_event()) != NULL && F.state == ST_GAME) game_message(&F.G, ev, 3.0f);
+    }
     if (F.mode == 1 && (F.state == ST_GAME || F.state == ST_PAUSE || F.state == ST_BIGMAP)) ns_update(F.G.p.x, F.G.p.z);
     glViewport(0, 0, g_vpW > 0 ? g_vpW : R->W, g_vpH > 0 ? g_vpH : R->H);
     glClearColor(0, 0, 0, 1);
@@ -2518,6 +2767,9 @@ void fe_frame(double now) {
                 F.atStep = F.atStep <= 52 ? 53 : 70;
             }
         }
+        break;
+    case ST_MP:
+        ui_begin(R); draw_mp_screen(); ui_flush(R);
         break;
     case ST_SHOP:
         draw_shop();
@@ -2657,10 +2909,17 @@ void fe_mouse_wheel(float dy) {
     if (F.state == ST_BIGMAP) F.bmScale = clampf(F.bmScale * (dy > 0 ? 1.25f : 0.8f), 0.06f, 4.0f);
 }
 
-int fe_text_wanted(void) { return F.ready && F.state == ST_NLINPUT; }
+int fe_text_wanted(void) { return F.ready && (F.state == ST_NLINPUT || F.state == ST_MP); }
 
 void fe_text_char(int c) {
     char norm[8];
+    if (F.ready && F.state == ST_MP) {
+        if (c >= 'a' && c <= 'z') c -= 32;
+        if (((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) && mpCodeLen < 10) { mpCode[mpCodeLen++] = (char)c; mpCode[mpCodeLen] = 0; }
+        else if (c == 8 && mpCodeLen > 0) mpCode[--mpCodeLen] = 0;
+        else if (c == 13 && mpCodeLen == 10) { uint32_t ip; int port; if (mp_code_decode(mpCode, &ip, &port)) mp_join(ip, port); }
+        return;
+    }
     if (!F.ready || F.state != ST_NLINPUT) return;
     if (c >= 'a' && c <= 'z') c -= 32;
     if (c >= '0' && c <= '9') {
@@ -2689,6 +2948,7 @@ void fe_key_command(int cmd) {
     case ST_MISSIONS: set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
     case ST_CREDITS: set_state(ST_MENU); break;
     case ST_NLINPUT: set_state(F.nlInFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
+    case ST_MP: if (mp_mode() == MP_JOINING) mp_leave(); mp_lan_listen(0); set_state(ST_MENU); break;
     default: break;
     }
 }
