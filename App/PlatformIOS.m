@@ -354,13 +354,13 @@ void plat_audio_init(const char *const *sfx, int nsfx, const char *const *loops,
     }
 }
 
-void plat_sfx(int id, float vol) {
+void plat_sfx(int sid, float vol) {
     NSArray *v;
     id o;
-    if (!gSfx || id < 0 || id >= (int)gSfx.count || vol <= 0.01f) return;
-    v = gSfx[id];
-    o = v[gSfxNext[id] % SFX_VOICES];
-    gSfxNext[id]++;
+    if (!gSfx || sid < 0 || sid >= (int)gSfx.count || vol <= 0.01f) return;
+    v = gSfx[sid];
+    o = v[gSfxNext[sid] % SFX_VOICES];
+    gSfxNext[sid]++;
     if (o == [NSNull null]) return;
     {
         AVAudioPlayer *pl = (AVAudioPlayer *)o;
@@ -370,11 +370,11 @@ void plat_sfx(int id, float vol) {
     }
 }
 
-void plat_loop(int id, float vol, float rate) {
+void plat_loop(int sid, float vol, float rate) {
     id o;
     AVAudioPlayer *pl;
-    if (!gLoops || id < 0 || id >= (int)gLoops.count) return;
-    o = gLoops[id];
+    if (!gLoops || sid < 0 || sid >= (int)gLoops.count) return;
+    o = gLoops[sid];
     if (o == [NSNull null]) return;
     pl = (AVAudioPlayer *)o;
     if (vol <= 0.01f) { if (pl.playing) [pl pause]; return; }
