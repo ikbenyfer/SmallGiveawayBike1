@@ -3,6 +3,8 @@
 #ifdef __APPLE__
 #include <OpenGLES/ES2/gl.h>
 #include <OpenGLES/ES2/glext.h>
+#elif defined(_WIN32)
+#include "../Win/glwin.h"
 #else
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>

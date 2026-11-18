@@ -1,4 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
+#ifdef _WIN32
+#define strtok_r strtok_s
+#endif
 #include "frontend.h"
 #include "render.h"
 #include "../Game/nlmap.h"
@@ -136,6 +139,15 @@ static void reset_controls(void) {
     F.jumpEdge = F.actionEdge = F.switchEdge = 0;
     memset(&F.in, 0, sizeof(F.in));
 }
+
+/* desktop-besturing (buiten F, want fe_init wist F) */
+static int g_desktop, g_vpW, g_vpH;
+static Input g_dk;
+
+void fe_set_desktop(int on) { g_desktop = on; }
+void fe_key_input(const void *keys) { g_dk = *(const Input *)keys; }
+void fe_resize_viewport(int w, int h) { g_vpW = w; g_vpH = h; }
+int fe_wants_mouse(void) { return g_desktop && F.ready && F.state == ST_GAME && !F.at; }
 
 static void set_state(int s) {
     if (s != F.state && (F.state == ST_GAME || s != ST_GAME)) reset_controls();
@@ -672,7 +684,7 @@ static void draw_hud(void) {
         else if (ns_offline_hole(g->p.x, g->p.z)) ui_text(R, "NO MAP DATA HERE (offline / not downloaded)", W * 0.5f, 70, 20, 1, 0.5f, 0.5f, 1, 1);
         ui_text(R, "3D BAG + PDOK (CC BY 4.0)", 20, 246, 14, 0.9f, 0.9f, 0.9f, 0.8f, 0);
     }
-    ui_text(R, "TAP MAP", 116, 222, 14, 1, 1, 1, 0.55f, 1);
+    ui_text(R, g_desktop ? "M = MAP" : "TAP MAP", 116, 222, 14, 1, 1, 1, 0.55f, 1);
     /* missie-paneel */
     if (g->mission >= 0) {
         const MissionDef *m = &g->mdef[g->mission];
@@ -712,6 +724,20 @@ static void draw_hud(void) {
         ui_text(R, g->msg, W * 0.5f, H - 230, 30, 1, 1, 1, a, 1);
     }
 
+    if (g_desktop) {
+        ui_rect(R, 0, H - 30, W, 30, 0, 0, 0, 0.45f);
+        ui_text(R, mode == MODE_FOOT
+                       ? "WASD walk   MOUSE look   LEFT CLICK fire   SPACE jump   E enter   Q gun   M map   ESC pause"
+                       : "W gas   S brake/reverse   A/D steer   MOUSE look   E exit   M map   ESC pause",
+                W * 0.5f, H - 26, 16, 1, 1, 1, 0.85f, 1);
+        if (mode != MODE_FOOT) {
+            Vehicle *v = &g->veh[g->p.veh];
+            snprintf(b, sizeof(b), "%d KM/H", (int)(fabsf(v->speed) * 3.6f + 0.5f));
+            ui_text(R, b, W - 24, H - 80, 34, 1, 1, 1, 0.9f, 2);
+        }
+        if (mode == MODE_FOOT && game_near_vehicle(g) >= 0) ui_text(R, "PRESS E", W * 0.5f, H - 90, 26, 1, 0.85f, 0.3f, 0.6f + 0.4f * sinf(F.t * 6), 1);
+        return;
+    }
     /* sticks */
     ui_circle(R, F.lbx, F.lby, STICK_R, 0, 0, 0, F.lOn ? 0.35f : 0.22f);
     ui_ring(R, F.lbx, F.lby, STICK_R, 2.5f, 1, 1, 1, 0.5f);
@@ -1945,6 +1971,18 @@ static void build_input(void) {
     in->fire = ctl_down(CTL_FIRE);
     in->switchPressed = F.switchEdge;
     F.jumpEdge = F.actionEdge = F.switchEdge = 0;
+    if (g_desktop) {
+        in->mx = clampf(in->mx + g_dk.mx, -1, 1);
+        in->my = clampf(in->my + g_dk.my, -1, 1);
+        in->gas |= g_dk.gas && F.G.p.veh >= 0;
+        in->brake |= g_dk.brake && F.G.p.veh >= 0;
+        in->fire |= g_dk.fire;
+        in->jumpPressed |= g_dk.jumpPressed;
+        in->actionPressed |= g_dk.actionPressed;
+        in->switchPressed |= g_dk.switchPressed;
+        if (F.G.p.veh >= 0) { if (g_dk.gas) in->my = 0; }   /* W = gas, niet dubbel */
+        g_dk.jumpPressed = g_dk.actionPressed = g_dk.switchPressed = 0;
+    }
 }
 
 /* ------------------------------------------------------------------ automatische test */
@@ -2420,7 +2458,7 @@ void fe_frame(double now) {
     R->drawCalls = 0;
     if (F.loadDone) dl_tick();
     if (F.mode == 1 && (F.state == ST_GAME || F.state == ST_PAUSE || F.state == ST_BIGMAP)) ns_update(F.G.p.x, F.G.p.z);
-    glViewport(0, 0, R->W, R->H);
+    glViewport(0, 0, g_vpW > 0 ? g_vpW : R->W, g_vpH > 0 ? g_vpH : R->H);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -2600,5 +2638,57 @@ void fe_frame(double now) {
         plat_screenshot(pendingShot, R->W, R->H);
         F.skipStat = 2;
         pendingShot[0] = 0;
+    }
+}
+
+/* ------------------------------------------------------------------ desktop-invoer */
+
+void fe_mouse_look(float dx, float dy) {
+    static const float sens[3] = {0.6f, 1.0f, 1.5f};
+    float s;
+    if (!F.ready || F.state != ST_GAME || !F.loadDone) return;
+    s = sens[F.camSpeed % 3];
+    F.G.camYaw = wrap_angle(F.G.camYaw - dx * 0.0035f * s);
+    F.G.camPitch = clampf(F.G.camPitch + dy * 0.0028f * s * (F.invertY ? -1.0f : 1.0f), -0.15f, 1.15f);
+    F.G.camIdle = 0;
+}
+
+void fe_mouse_wheel(float dy) {
+    if (F.state == ST_BIGMAP) F.bmScale = clampf(F.bmScale * (dy > 0 ? 1.25f : 0.8f), 0.06f, 4.0f);
+}
+
+int fe_text_wanted(void) { return F.ready && F.state == ST_NLINPUT; }
+
+void fe_text_char(int c) {
+    char norm[8];
+    if (!F.ready || F.state != ST_NLINPUT) return;
+    if (c >= 'a' && c <= 'z') c -= 32;
+    if (c >= '0' && c <= '9') {
+        if (F.pcLen < 4 && !(F.pcLen == 0 && c == '0')) { F.pcIn[F.pcLen++] = (char)c; F.pcIn[F.pcLen] = 0; }
+    } else if (c >= 'A' && c <= 'Z') {
+        if (F.pcLen >= 4 && F.pcLen < 6) { F.pcIn[F.pcLen++] = (char)c; F.pcIn[F.pcLen] = 0; }
+    } else if (c == 8) {
+        if (F.pcLen > 0) F.pcIn[--F.pcLen] = 0;
+    } else if (c == 13) {
+        if (nl_normalize_postcode(F.pcIn, norm)) nl_play_pc(norm, F.nlInFrom);
+    }
+}
+
+void fe_key_command(int cmd) {
+    if (!F.ready || F.at) return;
+    if (cmd == FE_CMD_MAP) {
+        if (F.state == ST_GAME) bm_open();
+        else if (F.state == ST_BIGMAP) set_state(ST_GAME);
+        return;
+    }
+    switch (F.state) {
+    case ST_GAME: set_state(ST_PAUSE); save_all(); break;
+    case ST_PAUSE: case ST_BIGMAP: case ST_SHOP: case ST_DEALER: set_state(ST_GAME); break;
+    case ST_CUSTOMS: set_state(ST_GAME); save_all(); break;
+    case ST_SETTINGS: set_state(F.prevState == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
+    case ST_MISSIONS: set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
+    case ST_CREDITS: set_state(ST_MENU); break;
+    case ST_NLINPUT: set_state(F.nlInFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
+    default: break;
     }
 }

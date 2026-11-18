@@ -67,6 +67,13 @@ static const char *FS_U =
 static GLuint compile(GLenum type, const char *src) {
     GLuint s = glCreateShader(type);
     GLint ok = 0;
+#ifdef SGB_DESKTOP_GL
+    /* desktop-OpenGL 2.1: GLSL 1.20 kent geen precision-regel */
+    char buf[4096];
+    if (strncmp(src, "precision", 9) == 0) { const char *nl = strchr(src, '\n'); if (nl) src = nl + 1; }
+    snprintf(buf, sizeof(buf), "#version 120\n%s", src);
+    src = buf;
+#endif
     glShaderSource(s, 1, &src, NULL);
     glCompileShader(s);
     glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
