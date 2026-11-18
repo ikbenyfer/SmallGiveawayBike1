@@ -88,6 +88,19 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
     | Spoiler | $400 | |
 
     Op je eigen auto blijft alles bewaard. In de test haalde de BOLT X 123 km/h, en na de motor op niveau 3 153 km/h.
+- **Muziek en geluid.**
+  - Tijdens het spelen draait je eigen nummer "Boulevard Drift" (`Resources/music.mp3`) in een lus. In het hoofdmenu staat de muziek stil.
+  - **Geluidseffecten**, allemaal zelf gemaakt met synthese (`tools/make_sounds.py`, geen samples van anderen):
+    - schoten (pistool, SMG, shotgun), een leeg magazijn, en de schoten van de politie
+    - een sirene die harder klinkt naarmate de politie dichterbij komt
+    - mensen die gillen als ze geraakt of aangereden worden, of wegrennen
+    - de motor (toonhoogte en volume volgen je snelheid) en het tikken van de fietsketting
+    - botsingen, in- en uitstappen, springen en geld oppakken
+    - checkpoints, missie geslaagd of mislukt, BUSTED en KNOCKED OUT
+    - het bankalarm, de kassa bij aankopen en menuklikjes
+  - Geluiden verder weg klinken zachter.
+  - In SETTINGS zet je **MUSIC** en **SOUND EFFECTS** los aan of uit.
+  - De app gebruikt de iOS-audiomodus "ambient". Daardoor hoor je niets als de iPad op stil staat (schakelaar of bedieningspaneel), en loopt eventuele andere muziek gewoon door.
 - **REAL NL (aparte modus, knop in het hoofdmenu):** rijd door het echte Nederland.
   - **Ingebouwd en offline: heel Heemskerk en Beverwijk**, inclusief Wijk aan Zee, de duinen en het strand. Dat zijn 58.107 gebouwen met hun echte hoogte (3D BAG), alle wegen met straatnamen, water, groen en 1.897 postcodes, samen maar 2 MB in de app (`Resources/nl_hb.pak`). Je start via de knoppen rechts (Beverwijk centrum, de stations, Heemskerk centrum, Wijk aan Zee, de Bazaar) of je typt een postcode uit die gemeentes. Daar is geen internet voor nodig.
   - **Streaming terwijl je rijdt:** de wereld bestaat uit tegels van 250 √ó 250 m. Rondom je liggen er altijd 3 √ó 3 klaar. Komt er een nieuwe tegel in beeld, dan laadt een achtergrond-thread die, zodat het spel niet hapert. Binnen Heemskerk/Beverwijk komt de tegel uit de ingebouwde kaart. Daarbuiten komt hij uit je downloads, of anders van internet (3D BAG en PDOK), en wordt hij daarna bewaard. Zonder internet zie je buiten de regio "NO MAP DATA HERE".
@@ -102,7 +115,7 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
 - **Geld** verdien je met missies en met 18 stapels geld op de stoep, die na 2 minuten terugkomen. Je geld en je voortgang worden bewaard.
 - **Minimap** linksboven. Die draait mee met de camera en toont missiepunten en fietsen.
 - **Besturing:** een linker joystick om te bewegen of te sturen, een rechter joystick voor de camera, en de knoppen JUMP, RIDE/DRIVE/EXIT, GAS en BRAKE.
-- **Instellingen:** Auto aim aan/uit, Graphics (laag, midden of hoog: zichtafstand 95, 135 of 180 m, 6, 10 of 14 voetgangers, 4, 7 of 10 auto's), tijd van de dag (schemer, nacht of dag), camerasnelheid, camera-Y omkeren, FPS tonen en voortgang wissen.
+- **Instellingen:** Music aan/uit, Sound effects aan/uit, Auto aim aan/uit, Graphics (laag, midden of hoog: zichtafstand 95, 135 of 180 m, 6, 10 of 14 voetgangers, 4, 7 of 10 auto's), tijd van de dag (schemer, nacht of dag), camerasnelheid, camera-Y omkeren, FPS tonen en voortgang wissen.
 
 ## Prestaties: zo is het gebouwd
 Het spel draait op vaste 30 FPS. De wereld heeft geen texturen, alleen kleuren per vertex met vast ("gebakken") licht en zelf-lichtgevende ramen. Er zijn alleen blob-schaduwen en geen nabewerking. De stad zit in 64 statische VBO's met frustum- en afstandsculling en mist. Voetgangers en auto's worden hergebruikt (object pooling). De physics zijn simpel (cirkels tegen boxen).

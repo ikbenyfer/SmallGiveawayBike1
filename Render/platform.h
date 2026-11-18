@@ -41,5 +41,10 @@ int plat_read_file(const char *name, char **data, long *len);
 int plat_write_file(const char *name, const char *data, long len);
 void plat_delete_file(const char *name);
 int plat_read_resource(const char *name, char **data, long *len);   /* uit de app-bundel */
+/* geluid: sfx_<naam>.wav en music.mp3 uit de bundel */
+void plat_audio_init(const char *const *sfx, int nsfx, const char *const *loops, int nloops);
+void plat_sfx(int id, float vol);
+void plat_loop(int id, float vol, float rate);   /* vol 0 = stil */
+void plat_music(int on);
 
 #endif

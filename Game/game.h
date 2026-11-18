@@ -17,6 +17,10 @@
 enum { NEED_ANY = 0, NEED_BIKE = 1, NEED_CAR = 2, NEED_FOOT = 3 };
 enum { MODE_FOOT = 0, MODE_BIKE = 1, MODE_CAR = 2 };
 enum { PED_WALK = 0, PED_DODGE, PED_DOWN, PED_IDLE, PED_FLEE };
+enum { SFX_CLICK = 0, SFX_PISTOL, SFX_SMG, SFX_SHOTGUN, SFX_COPSHOT, SFX_EMPTY, SFX_SCREAM, SFX_HURT, SFX_CRASH,
+       SFX_DOOR, SFX_JUMP, SFX_CASH, SFX_CHECK, SFX_PASS, SFX_FAIL, SFX_ALARM, SFX_BUY, SFX_COUNT };
+enum { LOOP_ENGINE = 0, LOOP_BIKE, LOOP_SIREN, LOOP_COUNT };
+#define MAX_SFXQ 24
 
 typedef struct {
     float mx, my;          /* linker stick: -1..1, my>0 = vooruit */
@@ -100,6 +104,8 @@ typedef struct {
     int shopOpen, inShop;
     int statShots, statHits, copShots;
     float lastCopSpawn;
+    int sfxq[MAX_SFXQ]; float sfxx[MAX_SFXQ], sfxz[MAX_SFXQ]; int nsfx;
+    float screamCool, hurtSndCool;
     struct GarageCar { int exists, model, paint, eng, hand, neon, spoiler; } garage[MAX_OWNED];
     int dealerOpen, inDealer, customsOpen, inCustoms;
     int wanted;
@@ -126,6 +132,7 @@ int game_targets(const Game *g, V3 *out, int max);
 void game_teleport(Game *g, float x, float z, float h);
 void game_start_mission(Game *g, int m);
 void game_message(Game *g, const char *txt, float t);
+void game_sfx(Game *g, int id, float x, float z);
 void game_add_wanted(Game *g, int n);
 enum { WP_NONE = 0, WP_PISTOL, WP_SMG, WP_SHOTGUN, WP_COUNT };
 typedef struct { const char *name; int price, ammoPrice, ammoPack; float damage, delay, range, spread; int pellets; } WeaponDef;

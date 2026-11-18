@@ -189,6 +189,14 @@ int plat_read_resource(const char *name, char **data, long *len) {
     return 1;
 }
 
+/* geen geluid in de testopstelling: alleen tellen */
+static int sfxPlayed, loopsOn, musicOn;
+void plat_audio_init(const char *const *sfx, int nsfx, const char *const *loops, int nloops) { (void)sfx; (void)loops; printf("audio: %d effecten, %d lussen\n", nsfx, nloops); }
+void plat_sfx(int id, float vol) { (void)id; if (vol > 0.01f) sfxPlayed++; }
+void plat_loop(int id, float vol, float rate) { (void)id; (void)rate; if (vol > 0.01f) loopsOn++; }
+void plat_music(int on) { musicOn += on; }
+int plat_audio_stats(void) { return sfxPlayed; }
+
 void plat_delete_file(const char *name) {
     char p[512];
     snprintf(p, sizeof(p), "%s/docs/%s", OUT, name);

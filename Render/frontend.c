@@ -53,10 +53,11 @@ static struct {
     int jumpEdge, actionEdge, switchEdge;
     char shopMsg[96];
     float atMaxSpeed;
+    long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
     int lOn, rOn;
     /* instellingen */
-    int quality, tod, camSpeed, invertY, showFps, resetArm, autoAim;
+    int quality, tod, camSpeed, invertY, showFps, resetArm, autoAim, musicOn, sfxOn;
     /* menu */
     int pressed;
     float fade, fadeDir;
@@ -160,6 +161,8 @@ static void save_all(void) {
     plat_save_int("inverty", F.invertY);
     plat_save_int("showfps", F.showFps);
     plat_save_int("autoaim", F.autoAim);
+    plat_save_int("music", F.musicOn);
+    plat_save_int("sfx", F.sfxOn);
     if (F.loadDone && !F.at && F.mode == 0) {
         for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;
         plat_save_int("money", (int)F.G.money);
@@ -191,6 +194,14 @@ void fe_init(int w, int h) {
     F.invertY = plat_load_int("inverty", 0);
     F.showFps = plat_load_int("showfps", 0);
     F.autoAim = plat_load_int("autoaim", 1);
+    F.musicOn = plat_load_int("music", 1);
+    F.sfxOn = plat_load_int("sfx", 1);
+    {
+        static const char *const sfx[SFX_COUNT] = {"click", "pistol", "smg", "shotgun", "copshot", "empty", "scream", "hurt", "crash",
+                                                   "door", "jump", "cash", "check", "pass", "fail", "alarm", "buy"};
+        static const char *const loops[LOOP_COUNT] = {"engine", "bike", "siren"};
+        plat_audio_init(sfx, SFX_COUNT, loops, LOOP_COUNT);
+    }
     r_set_tod(&F.R, F.tod);
     world_init(&F.W);
     F.loadTotal = 1 + world_build_steps() + 3;
@@ -406,27 +417,29 @@ static const char *C_NAMES[3] = {"SLOW", "NORMAL", "FAST"};
 static void draw_settings(void) {
     Renderer *R = &F.R;
     int i;
-    const char *labels[7] = {"GRAPHICS", "TIME OF DAY", "CAMERA SPEED", "INVERT CAMERA Y", "SHOW FPS", "AUTO AIM", "RESET PROGRESS"};
-    const char *vals[7];
+    const char *labels[9] = {"GRAPHICS", "TIME OF DAY", "CAMERA SPEED", "INVERT CAMERA Y", "SHOW FPS", "AUTO AIM", "MUSIC", "SOUND EFFECTS", "RESET PROGRESS"};
+    const char *vals[9];
     vals[0] = Q_NAMES[F.quality % 3];
     vals[1] = T_NAMES[F.tod % 3];
     vals[2] = C_NAMES[F.camSpeed % 3];
     vals[3] = F.invertY ? "ON" : "OFF";
     vals[4] = F.showFps ? "ON" : "OFF";
     vals[5] = F.autoAim ? "ON (POLICE FIRST)" : "OFF";
-    vals[6] = F.resetArm ? "TAP AGAIN!" : "";
+    vals[6] = F.musicOn ? "ON" : "OFF";
+    vals[7] = F.sfxOn ? "ON" : "OFF";
+    vals[8] = F.resetArm ? "TAP AGAIN!" : "";
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
     draw_backdrop(0.35f, 0.0f, F.t);
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.45f);
     ui_text(R, "SETTINGS", R->W * 0.5f, 40, 60, 1, 1, 1, 1, 1);
-    for (i = 0; i < 7; i++) {
-        float y = 140.0f + i * 66.0f;
+    for (i = 0; i < 9; i++) {
+        float y = 118.0f + i * 58.0f;
         int pr = F.pressed == i + 1;
-        ui_rect(R, 180, y - 6, R->W - 360.0f, 56, pr ? 0.5f : 0.08f, 0.04f, 0.04f, 0.55f);
-        ui_text(R, labels[i], 210, y, 30, 1, 1, 1, 1, 0);
-        ui_text(R, vals[i], R->W - 210.0f, y, 30, 1.0f, 0.8f, 0.3f, 1, 2);
+        ui_rect(R, 180, y - 5, R->W - 360.0f, 50, pr ? 0.5f : 0.08f, 0.04f, 0.04f, 0.55f);
+        ui_text(R, labels[i], 210, y, 28, 1, 1, 1, 1, 0);
+        ui_text(R, vals[i], R->W - 210.0f, y, 28, 1.0f, 0.8f, 0.3f, 1, 2);
     }
-    ui_text(R, "Graphics changes draw distance and the number of people/cars.", R->W * 0.5f, 612, 18, 0.8f, 0.8f, 0.8f, 1, 1);
+    ui_text(R, "Graphics changes draw distance and the number of people/cars.", R->W * 0.5f, 648, 16, 0.8f, 0.8f, 0.8f, 1, 1);
     big_button("BACK", R->W * 0.5f, R->H - 74.0f, 48, F.pressed == 10, 1);
 }
 
@@ -1581,7 +1594,7 @@ static void shop_tap(float x, float y, int phase) {
         char name[48], info[80];
         int price;
         shop_item(hit - 600, name, sizeof(name), &price, info, sizeof(info));
-        if (game_buy(&F.G, hit - 600)) snprintf(F.shopMsg, sizeof(F.shopMsg), "Bought: %s", name);
+        if (game_buy(&F.G, hit - 600)) { snprintf(F.shopMsg, sizeof(F.shopMsg), "Bought: %s", name); if (F.sfxOn) plat_sfx(SFX_BUY, 0.8f); }
         else snprintf(F.shopMsg, sizeof(F.shopMsg), price > 0 ? "Not enough money (or you already have it)." : "Buy a gun first.");
         F.G.moneyShown = F.G.money;
         save_all();
@@ -1644,6 +1657,7 @@ static void dealer_tap(float x, float y, int phase) {
     if (hit >= 700 && hit < 700 + CAR_MODELS) {
         int r = game_buy_car(&F.G, hit - 700);
         if (r > 0) {
+            if (F.sfxOn) plat_sfx(SFX_BUY, 0.8f);
             snprintf(F.G.banner, sizeof(F.G.banner), "NEW CAR!");
             snprintf(F.G.sub, sizeof(F.G.sub), "Your %s is ready. Upgrade it at BLOCK CUSTOMS.", CARS[hit - 700].name);
             F.G.bannerT = 4.0f; F.G.bannerGood = 1;
@@ -1712,7 +1726,7 @@ static void customs_tap(float x, float y, int phase) {
     F.pressed = 0;
     if (hit == 890) { set_state(ST_GAME); save_all(); return; }
     if (hit >= 800 && hit < 805) {
-        if (game_custom(&F.G, hit - 800)) { F.shopMsg[0] = 0; F.G.moneyShown = F.G.money; save_all(); }
+        if (game_custom(&F.G, hit - 800)) { F.shopMsg[0] = 0; F.G.moneyShown = F.G.money; save_all(); if (F.sfxOn) plat_sfx(SFX_BUY, 0.7f); }
         else snprintf(F.shopMsg, sizeof(F.shopMsg), game_custom_price(&F.G, hit - 800) < 0 ? "Already maxed out." : "Not enough money.");
     }
 }
@@ -1839,14 +1853,14 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_SETTINGS) {
-        for (i = 0; i < 7; i++) {
-            float ry = 140.0f + i * 66.0f;
-            if (x > 180 && x < R->W - 180 && y > ry - 6 && y < ry + 50) hit = i + 1;
+        for (i = 0; i < 9; i++) {
+            float ry = 118.0f + i * 58.0f;
+            if (x > 180 && x < R->W - 180 && y > ry - 5 && y < ry + 45) hit = i + 1;
         }
         if (hit_text(x, y, "BACK", R->W * 0.5f, R->H - 74.0f + 24, 48)) hit = 10;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
-        if (hit != 7) F.resetArm = 0;
+        if (hit != 9) F.resetArm = 0;
         switch (hit) {
         case 1: F.quality = (F.quality + 1) % 3; break;
         case 2: F.tod = (F.tod + 1) % 3; break;
@@ -1854,7 +1868,9 @@ static void menu_tap(float x, float y, int phase) {
         case 4: F.invertY = !F.invertY; break;
         case 5: F.showFps = !F.showFps; break;
         case 6: F.autoAim = !F.autoAim; break;
-        case 7:
+        case 7: F.musicOn = !F.musicOn; break;
+        case 8: F.sfxOn = !F.sfxOn; break;
+        case 9:
             if (F.resetArm) {
                 for (i = 0; i < NMISSIONS; i++) F.G.completed[i] = 0;
                 F.G.money = 0; F.G.moneyShown = 0;
@@ -1909,6 +1925,7 @@ void fe_touch(long id, int phase, float x, float y) {
         else game_touch(&F.ts[slot], phase);
     } else {
         F.ts[slot].ctl = CTL_UI;
+        if (phase == TOUCH_END && F.sfxOn && F.pressed) plat_sfx(SFX_CLICK, 0.5f);
         menu_tap(x, y, phase);
     }
     if (phase == TOUCH_END) F.ts[slot].used = 0;
@@ -2331,6 +2348,7 @@ static void autotest_tick(float dt) {
                         q->dc / q->frames, q->tris / q->frames);
             }
             rep("laadtijd %.2f s, geheugen %ld kB, stad %d vertices, %d botsvormen", F.loadSecs, plat_memory_kb(), F.W.verts_total, F.W.nboxes);
+            rep("geluid: %ld geluidsgebeurtenissen in de test (muziek %s, effecten %s)", F.sfxPlayed, F.musicOn ? "aan" : "uit", F.sfxOn ? "aan" : "uit");
             rep("geld verdiend in test: %ld, missies gehaald: %d, in/uitstappen: %d, sprongen: %d", g->money - F.atMoney0, g->statMissionsPassed, g->statEnter, g->statJumps);
             plat_write_text("autotest_report.txt", F.rep);
             F.quality = plat_load_int("quality", 1);
@@ -2540,6 +2558,42 @@ void fe_frame(double now) {
         }
         break;
     default: break;
+    }
+    /* ---- geluid */
+    {
+        int playing = F.loadDone && (F.state == ST_GAME || F.state == ST_PAUSE || F.state == ST_BIGMAP || F.state == ST_SHOP ||
+                                     F.state == ST_DEALER || F.state == ST_CUSTOMS);
+        Game *g = &F.G;
+        float eng = 0, engRate = 1, bike = 0, bikeRate = 1, siren = 0;
+        int i;
+        plat_music(F.musicOn && playing);
+        if (F.sfxOn && F.state == ST_GAME && F.loadDone) {
+            for (i = 0; i < g->nsfx; i++) {
+                float dx = g->sfxx[i] - g->p.x, dz = g->sfxz[i] - g->p.z;
+                float vol = clampf(1.0f - sqrtf(dx * dx + dz * dz) / 70.0f, 0, 1);
+                if (g->sfxq[i] == SFX_PISTOL || g->sfxq[i] == SFX_SMG || g->sfxq[i] == SFX_SHOTGUN) vol *= 0.8f;
+                plat_sfx(g->sfxq[i], vol);
+            }
+            if (g->p.veh >= 0) {
+                const Vehicle *v = &g->veh[g->p.veh];
+                float top = v->type == VEH_BIKE ? 11.5f : (v->custom ? car_top_speed(v) : 19.0f);
+                float sp = clampf(fabsf(v->speed) / top, 0, 1);
+                if (v->type == VEH_CAR) { eng = 0.22f + 0.45f * sp; engRate = 0.75f + 1.2f * sp; }
+                else if (fabsf(v->speed) > 0.8f) { bike = 0.25f + 0.35f * sp; bikeRate = 0.7f + 1.0f * sp; }
+            }
+            for (i = 0; i < MAX_POLICE; i++) {
+                const Vehicle *v = &g->veh[g->firstPolice + i];
+                float dx, dz, d, s;
+                if (!v->active || v->wrecked || g->wanted <= 0) continue;
+                dx = v->x - g->p.x; dz = v->z - g->p.z; d = sqrtf(dx * dx + dz * dz);
+                s = clampf(1.0f - d / 130.0f, 0, 1) * 0.55f;
+                if (s > siren) siren = s;
+            }
+        }
+        if (F.loadDone) { F.sfxPlayed += g->nsfx; g->nsfx = 0; }
+        plat_loop(LOOP_ENGINE, eng, engRate);
+        plat_loop(LOOP_BIKE, bike, bikeRate);
+        plat_loop(LOOP_SIREN, siren, 1.0f);
     }
     F.lastDC = R->drawCalls;
     if (pendingShot[0]) {

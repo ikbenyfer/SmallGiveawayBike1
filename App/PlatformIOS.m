@@ -309,3 +309,82 @@ int plat_read_resource(const char *name, char **data, long *len) {
         return 1;
     }
 }
+
+/* ------------------------------------------------------------------ geluid (AVAudioPlayer) */
+#import <AVFoundation/AVFoundation.h>
+#define SFX_VOICES 3
+static NSMutableArray *gSfx;     /* per geluid een NSArray met SFX_VOICES spelers */
+static int gSfxNext[64];
+static NSMutableArray *gLoops;
+static AVAudioPlayer *gMusic;
+
+static AVAudioPlayer *load_player(NSString *file, BOOL loop) {
+    NSString *p = [[NSBundle mainBundle] pathForResource:file ofType:nil];
+    AVAudioPlayer *pl;
+    if (!p) { NSLog(@"SGB-AUDIO ontbreekt: %@", file); return nil; }
+    pl = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:p] error:nil];
+    pl.enableRate = YES;
+    pl.numberOfLoops = loop ? -1 : 0;
+    [pl prepareToPlay];
+    return pl;
+}
+
+void plat_audio_init(const char *const *sfx, int nsfx, const char *const *loops, int nloops) {
+    @autoreleasepool {
+        int i, k;
+        [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryAmbient error:nil];
+        [[AVAudioSession sharedInstance] setActive:YES error:nil];
+        gSfx = [NSMutableArray array];
+        for (i = 0; i < nsfx && i < 64; i++) {
+            NSMutableArray *v = [NSMutableArray array];
+            for (k = 0; k < SFX_VOICES; k++) {
+                AVAudioPlayer *pl = load_player([NSString stringWithFormat:@"sfx_%s.wav", sfx[i]], NO);
+                [v addObject:pl ? (id)pl : (id)[NSNull null]];
+            }
+            [gSfx addObject:v];
+        }
+        gLoops = [NSMutableArray array];
+        for (i = 0; i < nloops; i++) {
+            AVAudioPlayer *pl = load_player([NSString stringWithFormat:@"sfx_%s.wav", loops[i]], YES);
+            [gLoops addObject:pl ? (id)pl : (id)[NSNull null]];
+        }
+        gMusic = load_player(@"music.mp3", YES);
+        gMusic.volume = 0.55f;
+        NSLog(@"SGB-AUDIO klaar: %d effecten, %d lussen, muziek=%d", nsfx, nloops, gMusic != nil);
+    }
+}
+
+void plat_sfx(int id, float vol) {
+    NSArray *v;
+    id o;
+    if (!gSfx || id < 0 || id >= (int)gSfx.count || vol <= 0.01f) return;
+    v = gSfx[id];
+    o = v[gSfxNext[id] % SFX_VOICES];
+    gSfxNext[id]++;
+    if (o == [NSNull null]) return;
+    {
+        AVAudioPlayer *pl = (AVAudioPlayer *)o;
+        pl.volume = vol;
+        pl.currentTime = 0;
+        [pl play];
+    }
+}
+
+void plat_loop(int id, float vol, float rate) {
+    id o;
+    AVAudioPlayer *pl;
+    if (!gLoops || id < 0 || id >= (int)gLoops.count) return;
+    o = gLoops[id];
+    if (o == [NSNull null]) return;
+    pl = (AVAudioPlayer *)o;
+    if (vol <= 0.01f) { if (pl.playing) [pl pause]; return; }
+    pl.volume = vol;
+    pl.rate = rate < 0.5f ? 0.5f : (rate > 2.0f ? 2.0f : rate);
+    if (!pl.playing) [pl play];
+}
+
+void plat_music(int on) {
+    if (!gMusic) return;
+    if (on && !gMusic.playing) [gMusic play];
+    else if (!on && gMusic.playing) [gMusic pause];
+}

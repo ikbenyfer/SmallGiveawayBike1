@@ -10,6 +10,12 @@ static float dir_heading(int d) { return atan2f((float)DIRX[d], (float)DIRZ[d]);
 static void player_pos(const Game *g, float *x, float *z);
 static void update_cop(Game *g, Ped *p, float dt);
 
+void game_sfx(Game *g, int id, float x, float z) {
+    if (g->nsfx >= MAX_SFXQ) return;
+    g->sfxq[g->nsfx] = id; g->sfxx[g->nsfx] = x; g->sfxz[g->nsfx] = z;
+    g->nsfx++;
+}
+
 void game_message(Game *g, const char *txt, float t) {
     snprintf(g->msg, sizeof(g->msg), "%s", txt);
     g->msgT = t;
@@ -287,12 +293,14 @@ static void mission_end(Game *g, int ok) {
         char b[64];
         g->money += rew;
         g->moneyFlash = 2.0f;
+        game_sfx(g, SFX_PASS, g->p.x, g->p.z);
         g->completed[m] = 1;
         g->statMissionsPassed++;
         snprintf(b, sizeof(b), "+$%d", rew);
         banner(g, "MISSION PASSED", b, 1, 4.0f);
     } else {
-        banner(g, "MISSION FAILED", "Out of time. Go back to the marker to retry.", 0, 4.0f);
+        banner(g, "MISSION FAILED", "Out of time. Try again from the MISSIONS menu.", 0, 4.0f);
+        game_sfx(g, SFX_FAIL, g->p.x, g->p.z);
     }
     g->mission = -1;
     g->p.cool = 2.5f;
@@ -337,6 +345,7 @@ static void update_missions(Game *g, float dt) {
                     if (!need_ok(g, c->need)) { if (g->msgT <= 0) game_message(g, c->need == NEED_BIKE ? "You need a bike for this!" : (c->need == NEED_FOOT ? "Get off your vehicle!" : "You need a car for this!"), 2.0f); continue; }
                     g->mmask |= 1u << i;
                     g->mstep++;
+                    game_sfx(g, SFX_CHECK, px, pz);
                     {
                         char b[64];
                         snprintf(b, sizeof(b), "Got %d of %d", g->mstep, m->anyOrder);
@@ -358,6 +367,7 @@ static void update_missions(Game *g, float dt) {
                 g->wanted = 0;
                 game_add_wanted(g, c->alarm);
                 game_message(g, "ALARM! The police are on their way!", 3.0f);
+                game_sfx(g, SFX_ALARM, px, pz);
             }
             if (inside && c->clean && g->wanted > 0) {
                 if (g->msgT <= 0) game_message(g, "Lose the police first!", 2.0f);
@@ -367,6 +377,7 @@ static void update_missions(Game *g, float dt) {
                     g->holdT = 0;
                     g->mstep++;
                     game_message(g, "Vault open - you got the cash!", 2.5f);
+                    game_sfx(g, SFX_CASH, px, pz);
                     if (g->mstep >= m->ncp) mission_end(g, 1);
                 }
             } else if (inside) {
@@ -374,6 +385,7 @@ static void update_missions(Game *g, float dt) {
                     if (g->msgT <= 0) game_message(g, c->need == NEED_BIKE ? "Get on a bike first!" : (c->need == NEED_FOOT ? "On foot only - get off!" : "Get in a car first!"), 2.0f);
                 } else {
                     g->mstep++;
+                    if (g->mstep < m->ncp) game_sfx(g, SFX_CHECK, px, pz);
                     if (g->mstep >= m->ncp) mission_end(g, 1);
                 }
             }
@@ -453,6 +465,7 @@ static void enter_vehicle(Game *g, int idx) {
     g->p.speed = 0;
     g->p.vy = 0;
     g->statEnter++;
+    game_sfx(g, SFX_DOOR, v->x, v->z);
 }
 
 static void exit_vehicle(Game *g) {
@@ -470,6 +483,7 @@ static void exit_vehicle(Game *g) {
     v->steer = 0;
     g->p.veh = -1;
     g->p.cool = 0.5f;
+    game_sfx(g, SFX_DOOR, v->x, v->z);
 }
 
 static void collide_vehicles(Game *g, Vehicle *a) {
@@ -520,6 +534,7 @@ static void vehicle_world_collide(Game *g, Vehicle *v) {
         if (v->hitcool <= 0 && g->p.veh >= 0 && v == &g->veh[g->p.veh]) {
             float imp = fabsf(v->speed) * fabsf(d);
             if (imp > 7.0f) game_damage(g, (imp - 7.0f) * 2.5f);
+            if (imp > 4.0f) game_sfx(g, SFX_CRASH, v->x, v->z);
         }
         if (v->hitcool <= 0) {
             if ((d < -0.6f && v->speed > 0) || (d > 0.6f && v->speed < 0)) v->speed = -v->speed * 0.25f;
@@ -761,6 +776,7 @@ static void update_ped(Game *g, Ped *p, float dt) {
         if (v->speed < 0) al = -al;
         if (al > -1.0f && al < 1.6f + (v->type == VEH_CAR ? 2.0f : 0.6f) && fabsf(la) < (v->type == VEH_CAR ? 1.2f : 0.7f) && sp > 4.0f) {
             p->state = PED_DOWN; p->timer = 2.8f; p->h = v->h;
+            game_sfx(g, SFX_SCREAM, p->x, p->z);
             if (i == g->p.veh) {
                 game_message(g, "You hit someone! The police are after you!", 2.0f);
                 game_add_wanted(g, 1);
@@ -918,7 +934,7 @@ static void update_player_foot(Game *g, const Input *in, float dt) {
         p->x += hf.x * p->speed * dt;
         p->z += hf.z * p->speed * dt;
     }
-    if (in->jumpPressed && p->onGround) { p->vy = 6.0f; p->onGround = 0; g->statJumps++; }
+    if (in->jumpPressed && p->onGround) { p->vy = 6.0f; p->onGround = 0; g->statJumps++; game_sfx(g, SFX_JUMP, p->x, p->z); }
     p->vy -= 16.0f * dt;
     p->y += p->vy * dt;
     ground = world_ground_y(g->w, p->x, p->z);
@@ -1052,13 +1068,17 @@ static void peds_panic(Game *g, float x, float z) {
         float dx, dz;
         if (!p->active || p->state == PED_DOWN) continue;
         dx = p->x - x; dz = p->z - z;
-        if (dx * dx + dz * dz < 28.0f * 28.0f) { p->state = PED_FLEE; p->timer = 5.0f; p->h = atan2f(dx, dz); }
+        if (dx * dx + dz * dz < 28.0f * 28.0f) {
+            if (p->state != PED_FLEE && g->screamCool <= 0) { game_sfx(g, SFX_SCREAM, p->x, p->z); g->screamCool = 2.5f; }
+            p->state = PED_FLEE; p->timer = 5.0f; p->h = atan2f(dx, dz);
+        }
     }
 }
 
 static void ped_hit(Game *g, Ped *p, float dmg) {
     p->hp -= dmg;
     if (p->hp > 0) return;
+    game_sfx(g, SFX_SCREAM, p->x, p->z);
     p->state = PED_DOWN;
     p->shot = 1;
     p->timer = p->cop ? 15.0f : 25.0f;
@@ -1162,6 +1182,7 @@ static void update_cop(Game *g, Ped *p, float dt) {
                 add_tracer(g, v3(p->x, p->y + 1.4f, p->z), v3(tgt.x + rng_range(&g->rng, -1.5f, 1.5f), tgt.y + rng_range(&g->rng, -0.8f, 1.0f), tgt.z + rng_range(&g->rng, -1.5f, 1.5f)));
             }
             g->copShots++;
+            game_sfx(g, SFX_COPSHOT, p->x, p->z);
         }
     }
     p->y = world_ground_y(g->w, p->x, p->z);
@@ -1184,11 +1205,12 @@ static void update_weapons(Game *g, const Input *in, float dt) {
     }
     if (g->p.veh >= 0 || g->weapon == WP_NONE || !in->fire || g->fireCool > 0) return;
     wd = &WEAPONS[g->weapon];
-    if (g->ammo[g->weapon] <= 0) { game_message(g, "Out of ammo! Buy more at BLOCK ARMS.", 1.5f); g->fireCool = 0.6f; return; }
+    if (g->ammo[g->weapon] <= 0) { game_message(g, "Out of ammo! Buy more at BLOCK ARMS.", 1.5f); g->fireCool = 0.6f; game_sfx(g, SFX_EMPTY, g->p.x, g->p.z); return; }
     g->ammo[g->weapon]--;
     g->fireCool = wd->delay;
     g->muzzleT = 0.06f;
     g->statShots++;
+    game_sfx(g, g->weapon == WP_SMG ? SFX_SMG : (g->weapon == WP_SHOTGUN ? SFX_SHOTGUN : SFX_PISTOL), g->p.x, g->p.z);
     {
         /* Richten. Auto-aim AAN: eerst politie (agenten en politieauto's) in de kijkrichting, pas als die er
          * niet is gewone mensen. Auto-aim UIT: alleen wat precies in de schietlijn van de camera staat. */
@@ -1417,6 +1439,7 @@ void game_damage(Game *g, float amount) {
     if (g->health < 0) g->health = 0;
     g->hurtT = 0;
     g->hurtFlash = 0.6f;
+    if (g->hurtSndCool <= 0) { game_sfx(g, SFX_HURT, g->p.x, g->p.z); g->hurtSndCool = 0.5f; }
 }
 
 static void respawn(Game *g, const char *title, const char *sub) {
@@ -1430,6 +1453,7 @@ static void respawn(Game *g, const char *title, const char *sub) {
     g->p.vy = 0; g->p.speed = 0;
     game_teleport(g, g->w->poi[POI_SPAWN].x, g->w->poi[POI_SPAWN].z, g->w->spawn_heading);
     banner(g, title, sub, 0, 4.5f);
+    game_sfx(g, SFX_FAIL, g->p.x, g->p.z);
     g->p.cool = 3.0f;
 }
 
@@ -1488,6 +1512,8 @@ static void update_police_and_health(Game *g, float dt) {
     int k, near = 0, close = 0;
     player_pos(g, &px, &pz);
     if (g->crimeCool > 0) g->crimeCool -= dt;
+    if (g->screamCool > 0) g->screamCool -= dt;
+    if (g->hurtSndCool > 0) g->hurtSndCool -= dt;
     if (g->ramCool > 0) g->ramCool -= dt;
     if (g->hurtFlash > 0) g->hurtFlash -= dt;
     if (g->p.hitCool > 0) g->p.hitCool -= dt;
@@ -1704,6 +1730,7 @@ void game_update(Game *g, const Input *in, float dt) {
             g->moneyFlash = 1.2f;
             g->cashTimer[i] = 120.0f;
             g->statCash++;
+            game_sfx(g, SFX_CASH, px, pz);
             snprintf(b, sizeof(b), "+$%d", val);
             game_message(g, b, 1.2f);
         }
