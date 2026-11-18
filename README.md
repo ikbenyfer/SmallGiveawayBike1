@@ -37,22 +37,17 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph�
   Speel je een missie opnieuw, dan krijg je de halve beloning.
 - **Politie en sterren**: rijd je iemand aan of steel je een auto uit het verkeer, dan krijg je een ster (maximaal 3). Per ster komt er een politieauto met zwaailicht achter je aan, die ook op de minimap staat. Blijf 10 seconden ver weg van de politie, dan verlies je een ster. Sta je stil naast de politie, dan word je **BUSTED**: je betaalt een boete (10% van je geld, minstens $50) en begint opnieuw op het plein.
 - **Health bar** onder je geld. Je verliest health door harde botsingen, door aangereden te worden en als de politie je ramt. Na 5 seconden zonder schade herstelt je health vanzelf. Is je health op, dan ben je **KNOCKED OUT** en begin je opnieuw op het plein.
-- **REAL NL (aparte modus, knop in het hoofdmenu):** typ een Nederlandse postcode op het eigen toetsenbord, bijvoorbeeld 1012 JS. De app haalt dan een gebied van 500 × 500 m rond die postcode op:
-  - **Gebouwen met hun echte hoogte** uit de 3D BAG (TU Delft/3DGI, LoD 1.2).
-  - **Straten met straatnamen, water en landgebruik** uit PDOK TOP10NL (Kadaster). Fietspaden zijn rood.
-  - De postcode wordt opgezocht via de PDOK Locatieserver.
+- **REAL NL (aparte modus, knop in het hoofdmenu):** rijd door het echte Nederland.
+  - **Ingebouwd en offline: heel Heemskerk en Beverwijk**, inclusief Wijk aan Zee, de duinen en het strand. Dat zijn 58.107 gebouwen met hun echte hoogte (3D BAG), alle wegen met straatnamen, water, groen en 1.897 postcodes, samen maar 2 MB in de app (`Resources/nl_hb.pak`). Je start via de knoppen rechts (Beverwijk centrum, de stations, Heemskerk centrum, Wijk aan Zee, de Bazaar) of je typt een postcode uit die gemeentes. Daar is geen internet voor nodig.
+  - **Streaming terwijl je rijdt:** de wereld bestaat uit tegels van 250 × 250 m. Rondom je liggen er altijd 3 × 3 klaar. Komt er een nieuwe tegel in beeld, dan laadt een achtergrond-thread die, zodat het spel niet hapert. Binnen Heemskerk/Beverwijk komt de tegel uit de ingebouwde kaart. Daarbuiten komt hij uit je downloads, of anders van internet (3D BAG en PDOK), en wordt hij daarna bewaard. Zonder internet zie je buiten de regio "NO MAP DATA HERE".
+  - **Andere postcodes:** typ een postcode en tik op PLAY. Je gaat erheen en het land laadt bij terwijl je rijdt.
+  - **Downloadmodus:** DOWNLOAD bewaart een gebied van 1,25 × 1,25 km (25 tegels) rond een postcode. Groningen was zo bijvoorbeeld 162 kB. Dat gebeurt op de achtergrond, met een wachtrij, en daarna kun je het offline spelen. Rechts staat de lijst met gedownloade gebieden: tik om te spelen, of tik op X en dan op ? om te verwijderen.
+  - **Grote kaart:** tik op de minimap. Je kunt slepen, in- en uitzoomen met + en −, en met ME terug naar jezelf. In REAL NL tik je een plek aan en ga je er met **GO HERE** meteen heen. Heemskerk en Beverwijk staan er helemaal op; tegels die je elders hebt bezocht, komen er vanzelf bij. In de verzonnen stad toont de grote kaart de hele stad.
 
-  Je loopt, fietst of rijdt erdoorheen. Bovenaan zie je de straat waar je bent, en de minimap is gemaakt uit dezelfde data. Er zijn hier geen missies, politie of verkeer: het is vrij rondrijden.
-
-  **Downloadmodus (offline spelen):** in het REAL NL-scherm typ je links een postcode. Dan heb je twee knoppen:
-  - **PLAY**: je gaat er meteen heen.
-  - **DOWNLOAD**: het gebied wordt op de achtergrond opgeslagen. Je kunt meerdere postcodes achter elkaar in de wachtrij zetten. Het downloaden loopt door, ook als je intussen speelt.
-
-  Rechts staat **DOWNLOADED (OFFLINE)**, met per gebied de postcode, de plaats en de grootte (ongeveer 0,7 MB per gebied). Tik op een gebied om het te spelen. Dat werkt **zonder Wi-Fi**: alles komt dan uit `Documents/nl/` op de iPad. Met **X** en daarna **?** verwijder je een gebied. Een gebied dat je via PLAY volledig hebt geladen, komt ook vanzelf in die lijst. Een `*` achter de grootte betekent dat de hoogtes geschat zijn.
-
-  iOS 9 vertrouwt het certificaat van de 3D BAG-server niet zelf, omdat het de nieuwere Let's Encrypt-root niet kent. Daarom zitten de officiële rootcertificaten in de app: ISRG Root X1/X2 en DigiCert Global Root G2, met gecontroleerde SHA-256-vingerafdruk. Ze worden alleen als **extra** vertrouwensanker gebruikt. De systeemcontrole en de hostnaamcontrole blijven gewoon aan. Lukt de 3D BAG toch niet, dan valt de app terug op BAG-plattegronden van PDOK met **geschatte** hoogtes. Dat zie je dan ook in beeld staan.
-
-  Bronvermelding: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, via PDOK). Alles valt onder CC BY 4.0.
+  De onderdelen die de bouw en de bronvermelding vastleggen:
+  - `tools/build_region_pack.py` maakt het pakket opnieuw (op de pc, met internet).
+  - Bronvermelding: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, PDOK), gemeentegrenzen en postcodes (PDOK). Alles valt onder CC BY 4.0.
+  - iOS 9 kent de rootcertificaten van 3D BAG niet. Daarom zitten ISRG Root X1/X2 en DigiCert Global Root G2 in de app als **extra** vertrouwensanker; de normale controle blijft aan. Lukt 3D BAG toch niet, dan valt de app terug op PDOK BAG met geschatte hoogtes.
 - **Geld** verdien je met missies en met 18 stapels geld op de stoep, die na 2 minuten terugkomen. Je geld en je voortgang worden bewaard.
 - **Minimap** linksboven. Die draait mee met de camera en toont missiepunten en fietsen.
 - **Besturing:** een linker joystick om te bewegen of te sturen, een rechter joystick voor de camera, en de knoppen JUMP, RIDE/DRIVE/EXIT, GAS en BRAKE.
@@ -78,7 +73,13 @@ In de Linux-test tekent een frame **ongeveer 50-90 draw calls en 11-26 duizend d
 Verder: laden 0,3 s, geheugen ongeveer 21-31 MB, geen crash. In-, uitstappen en springen werkten. Screenshots staan in `device_results/`.
 Wat er na de iPad-test is aangepast: muren aan de schaduwkant waren bijna zwart, dus er is meer omgevingslicht. **De touch-besturing met je vingers is nog niet door een mens getest.**
 
-**Linux-CI (Mesa, geen iPad), versie 2:** alles compileert zonder waarschuwingen en AddressSanitizer vindt niets. De autotest doorloopt ook de **downloadmodus**: 9711LM (Groningen) wordt gedownload (680 kB, 2,7 s), daarna offline gespeeld (709 gebouwen, alles uit de opslag) en daarna verwijderd. Verder doorloopt hij de REAL NL-modus met postcode 1012JS: dat geeft 703 gebouwen met echte hoogtes (de hoogste is 35 m), 179 wegen en grachten, laden en bouwen in 2,7 s, en tijdens het rijden de straatnaam "Warmoesstraat". Het gebied heeft wel ongeveer 290 duizend vertices, veel meer dan de verzonnen stad. Of de iPad 2 dat op 30 FPS haalt, moet de iPad-test nog uitwijzen.
+**Linux-CI (Mesa, geen iPad), versie 2:** alles compileert zonder waarschuwingen en AddressSanitizer vindt niets. De autotest gaf voor REAL NL:
+- **Ingebouwd:** Beverwijk, Breestraat: 9 tegels uit het pakket, 1649 gebouwen, klaar in 1,5 s. Na 600 m reizen lagen de nieuwe tegels binnen 0,2 s klaar.
+- **Grote kaart:** werkt.
+- **Online (1012JS, Amsterdam):** tegels komen van internet en laden onderweg bij.
+- **Downloadmodus:** Groningen 9711LM, 25 tegels, 0 mislukt, 162 kB. Daarna offline gespeeld (9 tegels uit opslag, 1607 gebouwen) en weer verwijderd.
+
+Let op: 9 tegels zijn ongeveer **300 tot 480 duizend vertices**, veel meer dan de verzonnen stad. Of de iPad 2 dat op 25 tot 30 FPS haalt, is **nog niet gemeten**. Zo niet, dan moeten de ramen of de laadafstand omlaag.
 
 Verder doorloopt de autotest:
 - lopen, fiets en auto, en missie 1 (gehaald)
