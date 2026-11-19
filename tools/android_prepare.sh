@@ -6,8 +6,7 @@ git clone --depth 1 -b release-2.8.0 https://github.com/libsdl-org/SDL_mixer.git
 P=android-build
 cp -r sdl/android-project $P
 # reserve voor Maven Central (die geeft soms tijdelijk "Could not find")
-sed -i "s#mavenCentral()#mavenCentral()
-        maven { url 'https://maven-central.storage-download.googleapis.com/maven2/' }#g" $P/build.gradle
+sed -i "s#mavenCentral()#mavenCentral(); maven { url 'https://maven-central.storage-download.googleapis.com/maven2/' }#g" $P/build.gradle
 grep -n "maven" $P/build.gradle
 J=$P/app/jni
 rm -rf $J/src $J/SDL $J/SDL_mixer $J/CMakeLists.txt
