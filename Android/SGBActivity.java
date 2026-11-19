@@ -2,6 +2,9 @@ package nl.yf.smallgiveawaybike1;
 
 import org.libsdl.app.SDLActivity;
 
+import android.util.Log;
+import android.view.MotionEvent;
+
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -13,6 +16,17 @@ public class SGBActivity extends SDLActivity {
     @Override
     protected String[] getLibraries() {
         return new String[] {"SDL2", "SDL2_mixer", "main"};
+    }
+
+    private int touchLogs;
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {   /* diagnose: eerste aanrakingen loggen */
+        if (touchLogs < 8) {
+            touchLogs++;
+            Log.i("SGB", "java touch actie=" + ev.getActionMasked() + " x=" + ev.getX() + " y=" + ev.getY() + " bron=" + ev.getSource() + " apparaat=" + ev.getDeviceId());
+        }
+        return super.dispatchTouchEvent(ev);
     }
 
     /* Haalt een URL op; null bij een fout of een andere status dan 200. */
