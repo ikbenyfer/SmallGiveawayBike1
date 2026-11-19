@@ -306,6 +306,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+          cache-dependency-path: Android/build.gradle
 
       - name: Pakketten
         run: |
@@ -333,7 +335,7 @@ jobs:
         run: |
           export SGB_VERSION="$(cat ../VERSION)" SGB_VC="${{ github.run_number }}"
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleRelease
+          for i in 1 2 3; do ./gradlew --no-daemon assembleRelease && break; echo "poging $i mislukt, opnieuw"; sleep 30; done
           cp app/build/outputs/apk/release/app-release.apk ../SmallGiveawayBike1-Android.apk
           ls -l ../SmallGiveawayBike1-Android.apk
 

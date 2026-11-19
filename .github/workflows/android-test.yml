@@ -16,6 +16,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+          cache-dependency-path: Android/build.gradle
 
       - name: Pakketten + KVM
         run: |
@@ -33,7 +35,7 @@ jobs:
           cd android-build
           export NDK_VER="$(basename "$ANDROID_NDK_LATEST_HOME")" SGB_VERSION="$(cat ../VERSION)" SGB_VC=1 SGB_ABIS=x86_64
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          for i in 1 2 3; do ./gradlew --no-daemon assembleRelease && break; echo "poging $i mislukt, opnieuw"; sleep 30; done
           cp app/build/outputs/apk/release/app-release.apk ../test.apk
 
       - name: Starten in de emulator
