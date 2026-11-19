@@ -667,12 +667,6 @@ int main(int argc, char **argv) {
         int mdx = 0, mdy = 0;
         static int edgeJump, edgeAction, edgeSwitch;
         while (SDL_PollEvent(&e)) {
-#ifdef __ANDROID__
-            {   /* eerste events loggen (diagnose) */
-                static int nev;
-                if (nev++ < 40 && e.type != SDL_FINGERMOTION && e.type != SDL_MOUSEMOTION) plat_log("event 0x%x", e.type);
-            }
-#endif
             switch (e.type) {
             case SDL_QUIT: running = 0; break;
             case SDL_CONTROLLERDEVICEADDED: pad_open_first(); break;
@@ -727,11 +721,6 @@ int main(int argc, char **argv) {
                 float lx = (e.tfinger.x * (float)g_scrW - (float)g_vx) * (float)fe_ui_width() / (float)(g_vw > 0 ? g_vw : 1);
                 float ly = (e.tfinger.y * (float)g_scrH - (float)g_vy) * 768.0f / (float)(g_vh > 0 ? g_vh : 1);
                 int ph = e.type == SDL_FINGERDOWN ? TOUCH_BEGIN : e.type == SDL_FINGERUP ? TOUCH_END : TOUCH_MOVE;
-                if (ph != TOUCH_MOVE) {   /* eerste aanrakingen loggen (handig bij problemen) */
-                    static int nlog;
-                    if (nlog++ < 12) plat_log("touch %s %.0f,%.0f ruw %.3f,%.3f (scherm %dx%d, beeld %d,%d %dx%d, ui-breedte %d)", ph == TOUCH_BEGIN ? "neer" : "op", lx, ly,
-                                         (double)e.tfinger.x, (double)e.tfinger.y, g_scrW, g_scrH, g_vx, g_vy, g_vw, g_vh, fe_ui_width());
-                }
                 fe_touch((long)e.tfinger.fingerId + 1, ph, lx, ly);
                 break;
             }
@@ -783,13 +772,6 @@ int main(int argc, char **argv) {
         }
         pad_poll();
         fe_frame(plat_time());
-#ifdef __ANDROID__
-        {   /* elke 10 s: draait de lus nog? */
-            static int frames; static double lastT;
-            frames++;
-            if (plat_time() - lastT > 10.0) { plat_log("lus: %d frames, scherm %dx%d", frames, g_scrW, g_scrH); frames = 0; lastT = plat_time(); }
-        }
-#endif
         SDL_GL_SwapWindow(win);
         if (g_autotestDone && g_autotest) { static int quitT; if (++quitT > 90) running = 0; }
         if (fe_should_quit()) running = 0;
