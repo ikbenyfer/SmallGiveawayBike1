@@ -135,8 +135,8 @@ static void setup_missions(Game *g) {
     m->time = 150;
     m->startVeh = 1;
     {
-        static const float pts[10][2] = {{22, 190}, {50, 190}, {130, 246}, {162, 246}, {298, 190},
-                                         {330, 190}, {354, 246}, {386, 246}, {274, 302}, {242, 302}};
+        static const float pts[10][2] = {{22, 202}, {50, 202}, {130, 258}, {162, 258}, {298, 202},
+                                         {330, 202}, {354, 258}, {386, 258}, {274, 314}, {242, 314}};
         for (i = 0; i < 10; i++) cp_set(&m->cp[i], pts[i][0], pts[i][1], 3.0f, NEED_BIKE, "Ride through the alley");
         m->ncp = 10;
     }
