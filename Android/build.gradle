@@ -1,0 +1,54 @@
+// app/build.gradle van de Android-versie (vervangt die van het SDL-sjabloon in CI)
+apply plugin: 'com.android.application'
+
+android {
+    namespace "nl.yf.smallgiveawaybike1"
+    compileSdkVersion 34
+    if (System.getenv("NDK_VER")) ndkVersion System.getenv("NDK_VER")
+    defaultConfig {
+        applicationId "nl.yf.smallgiveawaybike1"
+        minSdkVersion 21
+        targetSdkVersion 34
+        versionCode((System.getenv("SGB_VC") ?: "1") as int)
+        versionName(System.getenv("SGB_VERSION") ?: "dev")
+        externalNativeBuild {
+            ndkBuild {
+                arguments "APP_PLATFORM=android-21"
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
+            }
+        }
+    }
+    signingConfigs {
+        rel {
+            if (System.getenv("KS_FILE")) {
+                storeFile file(System.getenv("KS_FILE"))
+                storePassword System.getenv("KS_PASS")
+                keyAlias "sgb"
+                keyPassword System.getenv("KS_PASS")
+                storeType "pkcs12"
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig System.getenv("KS_FILE") ? signingConfigs.rel : signingConfigs.debug
+        }
+    }
+    externalNativeBuild {
+        ndkBuild {
+            path 'jni/Android.mk'
+        }
+    }
+    androidResources {
+        noCompress 'raw', 'pak', 'mp3', 'wav', 'txt'
+    }
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+}

@@ -12,6 +12,15 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **iPad:** `SmallGiveawayBike1.ipa` (en een `.deb`)
 - **Windows:** `SmallGiveawayBike1-Windows.zip`
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
+- **Android:** `SmallGiveawayBike1-Android.apk`
+
+## Android-versie
+Dit is dezelfde game voor Android-telefoons en -tablets (Android 5.0 of nieuwer, ARM 32- en 64-bit). Hij is gebouwd met SDL2 en OpenGL ES 2, net als op de iPad.
+- **Installeren:** download de `.apk` uit de release op je telefoon en open hem. Android vraagt dan om **installeren uit onbekende bronnen** toe te staan.
+- **Besturing:** dezelfde touch-knoppen als op de iPad. Een Bluetooth- of USB-controller werkt ook, net als op de pc, inclusief PS4- en Xbox-controllers. De **terug-knop** van Android werkt als pauze/terug.
+- **Beeld:** de game is gemaakt voor 4:3 (iPad). Op een breed telefoonscherm staat hij in het midden, met zwarte randen links en rechts.
+- **Opslag:** in de app zelf. Verwijder je de app, dan ben je je saves kwijt.
+- **Online en REAL NL** werken ook, via wifi of mobiel internet.
 
 ## Linux-versie
 Dit is de 64-bit versie van dezelfde game, gebouwd met SDL2 en OpenGL.
@@ -63,7 +72,8 @@ Menu's bedien je met de muis. Een postcode typ je op het toetsenbord.
 | Linux-testopstelling | `Tests/preview_linux.c`, `tools/linux_assets.py` |
 | iPad-test | `tools/ipad_test.py` |
 | Techniekonderzoek (fase 1) | `docs/TECHNIEK.md` |
-| Bouwen | `.github/workflows/build.yml` (iOS-app, Windows-versie en Linux-test) |
+| Bouwen | `.github/workflows/build.yml` (iOS-app, Windows-, Linux- en Android-versie en Linux-test) |
+| Android | `Android/` (Gradle, ndk-build, manifest, `SGBActivity.java`) + `Win/main_win.c` met `__ANDROID__` |
 | Windows-versie | `Win/` (SDL2, toetsenbord/muis, WinHTTP) |
 
 ## Installeren

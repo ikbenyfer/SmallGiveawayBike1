@@ -1,5 +1,6 @@
 /* Windows-versie: SDL2 (venster, toetsenbord/muis, geluid via SDL_mixer), desktop-OpenGL,
- * WinHTTP (Windows) of libcurl (Linux, bouwen met -DSGB_LINUX_GL) voor de echte NL-kaart. Opslag in %APPDATA%\SmallGiveawayBike1. */
+ * WinHTTP (Windows) of libcurl (Linux, bouwen met -DSGB_LINUX_GL) voor de echte NL-kaart. Opslag in %APPDATA%\SmallGiveawayBike1.
+ * Android (__ANDROID__): zelfde code met OpenGL ES 2, touch, bestanden uit de APK-assets en HTTP via Java (SGBActivity.httpGet). */
 #ifdef _WIN32
 #include "glwin.h"
 #include <winhttp.h>
@@ -10,7 +11,12 @@
 #else
 #define _GNU_SOURCE
 #include "../Render/gl_inc.h"
+#ifdef __ANDROID__
+#include <jni.h>
+#include <android/log.h>
+#else
 #include <curl/curl.h>
+#endif
 #include <pthread.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -19,8 +25,13 @@
 #define SEP "/"
 #define InterlockedExchange(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
 #endif
+#ifdef __ANDROID__
+#include "SDL.h"
+#include "SDL_mixer.h"
+#else
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,10 +74,34 @@ static int read_all(const char *path, char **data, long *len) {
     return 1;
 }
 
+/* pad van een bronbestand (Android: naam binnen de APK-assets, SDL_RWFromFile leest die) */
+static void res_path(char *p, size_t n, const char *name) {
+#ifdef __ANDROID__
+    snprintf(p, n, "%s", name);
+#else
+    snprintf(p, n, "%s" SEP "%s", DATA, name);
+#endif
+}
+
 int plat_read_resource(const char *name, char **data, long *len) {
+#ifdef __ANDROID__
+    SDL_RWops *rw = SDL_RWFromFile(name, "rb");
+    Sint64 n;
+    if (!rw) return 0;
+    n = SDL_RWsize(rw);
+    if (n < 0) { SDL_RWclose(rw); return 0; }
+    *data = (char *)malloc((size_t)n + 1);
+    if (!*data) { SDL_RWclose(rw); return 0; }
+    if (n > 0 && SDL_RWread(rw, *data, 1, (size_t)n) != (size_t)n) { free(*data); *data = NULL; SDL_RWclose(rw); return 0; }
+    (*data)[n] = 0;
+    *len = (long)n;
+    SDL_RWclose(rw);
+    return 1;
+#else
     char p[MAX_PATH];
-    snprintf(p, sizeof(p), "%s" SEP "%s", DATA, name);
+    res_path(p, sizeof(p), name);
     return read_all(p, data, len);
+#endif
 }
 
 int plat_read_file(const char *name, char **data, long *len) {
@@ -140,6 +175,9 @@ void plat_log(const char *fmt, ...) {
     va_end(ap);
     fprintf(stdout, "%s\n", buf);
     fflush(stdout);
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_INFO, "SGB", "%s", buf);
+#endif
     if (BASE[0]) {   /* ook naar %APPDATA%\SmallGiveawayBike1\log.txt (handig bij problemen) */
         static FILE *lf;
         if (!lf) { char p[MAX_PATH]; snprintf(p, sizeof(p), "%s" SEP "log.txt", BASE); lf = fopen(p, "w"); }
@@ -252,10 +290,10 @@ void plat_audio_init(const char *const *names, int n, const char *const *loops, 
     Mix_Init(MIX_INIT_MP3);
     Mix_AllocateChannels(32);
     Mix_ReserveChannels(nl);
-    for (i = 0; i < n && i < 64; i++) { snprintf(p, sizeof(p), "%s" SEP "sfx_%s.wav", DATA, names[i]); sfx[i] = Mix_LoadWAV(p); }
-    for (i = 0; i < nl && i < 8; i++) { snprintf(p, sizeof(p), "%s" SEP "sfx_%s.wav", DATA, loops[i]); loopc[i] = Mix_LoadWAV(p); }
+    for (i = 0; i < n && i < 64; i++) { char nm[96]; snprintf(nm, sizeof(nm), "sfx_%s.wav", names[i]); res_path(p, sizeof(p), nm); sfx[i] = Mix_LoadWAV(p); }
+    for (i = 0; i < nl && i < 8; i++) { char nm[96]; snprintf(nm, sizeof(nm), "sfx_%s.wav", loops[i]); res_path(p, sizeof(p), nm); loopc[i] = Mix_LoadWAV(p); }
     nsfxc = n; nloops = nl;
-    snprintf(p, sizeof(p), "%s" SEP "music.mp3", DATA);
+    res_path(p, sizeof(p), "music.mp3");
     music = Mix_LoadMUS(p);
     if (!music) plat_log("muziek niet geladen: %s", Mix_GetError());
     Mix_VolumeMusic(70);
@@ -296,7 +334,52 @@ typedef struct { volatile int state; char url[1024]; char *data; long len; } Req
 static Req reqs[NREQ];
 static int reqNext;
 
-#ifndef _WIN32
+#ifdef __ANDROID__
+static jclass g_actCls;
+static jmethodID g_httpGet;
+
+static void android_jni_init(void) {
+    JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+    jobject act = (jobject)SDL_AndroidGetActivity();
+    if (env && act) {
+        jclass c = (*env)->GetObjectClass(env, act);
+        g_actCls = (jclass)(*env)->NewGlobalRef(env, c);
+        g_httpGet = (*env)->GetStaticMethodID(env, g_actCls, "httpGet", "(Ljava/lang/String;)[B");
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); g_httpGet = NULL; }
+        (*env)->DeleteLocalRef(env, c);
+    }
+    if (env && act) (*env)->DeleteLocalRef(env, act);
+    plat_log("android: http %s", g_httpGet ? "ok" : "niet beschikbaar");
+}
+
+static void *http_thread(void *arg) {
+    Req *r = (Req *)arg;
+    JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();   /* koppelt deze thread aan de JVM */
+    int ok = 0;
+    if (env && g_actCls && g_httpGet) {
+        jstring js = (*env)->NewStringUTF(env, r->url);
+        jbyteArray arr = (jbyteArray)(*env)->CallStaticObjectMethod(env, g_actCls, g_httpGet, js);
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); arr = NULL; }
+        if (arr) {
+            jsize n = (*env)->GetArrayLength(env, arr);
+            if (n > 0) {
+                r->data = (char *)malloc((size_t)n + 1);
+                if (r->data) {
+                    (*env)->GetByteArrayRegion(env, arr, 0, n, (jbyte *)r->data);
+                    r->data[n] = 0;
+                    r->len = n;
+                    ok = 1;
+                }
+            }
+            (*env)->DeleteLocalRef(env, arr);
+        }
+        if (js) (*env)->DeleteLocalRef(env, js);
+    }
+    plat_log("NET %s: %ld bytes", ok ? "ok" : "fout", ok ? r->len : 0L);
+    InterlockedExchange(&r->state, ok ? 2 : 3);
+    return NULL;
+}
+#elif !defined(_WIN32)
 typedef struct { char *buf; long len, cap; } CurlBuf;
 static size_t curl_write(char *p, size_t sz, size_t n, void *ud) {
     CurlBuf *b = (CurlBuf *)ud;
@@ -460,6 +543,10 @@ static void pad_poll(void) {
 
 static void *getproc(const char *n) { return SDL_GL_GetProcAddress(n); }
 
+#ifdef __ANDROID__
+static int g_scrW = 1, g_scrH = 1, g_vx, g_vy, g_vw = 1, g_vh = 1;   /* scherm en 4:3-beeld in pixels */
+#endif
+
 int main(int argc, char **argv) {
     SDL_Window *win;
     SDL_GLContext ctx;
@@ -475,6 +562,9 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
     GetModuleFileNameA(NULL, exe, MAX_PATH);
     slash = strrchr(exe, '\\');
+#elif defined(__ANDROID__)
+    snprintf(exe, sizeof(exe), ".");
+    slash = NULL;
 #else
     {
         ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
@@ -489,6 +579,9 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
         if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, BASE) != S_OK) snprintf(BASE, sizeof(BASE), "%s", exe);
         strncat(BASE, "\\SmallGiveawayBike1", sizeof(BASE) - strlen(BASE) - 1);
+#elif defined(__ANDROID__)
+        const char *ip = SDL_AndroidGetInternalStoragePath();
+        snprintf(BASE, sizeof(BASE), "%s", ip ? ip : ".");
 #else
         const char *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
         if (xdg && xdg[0]) snprintf(BASE, sizeof(BASE), "%s/SmallGiveawayBike1", xdg);
@@ -502,15 +595,30 @@ int main(int argc, char **argv) {
     }
     settings_load();
 
+#ifdef __ANDROID__
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+    SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+#endif
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", SDL_GetError(), NULL);
         return 1;
     }
+#ifdef __ANDROID__
+    android_jni_init();
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    win = SDL_CreateWindow("Small Giveaway Bike 1", 0, 0, 0, 0, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
+#else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     win = SDL_CreateWindow("Small Giveaway Bike 1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL);
+#endif
     if (!win) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", SDL_GetError(), NULL); return 1; }
     {
         PlatImage ic;
@@ -522,18 +630,28 @@ int main(int argc, char **argv) {
         }
     }
     ctx = SDL_GL_CreateContext(win);
+#ifdef __ANDROID__
+    if (!ctx) {   /* sommige toestellen hebben geen 24-bits diepte */
+        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+        ctx = SDL_GL_CreateContext(win);
+    }
+#endif
 #ifdef _WIN32
     if (!ctx || !sgb_gl_load(getproc)) {
 #else
     (void)getproc;
     if (!ctx) {
 #endif
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", "OpenGL 2.1 is nodig. Werk je grafische driver bij.", win);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", "OpenGL 2.1 / OpenGL ES 2.0 is nodig.", win);
         return 1;
     }
     SDL_GL_SetSwapInterval(1);
     plat_log("GL: %s / %s", glGetString(GL_RENDERER), glGetString(GL_VERSION));
+#ifdef __ANDROID__
+    fe_set_desktop(0);   /* touch-knoppen op het scherm */
+#else
     fe_set_desktop(1);
+#endif
     fe_init(W, H);
     {
         static const int defs[KA_COUNT] = {SDL_SCANCODE_W, SDL_SCANCODE_S, SDL_SCANCODE_A, SDL_SCANCODE_D, SDL_SCANCODE_SPACE,
@@ -567,6 +685,7 @@ int main(int argc, char **argv) {
                 }
                 switch (e.key.keysym.sym) {
                 case SDLK_ESCAPE: fe_key_command(FE_CMD_BACK); break;
+                case SDLK_AC_BACK: fe_key_command(FE_CMD_BACK); break;
                 case SDLK_BACKSPACE: fe_text_char(8); break;
                 case SDLK_F11:
                     fullscreen = !fullscreen;
@@ -592,6 +711,19 @@ int main(int argc, char **argv) {
                 }
                 break;
             case SDL_MOUSEWHEEL: fe_mouse_wheel((float)e.wheel.y); break;
+#ifdef __ANDROID__
+            case SDL_FINGERDOWN:
+            case SDL_FINGERMOTION:
+            case SDL_FINGERUP: {
+                /* genormaliseerd (0..1 over het hele scherm) -> 1024x768 binnen het 4:3-beeld */
+                float lx = (e.tfinger.x * (float)g_scrW - (float)g_vx) * 1024.0f / (float)(g_vw > 0 ? g_vw : 1);
+                float ly = (e.tfinger.y * (float)g_scrH - (float)g_vy) * 768.0f / (float)(g_vh > 0 ? g_vh : 1);
+                int ph = e.type == SDL_FINGERDOWN ? TOUCH_BEGIN : e.type == SDL_FINGERUP ? TOUCH_END : TOUCH_MOVE;
+                fe_touch((long)e.tfinger.fingerId + 1, ph, lx, ly);
+                break;
+            }
+            case SDL_APP_WILLENTERBACKGROUND: fe_background(); break;
+#endif
             case SDL_WINDOWEVENT:
                 if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST) fe_background();
                 break;
@@ -613,14 +745,28 @@ int main(int argc, char **argv) {
             keys.jumpPressed = edgeJump; keys.actionPressed = edgeAction; keys.switchPressed = edgeSwitch;
             edgeJump = edgeAction = edgeSwitch = 0;
             if ((SDL_bool)rel != SDL_GetRelativeMouseMode()) SDL_SetRelativeMouseMode(rel ? SDL_TRUE : SDL_FALSE);
-            if (fe_text_wanted()) SDL_StartTextInput(); else SDL_StopTextInput();
+            {   /* alleen bij een wijziging (op Android opent/sluit dit het schermtoetsenbord) */
+                static int textOn = -1;
+                int tw = fe_text_wanted() ? 1 : 0;
+                if (tw != textOn) { if (tw) SDL_StartTextInput(); else SDL_StopTextInput(); textOn = tw; }
+            }
             fe_key_input(&keys);
             if (mdx || mdy) fe_mouse_look((float)mdx, (float)mdy);
         }
         {
             int dw, dh;
             SDL_GL_GetDrawableSize(win, &dw, &dh);
+#ifdef __ANDROID__
+            {   /* het spel is ontworpen voor 4:3 (iPad): midden op het scherm, zwarte randen ernaast */
+                int vw = dw, vh = dw * 3 / 4;
+                if (vh > dh) { vh = dh; vw = dh * 4 / 3; }
+                g_scrW = dw; g_scrH = dh; g_vw = vw; g_vh = vh; g_vx = (dw - vw) / 2; g_vy = (dh - vh) / 2;
+                fe_set_viewport_origin(g_vx, g_vy);
+                fe_resize_viewport(vw, vh);
+            }
+#else
             fe_resize_viewport(dw, dh);
+#endif
         }
         pad_poll();
         fe_frame(plat_time());

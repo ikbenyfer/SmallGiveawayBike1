@@ -285,9 +285,81 @@ jobs:
           name: SmallGiveawayBike1-Linux
           path: SmallGiveawayBike1-Linux.tar.gz
 
+  android:
+    name: Android-versie (APK, SDL2)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Pakketten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pil fonts-dejavu-core
+
+      - name: SDL2 + SDL2_mixer ophalen en Android-project klaarzetten
+        shell: bash
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          set -e
+          git clone --depth 1 -b release-2.30.9 https://github.com/libsdl-org/SDL.git sdl
+          git clone --depth 1 -b release-2.8.0 https://github.com/libsdl-org/SDL_mixer.git sdl_mixer
+          P=android-build
+          cp -r sdl/android-project $P
+          J=$P/app/jni
+          rm -rf $J/src $J/SDL $J/SDL_mixer $J/CMakeLists.txt
+          ln -s "$PWD/sdl" $J/SDL
+          ln -s "$PWD/sdl_mixer" $J/SDL_mixer
+          mkdir -p $J/src
+          cp -r Game Render Win $J/src/
+          cp Android/jni/Android.mk Android/jni/Application.mk $J/
+          cp Android/jni/src/Android.mk $J/src/
+          cp Android/build.gradle $P/app/build.gradle
+          cp Android/AndroidManifest.xml $P/app/src/main/AndroidManifest.xml
+          mkdir -p $P/app/src/main/java/nl/yf/smallgiveawaybike1
+          cp Android/SGBActivity.java $P/app/src/main/java/nl/yf/smallgiveawaybike1/
+          rm -rf $P/app/src/main/res/mipmap-*
+          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            mkdir -p $P/app/src/main/res/mipmap-${d%%:*}
+            python3 -c "import sys; from PIL import Image; Image.open('Resources/Icon-152.png').convert('RGBA').resize((int(sys.argv[1]),)*2, Image.LANCZOS).save(sys.argv[2])" ${d##*:} $P/app/src/main/res/mipmap-${d%%:*}/ic_launcher.png
+          done
+          A=$P/app/src/main/assets
+          mkdir -p $A
+          python3 tools/linux_assets.py $A
+          cp Resources/sfx_*.wav Resources/music.mp3 Resources/nl_hb.pak Resources/nl_hb_map.txt $A/
+          ls $A | head -50
+          echo "NDK_VER=$(basename "$ANDROID_NDK_LATEST_HOME")" >> $GITHUB_ENV
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/sgb.p12"
+            echo "KS_FILE=$RUNNER_TEMP/sgb.p12" >> $GITHUB_ENV
+          else
+            echo "Geen ANDROID_KEYSTORE_B64-secret: APK wordt met een tijdelijke debug-sleutel ondertekend"
+          fi
+
+      - name: APK bouwen
+        working-directory: android-build
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          export SGB_VERSION="$(cat ../VERSION)" SGB_VC="${{ github.run_number }}"
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../SmallGiveawayBike1-Android.apk
+          ls -l ../SmallGiveawayBike1-Android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SmallGiveawayBike1-Android
+          path: SmallGiveawayBike1-Android.apk
+
   release:
-    name: GitHub-release (iPad + Windows + Linux)
-    needs: [preview, build, windows, linux]
+    name: GitHub-release (iPad + Windows + Linux + Android)
+    needs: [preview, build, windows, linux, android]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
@@ -311,8 +383,8 @@ jobs:
           VER="$(cat VERSION 2>/dev/null || echo 1.2)"
           TAG="v$VER"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then TAG="v$VER-build.${{ github.run_number }}"; fi
-          printf 'Automatische build van main (%s).\n\n%s\n\nBestanden:\n- iPad (iOS 9, armv7): SmallGiveawayBike1.ipa of de .deb\n- Windows (x64): SmallGiveawayBike1-Windows.zip\n- Linux (x64): SmallGiveawayBike1-Linux.tar.gz\n' "${GITHUB_SHA:0:7}" "$MSG" > notes.md
+          printf 'Automatische build van main (%s).\n\n%s\n\nBestanden:\n- iPad (iOS 9, armv7): SmallGiveawayBike1.ipa of de .deb\n- Windows (x64): SmallGiveawayBike1-Windows.zip\n- Linux (x64): SmallGiveawayBike1-Linux.tar.gz\n- Android (5.0+, telefoon/tablet): SmallGiveawayBike1-Android.apk\n' "${GITHUB_SHA:0:7}" "$MSG" > notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Small Giveaway Bike 1 $TAG" --notes-file notes.md --latest \
             art/SmallGiveawayBike1/*.ipa art/SmallGiveawayBike1/*.deb \
-            art/SmallGiveawayBike1-Windows/*.zip art/SmallGiveawayBike1-Linux/*.tar.gz
+            art/SmallGiveawayBike1-Windows/*.zip art/SmallGiveawayBike1-Linux/*.tar.gz art/SmallGiveawayBike1-Android/*.apk

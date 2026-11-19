@@ -154,7 +154,9 @@ static Input g_dk;
 
 void fe_set_desktop(int on) { g_desktop = on; }
 void fe_key_input(const void *keys) { g_dk = *(const Input *)keys; }
+static int g_vpX, g_vpY;
 void fe_resize_viewport(int w, int h) { g_vpW = w; g_vpH = h; }
+void fe_set_viewport_origin(int x, int y) { g_vpX = x; g_vpY = y; }
 int fe_wants_mouse(void) { return g_desktop && F.ready && F.state == ST_GAME && !F.at; }
 
 static void set_state(int s) {
@@ -3420,7 +3422,7 @@ void fe_frame(double now) {
     }
     if (F.mode == 1 && (F.state == ST_GAME || F.state == ST_PAUSE || F.state == ST_BIGMAP)) ns_update(F.G.p.x, F.G.p.z);
     if (!F.at) pad_tick(dt);
-    glViewport(0, 0, g_vpW > 0 ? g_vpW : R->W, g_vpH > 0 ? g_vpH : R->H);
+    glViewport(g_vpX, g_vpY, g_vpW > 0 ? g_vpW : R->W, g_vpH > 0 ? g_vpH : R->H);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
