@@ -36,12 +36,23 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1024x768x24' ./preview | tee preview_out/run.log
           cat preview_out/autotest_report.txt
 
+      - name: Zelfde test op een 16:9-scherm (1366x768)
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          SGB_WIDE: '1'
+          SGB_OUT: preview_out/wide
+        run: |
+          mkdir -p preview_out/wide
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1366x768x24' ./preview > preview_out/wide/run.log 2>&1
+          tail -5 preview_out/wide/run.log
+
       - name: PPM naar PNG
         run: |
           python3 - <<'EOF'
           import glob, os
           from PIL import Image
-          for p in glob.glob("preview_out/*.ppm"):
+          for p in glob.glob("preview_out/*.ppm") + glob.glob("preview_out/wide/*.ppm"):
               Image.open(p).save(p[:-4] + ".png")
               os.remove(p)
           EOF

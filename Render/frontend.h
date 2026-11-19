@@ -22,7 +22,8 @@ int fe_text_wanted(void);
 void fe_text_char(int c);
 void fe_key_command(int cmd);
 void fe_resize_viewport(int w, int h);
-void fe_set_viewport_origin(int x, int y);   /* Android: 4:3-beeld midden op een breed scherm */
+void fe_set_viewport_origin(int x, int y);
+int fe_ui_width(void);   /* breedte van het UI-coordinatenstelsel (hoogte is altijd 768): 1024 bij 4:3, 1365 bij 16:9 */
 void fe_set_mptest(int mode);   /* 1 = host, 2 = meedoen (test met twee vensters) */
 
 /* controllers (alle platformen, Xbox-indeling) en instelbare toetsen */

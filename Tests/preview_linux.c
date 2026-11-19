@@ -205,7 +205,9 @@ void plat_delete_file(const char *name) {
 }
 
 int main(void) {
-    const int W = 1024, H = 768;
+    /* SGB_WIDE=1: 16:9-scherm (1366x768) testen; SGB_OUT: uitvoermap */
+    const int wide = getenv("SGB_WIDE") != NULL;
+    const int W = wide ? 1366 : 1024, H = 768;
     EGLDisplay dpy;
     EGLConfig cfg;
     EGLint n = 0, maj, min;
@@ -213,6 +215,7 @@ int main(void) {
     GLuint fbo, color, depth;
     int frame;
     double t = 0;
+    if (getenv("SGB_OUT")) OUT = getenv("SGB_OUT");
     mkdir(OUT, 0755);
     {
         PFNEGLGETPLATFORMDISPLAYEXTPROC gpd = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
@@ -249,16 +252,17 @@ int main(void) {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { printf("FBO niet compleet\n"); return 2; }
 
-    fe_init(W, H);
+    fe_init(1024, 768);
     for (frame = 0; frame < 30 * 500; frame++) {
         t += 1.0 / 30.0;
+        if (wide) fe_resize_viewport(W, H);
         fe_frame(t);
         if (frame == 25) plat_screenshot("00a_logo_fadein", W, H);
         if (frame == 80) plat_screenshot("00b_loading", W, H);
         if (!autotest_on) {
             /* nog even het menu tonen na de test */
             int k;
-            for (k = 0; k < 20; k++) { t += 1.0 / 30.0; fe_frame(t); }
+            for (k = 0; k < 20; k++) { t += 1.0 / 30.0; if (wide) fe_resize_viewport(W, H); fe_frame(t); }
             plat_screenshot("99_menu_after", W, H);
             break;
         }

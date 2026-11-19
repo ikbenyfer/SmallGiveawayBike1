@@ -550,7 +550,7 @@ static int g_scrW = 1, g_scrH = 1, g_vx, g_vy, g_vw = 1, g_vh = 1;   /* scherm e
 int main(int argc, char **argv) {
     SDL_Window *win;
     SDL_GLContext ctx;
-    int i, running = 1, W = 1024, H = 768, fullscreen = 0;
+    int i, running = 1, W = 1280, H = 720, fullscreen = 0;   /* 16:9-venster; elk formaat werkt (vergroten, F11) */
     char exe[MAX_PATH], *slash;
     Input keys;
     for (i = 1; i < argc; i++) {
@@ -606,6 +606,7 @@ int main(int argc, char **argv) {
     }
 #ifdef __ANDROID__
     android_jni_init();
+    (void)W; (void)H;
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
@@ -617,7 +618,8 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    win = SDL_CreateWindow("Small Giveaway Bike 1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL);
+    win = SDL_CreateWindow("Small Giveaway Bike 1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    if (win) SDL_SetWindowMinimumSize(win, 640, 400);
 #endif
     if (!win) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", SDL_GetError(), NULL); return 1; }
     {
@@ -652,7 +654,7 @@ int main(int argc, char **argv) {
 #else
     fe_set_desktop(1);
 #endif
-    fe_init(W, H);
+    fe_init(1024, 768);   /* UI-ontwerp 1024x768; de breedte groeit mee met het scherm (fe_ui_width) */
     {
         static const int defs[KA_COUNT] = {SDL_SCANCODE_W, SDL_SCANCODE_S, SDL_SCANCODE_A, SDL_SCANCODE_D, SDL_SCANCODE_SPACE,
                                            SDL_SCANCODE_E, SDL_SCANCODE_LCTRL, SDL_SCANCODE_Q, SDL_SCANCODE_LSHIFT, SDL_SCANCODE_M};
@@ -700,14 +702,14 @@ int main(int argc, char **argv) {
                 if (SDL_GetRelativeMouseMode()) { mdx += e.motion.xrel; mdy += e.motion.yrel; }
                 else if (e.motion.state & SDL_BUTTON_LMASK) {
                     int ww, wh; SDL_GetWindowSize(win, &ww, &wh);
-                    fe_touch(1, TOUCH_MOVE, e.motion.x * 1024.0f / ww, e.motion.y * 768.0f / wh);
+                    fe_touch(1, TOUCH_MOVE, e.motion.x * (float)fe_ui_width() / ww, e.motion.y * 768.0f / wh);
                 }
                 break;
             case SDL_MOUSEBUTTONDOWN:
             case SDL_MOUSEBUTTONUP:
                 if (e.button.button == SDL_BUTTON_LEFT && !SDL_GetRelativeMouseMode()) {
                     int ww, wh; SDL_GetWindowSize(win, &ww, &wh);
-                    fe_touch(1, e.type == SDL_MOUSEBUTTONDOWN ? TOUCH_BEGIN : TOUCH_END, e.button.x * 1024.0f / ww, e.button.y * 768.0f / wh);
+                    fe_touch(1, e.type == SDL_MOUSEBUTTONDOWN ? TOUCH_BEGIN : TOUCH_END, e.button.x * (float)fe_ui_width() / ww, e.button.y * 768.0f / wh);
                 }
                 break;
             case SDL_MOUSEWHEEL: fe_mouse_wheel((float)e.wheel.y); break;
@@ -715,8 +717,8 @@ int main(int argc, char **argv) {
             case SDL_FINGERDOWN:
             case SDL_FINGERMOTION:
             case SDL_FINGERUP: {
-                /* genormaliseerd (0..1 over het hele scherm) -> 1024x768 binnen het 4:3-beeld */
-                float lx = (e.tfinger.x * (float)g_scrW - (float)g_vx) * 1024.0f / (float)(g_vw > 0 ? g_vw : 1);
+                /* genormaliseerd (0..1 over het hele scherm) -> UI-coordinaten (breedte fe_ui_width, hoogte 768) */
+                float lx = (e.tfinger.x * (float)g_scrW - (float)g_vx) * (float)fe_ui_width() / (float)(g_vw > 0 ? g_vw : 1);
                 float ly = (e.tfinger.y * (float)g_scrH - (float)g_vy) * 768.0f / (float)(g_vh > 0 ? g_vh : 1);
                 int ph = e.type == SDL_FINGERDOWN ? TOUCH_BEGIN : e.type == SDL_FINGERUP ? TOUCH_END : TOUCH_MOVE;
                 fe_touch((long)e.tfinger.fingerId + 1, ph, lx, ly);
@@ -757,9 +759,9 @@ int main(int argc, char **argv) {
             int dw, dh;
             SDL_GL_GetDrawableSize(win, &dw, &dh);
 #ifdef __ANDROID__
-            {   /* het spel is ontworpen voor 4:3 (iPad): midden op het scherm, zwarte randen ernaast */
-                int vw = dw, vh = dw * 3 / 4;
-                if (vh > dh) { vh = dh; vw = dh * 4 / 3; }
+            {   /* breedbeeld vult het hele scherm; smaller dan 4:3 (zelden) krijgt randen boven en onder */
+                int vw = dw, vh = dh;
+                if (dw * 3 < dh * 4) vh = dw * 3 / 4;
                 g_scrW = dw; g_scrH = dh; g_vw = vw; g_vh = vh; g_vx = (dw - vw) / 2; g_vy = (dh - vh) / 2;
                 fe_set_viewport_origin(g_vx, g_vy);
                 fe_resize_viewport(vw, vh);

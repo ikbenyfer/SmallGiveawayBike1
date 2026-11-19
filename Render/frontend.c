@@ -104,6 +104,7 @@ static struct {
     char rep[6000]; int replen;
     int atBike, atCar;
     long atMoney0;
+    int SW;                 /* UI-breedte van het scherm (768 hoog); menu's staan in een 1024-paneel in het midden */
 } F;
 
 static const char *TIPS[] = {
@@ -143,7 +144,7 @@ static void reset_controls(void) {
     for (i = 0; i < NTOUCH; i++) if (F.ts[i].used) F.ts[i].ctl = CTL_UI;
     F.lOn = F.rOn = 0;
     F.lbx = 150; F.lby = F.R.H - 150.0f;
-    F.rbx = F.R.W - 170.0f; F.rby = F.R.H - 150.0f;
+    F.rbx = (float)fe_ui_width() - 170.0f; F.rby = F.R.H - 150.0f;
     F.jumpEdge = F.actionEdge = F.switchEdge = 0;
     memset(&F.in, 0, sizeof(F.in));
 }
@@ -155,7 +156,24 @@ static Input g_dk;
 void fe_set_desktop(int on) { g_desktop = on; }
 void fe_key_input(const void *keys) { g_dk = *(const Input *)keys; }
 static int g_vpX, g_vpY;
-void fe_resize_viewport(int w, int h) { g_vpW = w; g_vpH = h; }
+void fe_resize_viewport(int w, int h) {
+    g_vpW = w; g_vpH = h;
+    if (w > 0 && h > 0) {   /* breedbeeld: meer ruimte opzij, hoogte blijft 768 */
+        int sw = (int)(768.0f * (float)w / (float)h + 0.5f);
+        F.SW = sw < 1024 ? 1024 : sw > 2560 ? 2560 : sw;
+    }
+}
+int fe_ui_width(void) { return F.SW > 0 ? F.SW : F.R.W; }
+
+/* menu's zijn ontworpen voor 1024x768: op een breed scherm tekenen ze in een 1024-paneel in het midden */
+static void panel_on(void) {
+    int sw = fe_ui_width();
+    if (sw > 1024 && F.R.H == 768) { F.R.W = 1024; F.R.uiOff = (float)(sw - 1024) * 0.5f; }
+}
+static void panel_off(void) {
+    F.R.W = fe_ui_width(); F.R.uiOff = 0;
+}
+static int panel_state(int st) { return st != ST_GAME && st != ST_BIGMAP; }
 void fe_set_viewport_origin(int x, int y) { g_vpX = x; g_vpY = y; }
 int fe_wants_mouse(void) { return g_desktop && F.ready && F.state == ST_GAME && !F.at; }
 
@@ -261,6 +279,7 @@ void fe_init(int w, int h) {
     int i;
     memset(&F, 0, sizeof(F));
     r_init(&F.R, w, h);
+    F.SW = w;
     F.quality = plat_load_int("quality", 1);
     F.tod = plat_load_int("tod", 0);
     F.camSpeed = plat_load_int("camspeed", 1);
@@ -379,7 +398,9 @@ static void load_step(void) {
 
 static void draw_backdrop(float alpha, float logoA, float zoomT) {
     Renderer *R = &F.R;
-    float s = (float)R->H / 768.0f * (1.0f + 0.025f * (0.5f - 0.5f * cosf(zoomT * 0.12f)));
+    float s0 = (float)R->H / 768.0f, s;
+    if ((float)fe_ui_width() / 1408.0f > s0) s0 = (float)fe_ui_width() / 1408.0f;   /* heel breed scherm */
+    s = s0 * (1.0f + 0.025f * (0.5f - 0.5f * cosf(zoomT * 0.12f)));
     float bw = 1408.0f * s, bh = 768.0f * s;
     float bx = (R->W - bw) * 0.5f, by = (R->H - bh) * 0.5f;
     int i;
@@ -1155,6 +1176,7 @@ static void draw_missions(void) {
     char b[32];
     if (F.missionsFrom == ST_PAUSE) {
         r_draw_scene(R, &F.G);
+        panel_on();
         ui_begin(R);
         ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.75f);
     } else {
@@ -1960,6 +1982,7 @@ static void draw_shop(void) {
     char name[48], info[80], b[48];
     int i, price;
     r_draw_scene(R, &F.G);
+    panel_on();
     ui_begin(R);
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.72f);
     ui_rect(R, 152, 40, 720, 640, 0.07f, 0.06f, 0.07f, 0.95f);
@@ -2241,6 +2264,7 @@ static void draw_biz(void) {
     biz_color(F.bizShop, &cr, &cg, &cb);
     rowH = n > 5 ? 60.0f : 84.0f;
     r_draw_scene(R, g);
+    panel_on();
     ui_begin(R);
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.7f);
     ui_rect(R, 132, 30, 760, 650, 0.07f, 0.07f, 0.09f, 0.96f);
@@ -2299,6 +2323,7 @@ static void draw_home(void) {
     int k, hp = home_upgrade_price(1, g->homeLvl), gp = home_upgrade_price(0, g->garLvl), owned = 0;
     for (k = 0; k < MAX_OWNED; k++) owned += g->garage[k].exists;
     r_draw_scene(R, g);
+    panel_on();
     ui_begin(R);
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.65f);
     ui_rect(R, 132, 60, 760, 600, 0.07f, 0.07f, 0.09f, 0.96f);
@@ -2365,6 +2390,7 @@ static void draw_dealer(void) {
     int i, owned = 0;
     for (i = 0; i < MAX_OWNED; i++) owned += F.G.garage[i].exists;
     r_draw_scene(R, &F.G);
+    panel_on();
     ui_begin(R);
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.7f);
     ui_rect(R, 112, 40, 800, 640, 0.07f, 0.07f, 0.08f, 0.95f);
@@ -2451,6 +2477,7 @@ static void draw_customs(void) {
     if (F.G.p.veh < 0) { set_state(ST_GAME); return; }
     v = &F.G.veh[F.G.p.veh];
     r_draw_scene(R, &F.G);
+    panel_on();
     ui_begin(R);
     ui_rect(R, 0, 0, 520, (float)R->H, 0, 0, 0, 0.8f);
     ui_rect(R, 0, 0, 520, 70, 0.1f, 0.35f, 0.95f, 1);
@@ -2791,9 +2818,12 @@ void fe_touch(long id, int phase, float x, float y) {
         if (phase == TOUCH_BEGIN) game_touch(&F.ts[slot], TOUCH_BEGIN);
         else game_touch(&F.ts[slot], phase);
     } else {
+        int pan = panel_state(F.state) && fe_ui_width() > 1024;
         F.ts[slot].ctl = CTL_UI;
         if (phase == TOUCH_END && F.sfxOn && F.pressed) plat_sfx(SFX_CLICK, 0.5f);
+        if (pan) { panel_on(); x -= F.R.uiOff; }
         menu_tap(x, y, phase);
+        if (pan) panel_off();
     }
     if (phase == TOUCH_END) F.ts[slot].used = 0;
 }
@@ -3423,6 +3453,9 @@ void fe_frame(double now) {
     if (F.mode == 1 && (F.state == ST_GAME || F.state == ST_PAUSE || F.state == ST_BIGMAP)) ns_update(F.G.p.x, F.G.p.z);
     if (!F.at) pad_tick(dt);
     glViewport(g_vpX, g_vpY, g_vpW > 0 ? g_vpW : R->W, g_vpH > 0 ? g_vpH : R->H);
+    panel_off();
+    if (panel_state(F.state) && F.state != ST_PAUSE && F.state != ST_SHOP && F.state != ST_BIZ && F.state != ST_HOME &&
+        F.state != ST_DEALER && F.state != ST_CUSTOMS && !(F.state == ST_MISSIONS && F.missionsFrom == ST_PAUSE)) panel_on();
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -3581,7 +3614,7 @@ void fe_frame(double now) {
         r_draw_scene(R, &F.G);
         ui_begin(R);
         draw_hud();
-        if (F.state == ST_PAUSE) draw_pause();   /* (niet als er net een winkel/huis-menu opengaat) */
+        if (F.state == ST_PAUSE) { ui_flush(R); panel_on(); ui_begin(R); draw_pause(); }   /* (niet als er net een winkel/huis-menu opengaat) */
         if (F.fade > 0) {
             ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, clampf(F.fade, 0, 1));
             F.fade -= dt * 2.0f;
@@ -3632,10 +3665,11 @@ void fe_frame(double now) {
         plat_loop(LOOP_BIKE, bike, bikeRate);
         plat_loop(LOOP_SIREN, siren, 1.0f);
     }
+    panel_off();
     draw_pad_cursor();
     F.lastDC = R->drawCalls;
     if (pendingShot[0]) {
-        plat_screenshot(pendingShot, R->W, R->H);
+        plat_screenshot(pendingShot, g_vpW > 0 ? g_vpW : R->W, g_vpH > 0 ? g_vpH : R->H);
         F.skipStat = 2;
         pendingShot[0] = 0;
     }

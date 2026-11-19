@@ -18,9 +18,15 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 Dit is dezelfde game voor Android-telefoons en -tablets (Android 5.0 of nieuwer, ARM 32- en 64-bit). Hij is gebouwd met SDL2 en OpenGL ES 2, net als op de iPad.
 - **Installeren:** download de `.apk` uit de release op je telefoon en open hem. Android vraagt dan om **installeren uit onbekende bronnen** toe te staan.
 - **Besturing:** dezelfde touch-knoppen als op de iPad. Een Bluetooth- of USB-controller werkt ook, net als op de pc, inclusief PS4- en Xbox-controllers. De **terug-knop** van Android werkt als pauze/terug.
-- **Beeld:** de game is gemaakt voor 4:3 (iPad). Op een breed telefoonscherm staat hij in het midden, met zwarte randen links en rechts.
+- **Beeld:** breedbeeld (16:9, 20:9 enzovoort) vult het hele scherm. Je ziet dan meer van de stad opzij; de menu's staan in het midden.
 - **Opslag:** in de app zelf. Verwijder je de app, dan ben je je saves kwijt.
 - **Online en REAL NL** werken ook, via wifi of mobiel internet.
+
+## Breedbeeld (16:9) op Windows, Linux en Android
+- De game werkt nu op elk breed scherm. Het venster op de pc start als **1280x720 (16:9)**. Je kunt het vergroten, of met **F11** volledig scherm maken.
+- In het spel zie je meer van de stad opzij. De knoppen, de minikaart en het geld staan aan de randen van het scherm.
+- De menu's en winkels zijn gemaakt voor 4:3. Ze staan in het midden, en de achtergrond loopt door tot de rand.
+- Op de iPad (4:3) verandert er niets.
 
 ## Linux-versie
 Dit is de 64-bit versie van dezelfde game, gebouwd met SDL2 en OpenGL.

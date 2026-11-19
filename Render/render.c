@@ -953,7 +953,7 @@ void r_draw_scene(Renderer *r, Game *g) {
 /* ------------------------------------------------------------------ 2D batch */
 
 void ui_begin(Renderer *r) {
-    M4 p = m4_ortho(0, (float)r->W, (float)r->H, 0, -1, 1);
+    M4 p = m4_ortho(-r->uiOff, (float)r->W + r->uiOff, (float)r->H, 0, -1, 1);
     glUseProgram(r->progU);
     glUniformMatrix4fv(r->uProj, 1, GL_FALSE, p.m);
     glUniform1i(r->uTex, 0);
@@ -1039,6 +1039,7 @@ void ui_quad(Renderer *r, const Tex *t, float x, float y, float w, float h, floa
 }
 
 void ui_grad(Renderer *r, float x, float y, float w, float h, const float *top, const float *bot, float a) {
+    if (r->uiOff > 0 && x <= 0.5f && x + w >= (float)r->W - 0.5f) { x -= r->uiOff; w += 2.0f * r->uiOff; }
     UIVtx *v;
     uint8_t tr = c8(top[0] * a), tg = c8(top[1] * a), tb = c8(top[2] * a);
     uint8_t br = c8(bot[0] * a), bg = c8(bot[1] * a), bb = c8(bot[2] * a), A = c8(a);
@@ -1054,6 +1055,7 @@ void ui_grad(Renderer *r, float x, float y, float w, float h, const float *top, 
 }
 
 void ui_rect(Renderer *r, float x, float y, float w, float h, float cr, float cg, float cb, float ca) {
+    if (r->uiOff > 0 && x <= 0.5f && x + w >= (float)r->W - 0.5f) { x -= r->uiOff; w += 2.0f * r->uiOff; }   /* schermbreed blijft schermbreed */
     ui_quad(r, &r->white, x, y, w, h, 0.5f, 0.5f, 0.5f, 0.5f, cr, cg, cb, ca);
 }
 

@@ -22,6 +22,7 @@ enum { TOD_DUSK = 0, TOD_NIGHT = 1, TOD_DAY = 2 };
 
 typedef struct {
     int W, H;
+    float uiOff;           /* paneelmodus: UI-coordinaat 0 ligt uiOff pixels rechts van de schermrand (breedbeeld) */
     GLuint progW, progU;
     GLint wVP, wModel, wSun, wSunCol, wAmb, wCam, wFog, wFogCol, wTint, wEmis, wAlpha, wUnlit;
     GLint uProj, uTex;
