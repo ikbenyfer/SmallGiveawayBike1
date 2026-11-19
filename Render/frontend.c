@@ -30,7 +30,7 @@ typedef struct { char pc[8]; char name[96]; long kb; double rx, ry; } NLArea;
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME, ST_BIZ };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME, ST_BIZ, ST_SLOTS };
 enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH, CTL_RUN };
 
 #define NTOUCH 10
@@ -60,6 +60,7 @@ static struct {
     char shopMsg[96];
     float atMaxSpeed;
     int atShot2, bizShop, atBiz;
+    int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
     int lOn, rOn;
@@ -171,6 +172,49 @@ static void apply_settings(void) {
     r_set_tod(&F.R, F.tod);
 }
 
+/* ------------------------------------------------------------------ opslagslots (v3.3)
+ * Voortgang staat per slot onder "s<slot>_<naam>"; instellingen blijven gedeeld.
+ * Oude saves (zonder slots) worden bij de eerste start naar slot 1 verplaatst. */
+
+#define NSLOTS 3
+static const char *SLOT_KEYS[] = {"used", "money", "done", "guns", "ammo1", "ammo2", "ammo3", "armor", "home", "garage",
+                                  "cardio", "tough", "outfits", "outfit", "decor", "car0", "car1", "car2", "car3"};
+#define NSLOT_KEYS ((int)(sizeof(SLOT_KEYS) / sizeof(SLOT_KEYS[0])))
+
+static void slot_key(char *b, size_t n, int slot, const char *k) { snprintf(b, n, "s%d_%s", slot, k); }
+static void ssave(const char *k, int v) { char b[40]; slot_key(b, sizeof(b), F.slot, k); plat_save_int(b, v); }
+static int sload(const char *k, int def) { char b[40]; slot_key(b, sizeof(b), F.slot, k); return plat_load_int(b, def); }
+static int sload_in(int slot, const char *k, int def) { char b[40]; slot_key(b, sizeof(b), slot, k); return plat_load_int(b, def); }
+
+static void slots_migrate(void) {
+    int k;
+    if (plat_load_int("slotsv", 0) >= 1) return;
+    for (k = 1; k < NSLOT_KEYS; k++) {
+        char b[40];
+        slot_key(b, sizeof(b), 1, SLOT_KEYS[k]);
+        plat_save_int(b, plat_load_int(SLOT_KEYS[k], 0));
+    }
+    {
+        char b[40];
+        slot_key(b, sizeof(b), 1, "used");
+        plat_save_int(b, plat_load_int("money", 0) != 0 || plat_load_int("done", 0) != 0 || plat_load_int("car0", 0) != 0);
+    }
+    plat_save_int("slotsv", 1);
+    plat_save_int("slot", 1);
+    plat_save_flush();
+    plat_log("SGB opslag: oude save naar slot 1 verplaatst");
+}
+
+static void slot_erase(int slot) {
+    int k;
+    for (k = 0; k < NSLOT_KEYS; k++) {
+        char b[40];
+        slot_key(b, sizeof(b), slot, SLOT_KEYS[k]);
+        plat_save_int(b, 0);
+    }
+    plat_save_flush();
+}
+
 static void save_all(void) {
     int done = 0, i;
     plat_save_int("quality", F.quality);
@@ -183,25 +227,26 @@ static void save_all(void) {
     plat_save_int("sfx", F.sfxOn);
     if (F.loadDone && !F.at && F.mode == 0) {
         for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;
-        plat_save_int("money", (int)F.G.money);
-        plat_save_int("done", done);
-        plat_save_int("guns", F.G.owned[1] | (F.G.owned[2] << 1) | (F.G.owned[3] << 2));
-        plat_save_int("ammo1", F.G.ammo[1]); plat_save_int("ammo2", F.G.ammo[2]); plat_save_int("ammo3", F.G.ammo[3]);
-        plat_save_int("armor", (int)F.G.armor);
-        plat_save_int("home", F.G.homeLvl);
-        plat_save_int("garage", F.G.garLvl);
-        plat_save_int("cardio", F.G.cardio);
-        plat_save_int("tough", F.G.tough);
-        plat_save_int("outfits", F.G.outfits);
-        plat_save_int("outfit", F.G.outfit);
-        plat_save_int("decor", F.G.decor);
+        ssave("used", 1);
+        ssave("money", (int)F.G.money);
+        ssave("done", done);
+        ssave("guns", F.G.owned[1] | (F.G.owned[2] << 1) | (F.G.owned[3] << 2));
+        ssave("ammo1", F.G.ammo[1]); ssave("ammo2", F.G.ammo[2]); ssave("ammo3", F.G.ammo[3]);
+        ssave("armor", (int)F.G.armor);
+        ssave("home", F.G.homeLvl);
+        ssave("garage", F.G.garLvl);
+        ssave("cardio", F.G.cardio);
+        ssave("tough", F.G.tough);
+        ssave("outfits", F.G.outfits);
+        ssave("outfit", F.G.outfit);
+        ssave("decor", F.G.decor);
         {
             int c;
             for (c = 0; c < MAX_OWNED; c++) {
                 const struct GarageCar *gc = &F.G.garage[c];
                 char key[16];
                 snprintf(key, sizeof(key), "car%d", c);
-                plat_save_int(key, gc->exists ? (1 | (gc->model << 1) | (gc->paint << 4) | (gc->eng << 9) | (gc->hand << 11) | (gc->neon << 13) | (gc->spoiler << 16)) : 0);
+                ssave(key, gc->exists ? (1 | (gc->model << 1) | (gc->paint << 4) | (gc->eng << 9) | (gc->hand << 11) | (gc->neon << 13) | (gc->spoiler << 16)) : 0);
             }
         }
         F.savedMoney = F.G.money; F.savedDone = done;
@@ -262,6 +307,49 @@ void fe_background(void) {
 
 /* ------------------------------------------------------------------ laden */
 
+static void load_slot(void) {
+    int i, done;
+    game_init(&F.G, &F.W);
+    if (!F.at) {
+        F.G.money = sload("money", 0);
+        F.G.moneyShown = F.G.money;
+        done = sload("done", 0);
+        for (i = 0; i < NMISSIONS; i++) F.G.completed[i] = (done >> i) & 1;
+        {
+            int guns = sload("guns", 0);
+            F.G.owned[1] = guns & 1; F.G.owned[2] = (guns >> 1) & 1; F.G.owned[3] = (guns >> 2) & 1;
+            F.G.ammo[1] = sload("ammo1", 0); F.G.ammo[2] = sload("ammo2", 0); F.G.ammo[3] = sload("ammo3", 0);
+            F.G.armor = (float)sload("armor", 0);
+            F.G.homeLvl = sload("home", 0);
+            F.G.garLvl = sload("garage", 0);
+            if (F.G.homeLvl < 0 || F.G.homeLvl >= HOME_LEVELS) F.G.homeLvl = 0;
+            if (F.G.garLvl < 0 || F.G.garLvl >= GARAGE_LEVELS) F.G.garLvl = 0;
+            F.G.cardio = sload("cardio", 0); if (F.G.cardio < 0 || F.G.cardio > 3) F.G.cardio = 0;
+            F.G.tough = sload("tough", 0); if (F.G.tough < 0 || F.G.tough > 3) F.G.tough = 0;
+            F.G.outfits = sload("outfits", 0);
+            F.G.outfit = sload("outfit", 0); if (F.G.outfit < 0 || F.G.outfit >= BIZ_OUTFITS) F.G.outfit = 0;
+            F.G.decor = sload("decor", 0) & ((1 << BIZ_DECOR) - 1);
+            F.G.stamina = game_stamina_max(&F.G);
+        }
+        {
+            int c;
+            for (c = 0; c < MAX_OWNED; c++) {
+                char key[16];
+                int v;
+                struct GarageCar *gc = &F.G.garage[c];
+                snprintf(key, sizeof(key), "car%d", c);
+                v = sload(key, 0);
+                gc->exists = v & 1; gc->model = (v >> 1) & 7; gc->paint = (v >> 4) & 31; gc->eng = (v >> 9) & 3;
+                gc->hand = (v >> 11) & 3; gc->neon = (v >> 13) & 7; gc->spoiler = (v >> 16) & 1;
+                if (gc->model >= DEALER_MODELS) gc->model = 0;
+                if (gc->paint >= NPAINTS) gc->paint = 0;
+                if (gc->neon >= NNEONS) gc->neon = 0;
+            }
+            game_spawn_owned(&F.G);
+        }
+    }
+}
+
 static void load_step(void) {
     int s = F.loadStep;
     int nb = world_build_steps();
@@ -270,46 +358,10 @@ static void load_step(void) {
     else if (s == nb + 1) r_upload_world(&F.R, &F.W, 0);
     else if (s == nb + 2) r_build_models(&F.R);
     else if (s == nb + 3) {
-        int i, done;
-        game_init(&F.G, &F.W);
-        if (!F.at) {
-            F.G.money = plat_load_int("money", 0);
-            F.G.moneyShown = F.G.money;
-            done = plat_load_int("done", 0);
-            for (i = 0; i < NMISSIONS; i++) F.G.completed[i] = (done >> i) & 1;
-            {
-                int guns = plat_load_int("guns", 0);
-                F.G.owned[1] = guns & 1; F.G.owned[2] = (guns >> 1) & 1; F.G.owned[3] = (guns >> 2) & 1;
-                F.G.ammo[1] = plat_load_int("ammo1", 0); F.G.ammo[2] = plat_load_int("ammo2", 0); F.G.ammo[3] = plat_load_int("ammo3", 0);
-                F.G.armor = (float)plat_load_int("armor", 0);
-                F.G.homeLvl = plat_load_int("home", 0);
-                F.G.garLvl = plat_load_int("garage", 0);
-                if (F.G.homeLvl < 0 || F.G.homeLvl >= HOME_LEVELS) F.G.homeLvl = 0;
-                if (F.G.garLvl < 0 || F.G.garLvl >= GARAGE_LEVELS) F.G.garLvl = 0;
-                F.G.cardio = plat_load_int("cardio", 0); if (F.G.cardio < 0 || F.G.cardio > 3) F.G.cardio = 0;
-                F.G.tough = plat_load_int("tough", 0); if (F.G.tough < 0 || F.G.tough > 3) F.G.tough = 0;
-                F.G.outfits = plat_load_int("outfits", 0);
-                F.G.outfit = plat_load_int("outfit", 0); if (F.G.outfit < 0 || F.G.outfit >= BIZ_OUTFITS) F.G.outfit = 0;
-                F.G.decor = plat_load_int("decor", 0) & ((1 << BIZ_DECOR) - 1);
-                F.G.stamina = game_stamina_max(&F.G);
-            }
-            {
-                int c;
-                for (c = 0; c < MAX_OWNED; c++) {
-                    char key[16];
-                    int v;
-                    struct GarageCar *gc = &F.G.garage[c];
-                    snprintf(key, sizeof(key), "car%d", c);
-                    v = plat_load_int(key, 0);
-                    gc->exists = v & 1; gc->model = (v >> 1) & 7; gc->paint = (v >> 4) & 31; gc->eng = (v >> 9) & 3;
-                    gc->hand = (v >> 11) & 3; gc->neon = (v >> 13) & 7; gc->spoiler = (v >> 16) & 1;
-                    if (gc->model >= DEALER_MODELS) gc->model = 0;
-                    if (gc->paint >= NPAINTS) gc->paint = 0;
-                    if (gc->neon >= NNEONS) gc->neon = 0;
-                }
-                game_spawn_owned(&F.G);
-            }
-        }
+        slots_migrate();
+        F.slot = plat_load_int("slot", 1);
+        if (F.slot < 1 || F.slot > NSLOTS) F.slot = 1;
+        load_slot();
         F.loadDone = 1;
         apply_settings();
         F.loadSecs = (float)(plat_time() - F.loadStart);
@@ -824,6 +876,9 @@ static void draw_hud(void) {
     }
 }
 
+/* missie i is vrij als het de eerste is, als hij al eens gehaald is, of als de vorige gehaald is */
+static int mission_unlocked(int i) { return i <= 0 || F.G.completed[i] || F.G.completed[i - 1]; }
+
 static void draw_missions(void) {
     Renderer *R = &F.R;
     int i;
@@ -843,16 +898,21 @@ static void draw_missions(void) {
         const MissionDef *m = &F.G.mdef[i];
         int j = i - F.missionPage * 12;
         float x = (j & 1) ? 522.0f : 62.0f, y = 96.0f + (j / 2) * 98.0f;
-        int pr = F.pressed == i + 1, done = F.G.completed[i];
-        ui_rect(R, x, y, 440, 90, pr ? 0.55f : 0.06f, pr ? 0.08f : 0.05f, pr ? 0.08f : 0.06f, 0.78f);
-        ui_rect(R, x, y, 6, 90, done ? 0.35f : 0.95f, done ? 0.9f : 0.75f, done ? 0.4f : 0.15f, 1);
+        int pr = F.pressed == i + 1, done = F.G.completed[i], open = mission_unlocked(i);
+        float la = open ? 1.0f : 0.45f;
+        ui_rect(R, x, y, 440, 90, pr && open ? 0.55f : 0.06f, pr && open ? 0.08f : 0.05f, pr && open ? 0.08f : 0.06f, 0.78f);
+        ui_rect(R, x, y, 6, 90, !open ? 0.4f : (done ? 0.35f : 0.95f), !open ? 0.4f : (done ? 0.9f : 0.75f), !open ? 0.45f : (done ? 0.4f : 0.15f), 1);
         snprintf(b, sizeof(b), "%d. %s", i + 1, m->title);
-        ui_text(R, b, x + 18, y + 6, 30, 1, 1, 1, 1, 0);
-        {
+        ui_text(R, b, x + 18, y + 6, 30, 1, 1, 1, la, 0);
+        if (!open) {
+            char lb[64];
+            snprintf(lb, sizeof(lb), "LOCKED - finish mission %d first", i);
+            ui_text(R, lb, x + 18, y + 44, 15, 1.0f, 0.55f, 0.45f, 1, 0);
+        } else {
             float bw = ui_text_w(R, m->brief, 15.0f), bs = bw > 404.0f ? 15.0f * 404.0f / bw : 15.0f;
             ui_text(R, m->brief, x + 18, y + 44 + (15.0f - bs) * 0.5f, bs, 0.82f, 0.82f, 0.82f, 1, 0);
         }
-        snprintf(b, sizeof(b), "$%d", done ? m->reward / 2 : m->reward);
+        snprintf(b, sizeof(b), "$%d", done ? (m->repeatReward ? m->repeatReward : m->reward / 2) : m->reward);
         ui_text(R, b, x + 426, y + 8, 26, 0.55f, 1.0f, 0.55f, 1, 2);
         ui_text(R, m->tag ? m->tag : "", x + 426, y + 66, 17, 1.0f, 0.8f, 0.3f, 1, 2);
         if (done) ui_text(R, "DONE", x + 18, y + 66, 17, 0.4f, 1.0f, 0.45f, 1, 0);
@@ -861,6 +921,7 @@ static void draw_missions(void) {
             ui_text(R, b, x + 18, y + 66, 17, 0.9f, 0.9f, 0.9f, 1, 0);
         }
     }
+    if (F.shopMsg[0] && F.st < 4.0f) ui_text(R, F.shopMsg, R->W * 0.5f, R->H - 112.0f, 20, 1, 0.75f, 0.4f, 1, 1);
     big_button("BACK", R->W * 0.5f, R->H - 60.0f, 44, F.pressed == 100, 1);
     {
         int pages = (NMISSIONS + 11) / 12;
@@ -2235,6 +2296,83 @@ static void start_game(void) {
     F.fade = 1.0f;
 }
 
+/* ------------------------------------------------------------------ slotscherm (PLAY) */
+
+static const char *HOUSE_SHORT[3] = {"small house", "family house", "villa"};
+
+static void draw_slots(void) {
+    Renderer *R = &F.R;
+    char b[128];
+    int sl;
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
+    draw_backdrop(0.35f, 0.0f, F.t);
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.55f);
+    ui_text(R, "CHOOSE A SAVE SLOT", R->W * 0.5f, 26, 50, 1, 1, 1, 1, 1);
+    for (sl = 1; sl <= NSLOTS; sl++) {
+        float y = 110.0f + (sl - 1) * 170.0f;
+        int used = sload_in(sl, "used", 0), cur = sl == F.slot, k, done = 0, dm = sload_in(sl, "done", 0);
+        long money = sload_in(sl, "money", 0);
+        int pr = F.pressed == 1700 + sl, pd = F.pressed == 1710 + sl;
+        for (k = 0; k < NMISSIONS; k++) done += (dm >> k) & 1;
+        ui_rect(R, 112, y, 800, 150, pr ? 0.35f : 0.08f, pr ? 0.1f : 0.08f, pr ? 0.1f : 0.1f, 0.88f);
+        ui_rect(R, 112, y, 8, 150, cur ? 1.0f : 0.4f, cur ? 0.8f : 0.4f, cur ? 0.2f : 0.45f, 1);
+        snprintf(b, sizeof(b), "SLOT %d%s", sl, cur ? "   (last played)" : "");
+        ui_text(R, b, 140, y + 10, 34, 1, 1, 1, 1, 0);
+        if (used) {
+            int hl = sload_in(sl, "home", 0);
+            fmt_money(b, sizeof(b), money);
+            ui_text(R, b, 140, y + 58, 30, 0.55f, 1.0f, 0.55f, 1, 0);
+            snprintf(b, sizeof(b), "%d / %d missions done  -  %s", done, NMISSIONS, HOUSE_SHORT[hl < 0 || hl > 2 ? 0 : hl]);
+            ui_text(R, b, 140, y + 100, 20, 0.85f, 0.85f, 0.85f, 1, 0);
+        } else ui_text(R, "EMPTY - start a brand new game", 140, y + 70, 22, 0.7f, 0.7f, 0.7f, 1, 0);
+        ui_rect(R, 690, y + 22, 200, 60, pr ? 0.9f : 0.2f, pr ? 0.2f : 0.55f, 0.2f, 1);
+        ui_text(R, used ? "PLAY" : "NEW GAME", 790, y + 36, used ? 32 : 26, 1, 1, 1, 1, 1);
+        if (used) {
+            int arm = F.slotDelArm == sl;
+            ui_rect(R, 690, y + 94, 200, 40, pd || arm ? 0.85f : 0.3f, 0.12f, 0.12f, 1);
+            ui_text(R, arm ? "TAP AGAIN TO DELETE" : "DELETE", 790, y + 102, arm ? 15 : 20, 1, 1, 1, 1, 1);
+        }
+    }
+    big_button("BACK", R->W * 0.5f, R->H - 64.0f, 42, F.pressed == 1790, 1);
+}
+
+static void slots_tap(float x, float y, int phase) {
+    Renderer *R = &F.R;
+    int sl, hit = 0;
+    for (sl = 1; sl <= NSLOTS; sl++) {
+        float yy = 110.0f + (sl - 1) * 170.0f;
+        if (x > 690 && x < 890 && y > yy + 22 && y < yy + 82) hit = 1700 + sl;
+        if (x > 690 && x < 890 && y > yy + 94 && y < yy + 134 && sload_in(sl, "used", 0)) hit = 1710 + sl;
+    }
+    if (hit_text(x, y, "BACK", R->W * 0.5f, R->H - 64.0f + 21, 42)) hit = 1790;
+    if (phase != TOUCH_END) { F.pressed = hit; return; }
+    F.pressed = 0;
+    if (hit == 1790) { F.slotDelArm = 0; set_state(ST_MENU); return; }
+    if (hit > 1710 && hit <= 1710 + NSLOTS) {
+        sl = hit - 1710;
+        if (F.slotDelArm != sl) { F.slotDelArm = sl; return; }
+        F.slotDelArm = 0;
+        slot_erase(sl);
+        if (sl == F.slot) load_slot();
+        return;
+    }
+    if (hit > 1700 && hit <= 1700 + NSLOTS) {
+        sl = hit - 1700;
+        F.slotDelArm = 0;
+        if (F.mode != 0) nl_exit_to_city();
+        if (sl != F.slot) {
+            save_all();                 /* huidig slot eerst bewaren */
+            F.slot = sl;
+            plat_save_int("slot", sl);
+            load_slot();
+            apply_settings();
+        }
+        if (!sload("used", 0)) { ssave("used", 1); plat_save_flush(); }
+        start_game();
+    }
+}
+
+
 static void menu_tap(float x, float y, int phase) {
     Renderer *R = &F.R;
     int i, hit = 0;
@@ -2247,14 +2385,15 @@ static void menu_tap(float x, float y, int phase) {
             if (hit_text(x, y, MENU_ITEMS[i], MENU_X(i), R->H - 74.0f + 18, 32)) hit = i + 1;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
-        if (hit == 1) start_game();
-        else if (hit == 2) { set_state(ST_MISSIONS); F.missionsFrom = ST_MENU; }
+        if (hit == 1) { F.slotDelArm = 0; set_state(ST_SLOTS); }
+        else if (hit == 2) { F.shopMsg[0] = 0; set_state(ST_MISSIONS); F.missionsFrom = ST_MENU; }
         else if (hit == 3) open_nl_input(ST_MENU);
         else if (hit == 4) open_mp_screen();
         else if (hit == 5) set_state(ST_SETTINGS);
         else if (hit == 6) set_state(ST_CREDITS);
         return;
     }
+    if (F.state == ST_SLOTS) { slots_tap(x, y, phase); return; }
     if (F.state == ST_NLINPUT) { nl_input_tap(x, y, phase); return; }
     if (F.state == ST_BIGMAP) { bigmap_touch(x, y, phase); return; }
     if (F.state == ST_SHOP) { shop_tap(x, y, phase); return; }
@@ -2284,6 +2423,10 @@ static void menu_tap(float x, float y, int phase) {
         if (hit == 101) { if (F.missionPage > 0) F.missionPage--; return; }
         if (hit == 102) { if ((F.missionPage + 1) * 12 < NMISSIONS) F.missionPage++; return; }
         if (hit == 100) set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU);
+        else if (hit >= 1 && hit <= NMISSIONS && !mission_unlocked(hit - 1)) {
+            snprintf(F.shopMsg, sizeof(F.shopMsg), "Locked: finish mission %d (%s) first.", hit - 1, F.G.mdef[hit - 2].title);
+            F.st = 0;
+        }
         else if (hit >= 1 && hit <= NMISSIONS && F.G.mdef[hit - 1].requireWeapon && !game_has_weapon(&F.G)) {
             /* geen wapen: start in de stad bij BLOCK ARMS */
             if (F.missionsFrom == ST_PAUSE) set_state(ST_GAME); else start_game();
@@ -2347,7 +2490,7 @@ static void menu_tap(float x, float y, int phase) {
         F.pressed = 0;
         if (hit == 1) set_state(ST_GAME);
         else if (hit == 2 && F.mode == 1) open_nl_input(ST_PAUSE);
-        else if (hit == 2) { set_state(ST_MISSIONS); F.missionsFrom = ST_PAUSE; }
+        else if (hit == 2) { F.shopMsg[0] = 0; set_state(ST_MISSIONS); F.missionsFrom = ST_PAUSE; }
         else if (hit == 3) {
             if (mp_mode()) { mp_leave(); game_message(&F.G, "You left the online game", 2.0f); set_state(ST_GAME); }
             else mp_host_here();
@@ -2940,14 +3083,8 @@ static void autotest_tick(float dt) {
             F.at = 0;
             plat_autotest_done();
             /* echte voortgang terugzetten */
-            {
-                int i2, done = plat_load_int("done", 0);
-                game_init(&F.G, &F.W);
-                F.G.money = plat_load_int("money", 0);
-                F.G.moneyShown = F.G.money;
-                for (i2 = 0; i2 < NMISSIONS; i2++) F.G.completed[i2] = (done >> i2) & 1;
-                apply_settings();
-            }
+            load_slot();
+            apply_settings();
             set_state(ST_MENU);
             return;
         }
@@ -3043,6 +3180,9 @@ void fe_frame(double now) {
         break;
     case ST_SETTINGS:
         ui_begin(R); draw_settings(); ui_flush(R);
+        break;
+    case ST_SLOTS:
+        ui_begin(R); draw_slots(); ui_flush(R);
         break;
     case ST_CREDITS:
         ui_begin(R); draw_credits(); ui_flush(R);
@@ -3274,6 +3414,7 @@ void fe_key_command(int cmd) {
     case ST_CUSTOMS: set_state(ST_GAME); save_all(); break;
     case ST_SETTINGS: set_state(F.prevState == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
     case ST_MISSIONS: set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
+    case ST_SLOTS: F.slotDelArm = 0; set_state(ST_MENU); break;
     case ST_CREDITS: set_state(ST_MENU); break;
     case ST_NLINPUT: set_state(F.nlInFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
     case ST_MP: if (mp_mode() == MP_JOINING) mp_leave(); mp_lan_listen(0); set_state(ST_MENU); break;

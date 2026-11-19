@@ -166,7 +166,7 @@ long plat_memory_kb(void) {
 
 /* ------------------------------------------------------------------ instellingen (settings.txt) */
 
-#define MAXKEYS 64
+#define MAXKEYS 256
 static char keys[MAXKEYS][32];
 static int vals[MAXKEYS], nkeys;
 

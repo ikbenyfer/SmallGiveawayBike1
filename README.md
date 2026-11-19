@@ -161,6 +161,12 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten Ph≈
   - `tools/build_region_pack.py` maakt het pakket opnieuw (op de pc, met internet).
   - Bronvermelding: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, PDOK), gemeentegrenzen en postcodes (PDOK). Alles valt onder CC BY 4.0.
   - iOS 9 kent de rootcertificaten van 3D BAG niet. Daarom zitten ISRG Root X1/X2 en DigiCert Global Root G2 in de app als **extra** vertrouwensanker; de normale controle blijft aan. Lukt 3D BAG toch niet, dan valt de app terug op PDOK BAG met geschatte hoogtes.
+- **Opslagslots:** PLAY opent een keuzescherm met 3 slots.
+  - Per slot zie je je geld, hoeveel missies je gehaald hebt en hoe groot je huis is.
+  - Een leeg slot start een nieuw spel. DELETE wist een slot; daarvoor tik je twee keer.
+  - Een oude save, van voor de slots, staat automatisch in slot 1.
+  - Instellingen gelden voor alle slots samen.
+- **Missies op volgorde:** je begint met missie 1. De volgende missie gaat pas open als je de vorige gehaald hebt. Gehaalde missies kun je altijd opnieuw spelen.
 - **Winkels in de stad** (elk met een eigen icoontje op de kaart; loop in de gekleurde ring):
   - **GIVEAWAY BURGER** (oranje): eten en drinken, van $20 tot $150. Dat geeft gezondheid, uithoudingsvermogen en een ENERGY-boost, waarmee je een tijdje rent zonder moe te worden.
   - **BLOCK GYM** (lichtblauw): voorgoed trainen.
