@@ -729,7 +729,8 @@ int main(int argc, char **argv) {
                 int ph = e.type == SDL_FINGERDOWN ? TOUCH_BEGIN : e.type == SDL_FINGERUP ? TOUCH_END : TOUCH_MOVE;
                 if (ph != TOUCH_MOVE) {   /* eerste aanrakingen loggen (handig bij problemen) */
                     static int nlog;
-                    if (nlog++ < 12) plat_log("touch %s %.0f,%.0f (scherm %dx%d, ui-breedte %d)", ph == TOUCH_BEGIN ? "neer" : "op", lx, ly, g_scrW, g_scrH, fe_ui_width());
+                    if (nlog++ < 12) plat_log("touch %s %.0f,%.0f ruw %.3f,%.3f (scherm %dx%d, beeld %d,%d %dx%d, ui-breedte %d)", ph == TOUCH_BEGIN ? "neer" : "op", lx, ly,
+                                         (double)e.tfinger.x, (double)e.tfinger.y, g_scrW, g_scrH, g_vx, g_vy, g_vw, g_vh, fe_ui_width());
                 }
                 fe_touch((long)e.tfinger.fingerId + 1, ph, lx, ly);
                 break;
