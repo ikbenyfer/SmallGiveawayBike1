@@ -57,6 +57,9 @@ jobs:
             adb shell wm size
             SZ=$(adb shell wm size | tail -1 | sed 's/.*: //' | tr -cd '0-9x'); W=${SZ%x*}; H=${SZ#*x}; if [ $W -lt $H ]; then T=$W; W=$H; H=$T; fi
             tap() { adb shell input swipe $(( W * $1 / 1000 )) $(( H * $2 / 1000 )) $(( W * $1 / 1000 )) $(( H * $2 / 1000 )) 150; }
+            adb shell input touchscreen tap $(( W / 2 )) $(( H / 2 )); sleep 2
+            adb shell input tap $(( W / 3 )) $(( H / 3 )); sleep 2
+            adb shell dumpsys input | grep -iE "touch|FocusedWindow|Display" | head -20 || true
             tap 230 900; sleep 4
             adb shell screencap -p /sdcard/s2.png && adb pull /sdcard/s2.png out/02_play.png
             tap 500 400; sleep 4
