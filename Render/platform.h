@@ -31,6 +31,7 @@ void plat_save_flush(void);
 int plat_autotest_requested(void);
 void plat_autotest_done(void);
 void plat_write_text(const char *name, const char *text);   /* in Documents */
+const char *plat_key_name(int code);   /* naam van een toets (pc); "" op de iPad */
 void plat_screenshot(const char *name, int w, int h);       /* glReadPixels -> Documents/<name>.png */
 long plat_memory_kb(void);
 /* netwerk (asynchroon): start geeft id > 0; poll: 0 bezig, 1 klaar (data = malloc, aanroeper geeft vrij), -1 fout */

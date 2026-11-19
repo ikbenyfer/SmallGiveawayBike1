@@ -418,6 +418,44 @@ int plat_http_poll(int rid, char **data, long *len) {
     return -1;
 }
 
+/* ------------------------------------------------------------------ controllers (SDL GameController) */
+
+const char *plat_key_name(int code) { return code > 0 ? SDL_GetScancodeName((SDL_Scancode)code) : ""; }
+
+static SDL_GameController *pad;
+
+static void pad_open_first(void) {
+    int i;
+    if (pad) return;
+    for (i = 0; i < SDL_NumJoysticks(); i++)
+        if (SDL_IsGameController(i)) {
+            pad = SDL_GameControllerOpen(i);
+            if (pad) { plat_log("controller: %s", SDL_GameControllerName(pad)); break; }
+        }
+}
+
+static void pad_poll(void) {
+    static const int map[PB_COUNT] = {
+        SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_B, SDL_CONTROLLER_BUTTON_X, SDL_CONTROLLER_BUTTON_Y,
+        SDL_CONTROLLER_BUTTON_LEFTSHOULDER, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, -1, -1,
+        SDL_CONTROLLER_BUTTON_BACK, SDL_CONTROLLER_BUTTON_START, SDL_CONTROLLER_BUTTON_LEFTSTICK, SDL_CONTROLLER_BUTTON_RIGHTSTICK,
+        SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_DOWN, SDL_CONTROLLER_BUTTON_DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT};
+    float ax[6];
+    unsigned b = 0;
+    int k;
+    if (pad && !SDL_GameControllerGetAttached(pad)) { SDL_GameControllerClose(pad); pad = NULL; }
+    if (!pad) { fe_pad_input(0, NULL, 0, ""); return; }
+    ax[0] = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) / 32767.0f;
+    ax[1] = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY) / 32767.0f;
+    ax[2] = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f;
+    ax[3] = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f;
+    ax[4] = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) / 32767.0f;
+    ax[5] = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) / 32767.0f;
+    for (k = 0; k < PB_COUNT; k++)
+        if (map[k] >= 0 && SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)map[k])) b |= 1u << k;
+    fe_pad_input(1, ax, b, SDL_GameControllerName(pad));
+}
+
 /* ------------------------------------------------------------------ hoofdprogramma */
 
 static void *getproc(const char *n) { return SDL_GL_GetProcAddress(n); }
@@ -464,7 +502,7 @@ int main(int argc, char **argv) {
     }
     settings_load();
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", SDL_GetError(), NULL);
         return 1;
     }
@@ -497,6 +535,12 @@ int main(int argc, char **argv) {
     plat_log("GL: %s / %s", glGetString(GL_RENDERER), glGetString(GL_VERSION));
     fe_set_desktop(1);
     fe_init(W, H);
+    {
+        static const int defs[KA_COUNT] = {SDL_SCANCODE_W, SDL_SCANCODE_S, SDL_SCANCODE_A, SDL_SCANCODE_D, SDL_SCANCODE_SPACE,
+                                           SDL_SCANCODE_E, SDL_SCANCODE_LCTRL, SDL_SCANCODE_Q, SDL_SCANCODE_LSHIFT, SDL_SCANCODE_M};
+        fe_set_key_defaults(defs, KA_COUNT);
+    }
+    pad_open_first();
 
     while (running) {
         SDL_Event e;
@@ -505,14 +549,24 @@ int main(int argc, char **argv) {
         while (SDL_PollEvent(&e)) {
             switch (e.type) {
             case SDL_QUIT: running = 0; break;
+            case SDL_CONTROLLERDEVICEADDED: pad_open_first(); break;
+            case SDL_CONTROLLERDEVICEREMOVED: if (pad && !SDL_GameControllerGetAttached(pad)) { SDL_GameControllerClose(pad); pad = NULL; pad_open_first(); } break;
             case SDL_KEYDOWN:
                 if (e.key.repeat) break;
+                if (fe_bind_waiting()) {   /* CONTROLS: deze toets koppelen (Esc = annuleren) */
+                    if (e.key.keysym.sym == SDLK_ESCAPE) fe_key_command(FE_CMD_BACK);
+                    else fe_raw_key((int)e.key.keysym.scancode);
+                    break;
+                }
+                {
+                    int sc = (int)e.key.keysym.scancode;
+                    if (sc == fe_key_bind(KA_JUMP)) edgeJump = 1;
+                    if (sc == fe_key_bind(KA_ACTION) || e.key.keysym.sym == SDLK_RETURN) edgeAction = 1;
+                    if (sc == fe_key_bind(KA_SWITCH)) edgeSwitch = 1;
+                    if (sc == fe_key_bind(KA_MAP) || e.key.keysym.sym == SDLK_TAB) fe_key_command(FE_CMD_MAP);
+                }
                 switch (e.key.keysym.sym) {
-                case SDLK_SPACE: edgeJump = 1; break;
-                case SDLK_e: case SDLK_f: case SDLK_RETURN: edgeAction = 1; break;
-                case SDLK_q: edgeSwitch = 1; break;
                 case SDLK_ESCAPE: fe_key_command(FE_CMD_BACK); break;
-                case SDLK_m: case SDLK_TAB: fe_key_command(FE_CMD_MAP); break;
                 case SDLK_BACKSPACE: fe_text_char(8); break;
                 case SDLK_F11:
                     fullscreen = !fullscreen;
@@ -549,12 +603,13 @@ int main(int argc, char **argv) {
             Uint32 mb = SDL_GetMouseState(NULL, NULL);
             int rel = fe_wants_mouse();
             memset(&keys, 0, sizeof(keys));
-            keys.mx = (float)((k[SDL_SCANCODE_D] || k[SDL_SCANCODE_RIGHT]) - (k[SDL_SCANCODE_A] || k[SDL_SCANCODE_LEFT]));
-            keys.my = (float)((k[SDL_SCANCODE_W] || k[SDL_SCANCODE_UP]) - (k[SDL_SCANCODE_S] || k[SDL_SCANCODE_DOWN]));
-            keys.gas = k[SDL_SCANCODE_W] || k[SDL_SCANCODE_UP];
-            keys.brake = k[SDL_SCANCODE_S] || k[SDL_SCANCODE_DOWN];
-            keys.run = k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT];   /* rennen */
-            keys.fire = rel && (mb & SDL_BUTTON_LMASK);
+            int kf = fe_key_bind(KA_FWD), kb = fe_key_bind(KA_BACK), kl = fe_key_bind(KA_LEFT), kr = fe_key_bind(KA_RIGHT);
+            keys.mx = (float)((k[kr] || k[SDL_SCANCODE_RIGHT]) - (k[kl] || k[SDL_SCANCODE_LEFT]));
+            keys.my = (float)((k[kf] || k[SDL_SCANCODE_UP]) - (k[kb] || k[SDL_SCANCODE_DOWN]));
+            keys.gas = k[kf] || k[SDL_SCANCODE_UP];
+            keys.brake = k[kb] || k[SDL_SCANCODE_DOWN];
+            keys.run = k[fe_key_bind(KA_RUN)];   /* rennen */
+            keys.fire = (rel && (mb & SDL_BUTTON_LMASK)) || k[fe_key_bind(KA_FIRE)];
             keys.jumpPressed = edgeJump; keys.actionPressed = edgeAction; keys.switchPressed = edgeSwitch;
             edgeJump = edgeAction = edgeSwitch = 0;
             if ((SDL_bool)rel != SDL_GetRelativeMouseMode()) SDL_SetRelativeMouseMode(rel ? SDL_TRUE : SDL_FALSE);
@@ -567,6 +622,7 @@ int main(int argc, char **argv) {
             SDL_GL_GetDrawableSize(win, &dw, &dh);
             fe_resize_viewport(dw, dh);
         }
+        pad_poll();
         fe_frame(plat_time());
         SDL_GL_SwapWindow(win);
         if (g_autotestDone && g_autotest) { static int quitT; if (++quitT > 90) running = 0; }

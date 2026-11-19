@@ -161,6 +161,16 @@ Hiervoor gebruikt het script de bestaande `iPadInstaller`. Op de iPad moeten PhÅ
   - `tools/build_region_pack.py` maakt het pakket opnieuw (op de pc, met internet).
   - Bronvermelding: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, PDOK), gemeentegrenzen en postcodes (PDOK). Alles valt onder CC BY 4.0.
   - iOS 9 kent de rootcertificaten van 3D BAG niet. Daarom zitten ISRG Root X1/X2 en DigiCert Global Root G2 in de app als **extra** vertrouwensanker; de normale controle blijft aan. Lukt 3D BAG toch niet, dan valt de app terug op PDOK BAG met geschatte hoogtes.
+- **Controllers (Bluetooth of bedraad), op alle platformen:**
+  - Op de **iPad** werken MFi-controllers (iOS 9). Koppel ze via Instellingen > Bluetooth, of sluit ze aan.
+  - Op **Windows en Linux** werken Xbox-, PlayStation- en Switch Pro-controllers en andere SDL-gamepads.
+  - De linker stick is om te lopen en te sturen, de rechter stick voor de camera. Standaard zijn de knoppen:
+    - A = springen, Y = in- en uitstappen, B = rennen, X = ander wapen
+    - RT = schieten of gas, LT = remmen
+    - BACK = kaart, START = pauze
+  - In menu's stuur je met de linker stick een cursor: A = tikken, B = terug, RB = snellere cursor.
+  - Met een controller verdwijnen de touch-knoppen. Raak je het scherm aan, dan komen ze terug.
+  - **CONTROLS** (in Settings, rechtsboven): stel elke knop zelf in. Op de pc kun je daar ook alle toetsen instellen; dubbele toetsen worden omgewisseld. RESET DEFAULTS zet alles terug.
 - **Opslagslots:** PLAY opent een keuzescherm met 3 slots.
   - Per slot zie je je geld, hoeveel missies je gehaald hebt en hoe groot je huis is.
   - Een leeg slot start een nieuw spel. DELETE wist een slot; daarvoor tik je twee keer.

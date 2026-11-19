@@ -208,6 +208,7 @@ jobs:
             Esc                   pauze / terug
             F11                   volledig scherm
             Menu's bedien je met de muis; postcodes typ je gewoon op het toetsenbord.
+            Controller (Xbox/PlayStation/...): werkt direct. Knoppen en toetsen aanpassen: Settings > CONTROLS.
 
           Opslag en instellingen staan in %APPDATA%\SmallGiveawayBike1 (ook log.txt bij problemen).
           Kaartgegevens: 3D BAG (TU Delft / 3DGI), BAG en TOP10NL (Kadaster, PDOK) - CC BY 4.0.

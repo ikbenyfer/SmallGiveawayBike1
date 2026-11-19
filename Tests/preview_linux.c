@@ -72,6 +72,7 @@ double plat_time(void) {
 int plat_load_int(const char *key, int def) { (void)key; return def; }
 void plat_save_int(const char *key, int val) { (void)key; (void)val; }
 void plat_save_flush(void) {}
+const char *plat_key_name(int code) { (void)code; return ""; }
 int plat_autotest_requested(void) { return autotest_on; }
 void plat_autotest_done(void) { autotest_on = 0; }
 

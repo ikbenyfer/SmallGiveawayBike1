@@ -30,7 +30,7 @@ typedef struct { char pc[8]; char name[96]; long kb; double rx, ry; } NLArea;
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME, ST_BIZ, ST_SLOTS };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME, ST_BIZ, ST_SLOTS, ST_CONTROLS };
 enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH, CTL_RUN };
 
 #define NTOUCH 10
@@ -59,7 +59,7 @@ static struct {
     int jumpEdge, actionEdge, switchEdge;
     char shopMsg[96];
     float atMaxSpeed;
-    int atShot2, bizShop, atBiz;
+    int atShot2, bizShop, atBiz, controlsFrom;
     int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
@@ -265,6 +265,7 @@ void fe_init(int w, int h) {
     F.showFps = plat_load_int("showfps", 0);
     F.autoAim = plat_load_int("autoaim", 1);
     F.musicOn = plat_load_int("music", 1);
+    pad_load_binds();
     {
         int id = plat_load_int("mpid", 0);
         char nm[16];
@@ -526,6 +527,8 @@ static void draw_settings(void) {
     draw_backdrop(0.35f, 0.0f, F.t);
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.45f);
     ui_text(R, "SETTINGS", R->W * 0.5f, 40, 60, 1, 1, 1, 1, 1);
+    ui_rect(R, R->W - 230.0f, 36, 200, 56, F.pressed == 20 ? 0.6f : 0.15f, F.pressed == 20 ? 0.2f : 0.35f, F.pressed == 20 ? 0.2f : 0.6f, 0.95f);
+    ui_text(R, "CONTROLS", R->W - 130.0f, 50, 26, 1, 1, 1, 1, 1);
     for (i = 0; i < 9; i++) {
         float y = 118.0f + i * 58.0f;
         int pr = F.pressed == i + 1;
@@ -687,6 +690,243 @@ static void btn_pos(int ctl, float *x, float *y, float *r) {
     }
 }
 
+/* ------------------------------------------------------------------ controllers + toetsen instellen (v3.4)
+ * Elk platform levert een "logische" controller (Xbox-indeling) via fe_pad_input. Acties zijn vrij te
+ * koppelen (CONTROLS-scherm); op de pc ook de toetsen. In menu's stuurt de controller een cursor. */
+
+static const char *PB_NAMES[PB_COUNT] = {"A", "B", "X", "Y", "LB", "RB", "LT", "RT", "BACK", "START", "L3", "R3", "D-UP", "D-DOWN", "D-LEFT", "D-RIGHT"};
+static const char *PA_NAMES[PA_COUNT] = {"JUMP", "ENTER / EXIT", "FIRE", "SWITCH GUN", "RUN", "GAS", "BRAKE / REVERSE", "MAP", "PAUSE"};
+static const int PA_DEFAULT[PA_COUNT] = {PB_A, PB_Y, PB_RT, PB_X, PB_B, PB_RT, PB_LT, PB_BACK, PB_START};
+static const char *KA_NAMES[KA_COUNT] = {"FORWARD / GAS", "BACK / BRAKE", "LEFT", "RIGHT", "JUMP", "ENTER / EXIT", "FIRE (also mouse)", "SWITCH GUN", "RUN", "MAP"};
+
+static struct {
+    int connected;
+    float ax[6];
+    unsigned btn, prev;
+    char name[48];
+    int bind[PA_COUNT];
+    int kbind[KA_COUNT], kdef[KA_COUNT], haveKeys;
+    int active;          /* laatste invoer kwam van de controller (touch-knoppen verbergen) */
+    float cx, cy;        /* menucursor */
+    int cursorDown;
+    int wait;            /* 1..PA_COUNT: wacht op knop; 100+k: wacht op toets */
+    int edgeJump, edgeAction, edgeSwitch;
+} P;
+
+static void pad_load_binds(void) {
+    int k;
+    for (k = 0; k < PA_COUNT; k++) {
+        char key[16];
+        snprintf(key, sizeof(key), "pb%d", k);
+        P.bind[k] = plat_load_int(key, PA_DEFAULT[k]);
+        if (P.bind[k] < 0 || P.bind[k] >= PB_COUNT) P.bind[k] = PA_DEFAULT[k];
+    }
+    for (k = 0; k < KA_COUNT; k++) {
+        char key[16];
+        snprintf(key, sizeof(key), "kb%d", k);
+        P.kbind[k] = plat_load_int(key, 0);
+    }
+    P.cx = 512; P.cy = 384;
+}
+
+static void pad_save_binds(void) {
+    int k;
+    for (k = 0; k < PA_COUNT; k++) { char key[16]; snprintf(key, sizeof(key), "pb%d", k); plat_save_int(key, P.bind[k]); }
+    for (k = 0; k < KA_COUNT; k++) { char key[16]; snprintf(key, sizeof(key), "kb%d", k); plat_save_int(key, P.kbind[k]); }
+    plat_save_flush();
+}
+
+void fe_set_key_defaults(const int *codes, int n) {
+    int k;
+    for (k = 0; k < KA_COUNT && k < n; k++) P.kdef[k] = codes[k];
+    P.haveKeys = 1;
+}
+
+int fe_key_bind(int action) {
+    if (action < 0 || action >= KA_COUNT) return 0;
+    return P.kbind[action] ? P.kbind[action] : P.kdef[action];
+}
+
+int fe_bind_waiting(void) { return P.wait != 0; }
+
+void fe_raw_key(int code) {
+    if (P.wait >= 100 && P.wait < 100 + KA_COUNT) {
+        int a = P.wait - 100, k;
+        for (k = 0; k < KA_COUNT; k++) if (k != a && fe_key_bind(k) == code) P.kbind[k] = fe_key_bind(a);   /* wisselen */
+        P.kbind[a] = code;
+        P.wait = 0;
+        pad_save_binds();
+    }
+}
+
+void fe_pad_input(int connected, const float *axes, unsigned buttons, const char *name) {
+    int k;
+    if (!connected && P.connected) { P.active = 0; P.wait = P.wait >= 100 ? P.wait : 0; }
+    if (connected && !P.connected && F.ready && F.loadDone && F.state == ST_GAME) game_message(&F.G, "Controller connected", 2.0f);
+    P.connected = connected;
+    for (k = 0; k < 6; k++) P.ax[k] = connected && axes ? axes[k] : 0;
+    if (P.ax[4] > 0.35f) buttons |= 1u << PB_LT;
+    if (P.ax[5] > 0.35f) buttons |= 1u << PB_RT;
+    P.btn = connected ? buttons : 0;
+    snprintf(P.name, sizeof(P.name), "%s", connected && name && name[0] ? name : "Controller");
+    if (connected && (P.btn || fabsf(P.ax[0]) > 0.3f || fabsf(P.ax[1]) > 0.3f || fabsf(P.ax[2]) > 0.3f || fabsf(P.ax[3]) > 0.3f)) P.active = 1;
+}
+
+static int pb_held(int b) { return (P.btn >> b) & 1; }
+static int pb_edge(int b) { return ((P.btn >> b) & 1) && !((P.prev >> b) & 1); }
+static int pa_held(int a) { return pb_held(P.bind[a]); }
+static int pa_edge(int a) { return pb_edge(P.bind[a]); }
+static float dz(float v) { return fabsf(v) < 0.18f ? 0.0f : (v - (v > 0 ? 0.18f : -0.18f)) / 0.82f; }
+
+static void bm_open(void);
+
+/* elke frame, voor de schermen: cursor in menu's, pauze, kaart, knop koppelen */
+static void pad_tick(float dt) {
+    Renderer *R = &F.R;
+    int k;
+    if (!P.connected) { P.prev = 0; return; }
+    if (P.wait >= 1 && P.wait <= PA_COUNT) {   /* CONTROLS: volgende knop koppelen */
+        for (k = 0; k < PB_COUNT; k++) if (pb_edge(k)) {
+            P.bind[P.wait - 1] = k;
+            P.wait = 0;
+            pad_save_binds();
+            if (F.sfxOn) plat_sfx(SFX_CLICK, 0.6f);
+            break;
+        }
+        P.prev = P.btn;
+        return;
+    }
+    P.edgeJump = P.edgeAction = P.edgeSwitch = 0;
+    if (F.state == ST_GAME) {
+        if (pa_edge(PA_PAUSE)) { set_state(ST_PAUSE); save_all(); }
+        else if (pa_edge(PA_MAP)) bm_open();
+        P.edgeJump = pa_edge(PA_JUMP); P.edgeAction = pa_edge(PA_ACTION); P.edgeSwitch = pa_edge(PA_SWITCH);
+    } else if (F.state != ST_LOGO && F.state != ST_LOAD && F.state != ST_NLLOAD) {
+        float mx = dz(P.ax[0]) + (pb_held(PB_RIGHT) ? 1.0f : 0) - (pb_held(PB_LEFT) ? 1.0f : 0);
+        float my = dz(P.ax[1]) + (pb_held(PB_DOWN) ? 1.0f : 0) - (pb_held(PB_UP) ? 1.0f : 0);
+        float sp = 620.0f * (pb_held(PB_RB) ? 1.8f : 1.0f);
+        if (mx || my) {
+            P.cx = clampf(P.cx + mx * sp * dt, 0, (float)R->W);
+            P.cy = clampf(P.cy + my * sp * dt, 0, (float)R->H);
+            if (P.cursorDown) fe_touch(-77, TOUCH_MOVE, P.cx, P.cy);
+        }
+        if (pb_edge(PB_A)) { P.cursorDown = 1; fe_touch(-77, TOUCH_BEGIN, P.cx, P.cy); }
+        else if (P.cursorDown && !pb_held(PB_A)) { P.cursorDown = 0; fe_touch(-77, TOUCH_END, P.cx, P.cy); }
+        if (pb_edge(PB_B) && !P.cursorDown) fe_key_command(FE_CMD_BACK);
+        else if (pb_edge(PB_START) && F.state == ST_PAUSE) set_state(ST_GAME);
+    }
+    P.prev = P.btn;
+}
+
+static void pad_build_input(Input *in) {
+    if (!P.connected) return;
+    {
+        float mx = dz(P.ax[0]), my = -dz(P.ax[1]), lx = dz(P.ax[2]), ly = -dz(P.ax[3]);
+        if (pb_held(PB_LEFT)) mx -= 1; if (pb_held(PB_RIGHT)) mx += 1;
+        if (pb_held(PB_UP)) my += 1; if (pb_held(PB_DOWN)) my -= 1;
+        in->mx = clampf(in->mx + mx, -1, 1);
+        in->my = clampf(in->my + my, -1, 1);
+        in->lx = clampf(in->lx + lx * 1.1f, -1, 1);
+        in->ly = clampf(in->ly + ly, -1, 1);
+    }
+    in->jumpPressed |= P.edgeJump;
+    in->actionPressed |= P.edgeAction;
+    in->switchPressed |= P.edgeSwitch;
+    in->run |= pa_held(PA_RUN);
+    if (F.G.p.veh >= 0) {
+        in->gas |= pa_held(PA_GAS) || P.ax[5] > 0.15f * (P.bind[PA_GAS] == PB_RT);
+        in->brake |= pa_held(PA_BRAKE) || P.ax[4] > 0.15f * (P.bind[PA_BRAKE] == PB_LT);
+    } else in->fire |= pa_held(PA_FIRE);
+    P.edgeJump = P.edgeAction = P.edgeSwitch = 0;
+}
+
+static void draw_pad_cursor(void) {
+    Renderer *R = &F.R;
+    if (!P.connected || !P.active || F.state == ST_GAME || F.state == ST_LOGO || F.state == ST_LOAD) return;
+    ui_begin(R);
+    ui_circle(R, P.cx, P.cy, 15, 0, 0, 0, 0.5f);
+    ui_circle(R, P.cx, P.cy, 10, P.cursorDown ? 1.0f : 1.0f, P.cursorDown ? 0.6f : 0.85f, 0.2f, 0.95f);
+    ui_ring(R, P.cx, P.cy, 15, 2, 1, 1, 1, 0.9f);
+    ui_flush(R);
+}
+
+/* ---- CONTROLS-scherm ---- */
+
+static const char *key_label(int a) {
+    const char *n = plat_key_name(fe_key_bind(a));
+    return n && n[0] ? n : "-";
+}
+
+static void draw_controls(void) {
+    Renderer *R = &F.R;
+    char b[96];
+    int k;
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
+    draw_backdrop(0.3f, 0.0f, F.t);
+    ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.62f);
+    ui_text(R, "CONTROLS", R->W * 0.5f, 14, 50, 1, 1, 1, 1, 1);
+    if (P.connected) snprintf(b, sizeof(b), "Controller: %s - tap a button to change it", P.name);
+    else snprintf(b, sizeof(b), "No controller found - pair one via Bluetooth or plug it in (USB)");
+    ui_text(R, b, R->W * 0.5f, 70, 18, P.connected ? 0.5f : 1.0f, P.connected ? 1.0f : 0.75f, P.connected ? 0.55f : 0.4f, 1, 1);
+    ui_text(R, "CONTROLLER", 280, 104, 22, 1.0f, 0.85f, 0.4f, 1, 1);
+    for (k = 0; k < PA_COUNT; k++) {
+        float y = 136.0f + k * 54.0f;
+        int pr = F.pressed == 1800 + k, w = P.wait == k + 1;
+        ui_rect(R, 60, y, 440, 46, 0.08f, 0.08f, 0.1f, 0.85f);
+        ui_text(R, PA_NAMES[k], 76, y + 10, 22, 1, 1, 1, 1, 0);
+        ui_rect(R, 360, y + 5, 128, 36, w ? 0.9f : (pr ? 0.6f : 0.2f), w ? 0.6f : (pr ? 0.2f : 0.35f), w ? 0.1f : 0.6f, 1);
+        ui_text(R, w ? "PRESS..." : PB_NAMES[P.bind[k] % PB_COUNT], 424, y + 10, w ? 18 : 22, 1, 1, 1, 1, 1);
+    }
+    ui_text(R, "Left stick: move / steer   Right stick: camera   (fixed)", 280, 136.0f + PA_COUNT * 54.0f + 4, 14, 0.8f, 0.8f, 0.8f, 1, 1);
+    if (g_desktop) {
+        ui_text(R, "KEYBOARD", 744, 104, 22, 1.0f, 0.85f, 0.4f, 1, 1);
+        for (k = 0; k < KA_COUNT; k++) {
+            float y = 136.0f + k * 48.0f;
+            int pr = F.pressed == 1850 + k, w = P.wait == 100 + k;
+            ui_rect(R, 524, y, 440, 42, 0.08f, 0.08f, 0.1f, 0.85f);
+            ui_text(R, KA_NAMES[k], 540, y + 9, 20, 1, 1, 1, 1, 0);
+            ui_rect(R, 808, y + 4, 144, 34, w ? 0.9f : (pr ? 0.6f : 0.2f), w ? 0.6f : (pr ? 0.2f : 0.35f), w ? 0.1f : 0.6f, 1);
+            ui_text(R, w ? "PRESS A KEY" : key_label(k), 880, y + 9, w ? 15 : 18, 1, 1, 1, 1, 1);
+        }
+    } else {
+        ui_text(R, "How to connect:", 560, 140, 22, 1.0f, 0.85f, 0.4f, 1, 0);
+        ui_text(R, "Settings > Bluetooth on the iPad, then pair", 560, 176, 17, 0.9f, 0.9f, 0.9f, 1, 0);
+        ui_text(R, "an MFi game controller (or plug it in).", 560, 200, 17, 0.9f, 0.9f, 0.9f, 1, 0);
+        ui_text(R, "In menus the left stick moves a cursor:", 560, 250, 17, 0.9f, 0.9f, 0.9f, 1, 0);
+        ui_text(R, "A = tap, B = back, RB = faster cursor.", 560, 274, 17, 0.9f, 0.9f, 0.9f, 1, 0);
+    }
+    if (P.wait) ui_text(R, P.wait >= 100 ? "Press the new key (ESC = cancel)" : "Press the new controller button (tap the screen = cancel)", R->W * 0.5f, 650, 20, 1, 0.85f, 0.3f, 1, 1);
+    ui_rect(R, 120, 690, 260, 56, F.pressed == 1898 ? 0.6f : 0.25f, 0.12f, 0.12f, 0.95f);
+    ui_text(R, "RESET DEFAULTS", 250, 706, 22, 1, 1, 1, 1, 1);
+    big_button("BACK", R->W * 0.5f + 160, 696, 44, F.pressed == 1899, 1);
+}
+
+static void controls_tap(float x, float y, int phase) {
+    Renderer *R = &F.R;
+    int k, hit = 0;
+    if (P.wait) { if (phase == TOUCH_END) P.wait = 0; return; }   /* tikken = annuleren */
+    for (k = 0; k < PA_COUNT; k++) {
+        float yy = 136.0f + k * 54.0f;
+        if (x > 360 && x < 488 && y > yy + 5 && y < yy + 41) hit = 1800 + k;
+    }
+    if (g_desktop)
+        for (k = 0; k < KA_COUNT; k++) {
+            float yy = 136.0f + k * 48.0f;
+            if (x > 808 && x < 952 && y > yy + 4 && y < yy + 38) hit = 1850 + k;
+        }
+    if (x > 120 && x < 380 && y > 690 && y < 746) hit = 1898;
+    if (hit_text(x, y, "BACK", R->W * 0.5f + 160, 696 + 22, 44)) hit = 1899;
+    if (phase != TOUCH_END) { F.pressed = hit; return; }
+    F.pressed = 0;
+    if (hit >= 1800 && hit < 1800 + PA_COUNT) P.wait = hit - 1800 + 1;
+    else if (hit >= 1850 && hit < 1850 + KA_COUNT) P.wait = 100 + hit - 1850;
+    else if (hit == 1898) {
+        for (k = 0; k < PA_COUNT; k++) P.bind[k] = PA_DEFAULT[k];
+        for (k = 0; k < KA_COUNT; k++) P.kbind[k] = 0;
+        pad_save_binds();
+    } else if (hit == 1899) set_state(ST_SETTINGS);
+}
+
 static void draw_hud(void) {
     Renderer *R = &F.R;
     Game *g = &F.G;
@@ -820,16 +1060,42 @@ static void draw_hud(void) {
 
     if (g_desktop) {
         ui_rect(R, 0, H - 30, W, 30, 0, 0, 0, 0.45f);
-        ui_text(R, mode == MODE_FOOT
-                       ? "WASD walk   MOUSE look   LEFT CLICK fire   SPACE jump   E enter   Q gun   M map   ESC pause"
-                       : "W gas   S brake/reverse   A/D steer   MOUSE look   E exit   M map   ESC pause",
-                W * 0.5f, H - 26, 16, 1, 1, 1, 0.85f, 1);
+        {
+            char hb[200];
+            if (mode == MODE_FOOT)
+                snprintf(hb, sizeof(hb), "%s/%s/%s/%s walk   MOUSE look   CLICK fire   %s jump   %s enter   %s run   %s gun   %s map   ESC pause",
+                         key_label(KA_FWD), key_label(KA_LEFT), key_label(KA_BACK), key_label(KA_RIGHT), key_label(KA_JUMP), key_label(KA_ACTION),
+                         key_label(KA_RUN), key_label(KA_SWITCH), key_label(KA_MAP));
+            else
+                snprintf(hb, sizeof(hb), "%s gas   %s brake/reverse   %s/%s steer   MOUSE look   %s exit   %s map   ESC pause",
+                         key_label(KA_FWD), key_label(KA_BACK), key_label(KA_LEFT), key_label(KA_RIGHT), key_label(KA_ACTION), key_label(KA_MAP));
+            ui_text(R, hb, W * 0.5f, H - 26, 15, 1, 1, 1, 0.85f, 1);
+        }
         if (mode != MODE_FOOT) {
             Vehicle *v = &g->veh[g->p.veh];
             snprintf(b, sizeof(b), "%d KM/H", (int)(fabsf(v->speed) * 3.6f + 0.5f));
             ui_text(R, b, W - 24, H - 80, 34, 1, 1, 1, 0.9f, 2);
         }
         if (mode == MODE_FOOT && game_near_vehicle(g) >= 0) ui_text(R, "PRESS E", W * 0.5f, H - 90, 26, 1, 0.85f, 0.3f, 0.6f + 0.4f * sinf(F.t * 6), 1);
+        return;
+    }
+    if (P.connected && P.active) {   /* controller: geen touch-knoppen */
+        char hb[160];
+        snprintf(hb, sizeof(hb), mode == MODE_FOOT ? "%s jump   %s enter   %s run   %s fire   %s gun   %s map   %s pause"
+                                                   : "%s gas   %s brake   %s exit   %s map   %s pause",
+                 mode == MODE_FOOT ? PB_NAMES[P.bind[PA_JUMP]] : PB_NAMES[P.bind[PA_GAS]],
+                 mode == MODE_FOOT ? PB_NAMES[P.bind[PA_ACTION]] : PB_NAMES[P.bind[PA_BRAKE]],
+                 mode == MODE_FOOT ? PB_NAMES[P.bind[PA_RUN]] : PB_NAMES[P.bind[PA_ACTION]],
+                 mode == MODE_FOOT ? PB_NAMES[P.bind[PA_FIRE]] : PB_NAMES[P.bind[PA_MAP]],
+                 mode == MODE_FOOT ? PB_NAMES[P.bind[PA_SWITCH]] : PB_NAMES[P.bind[PA_PAUSE]],
+                 PB_NAMES[P.bind[PA_MAP]], PB_NAMES[P.bind[PA_PAUSE]]);
+        ui_rect(R, 0, H - 30, W, 30, 0, 0, 0, 0.45f);
+        ui_text(R, hb, W * 0.5f, H - 26, 16, 1, 1, 1, 0.85f, 1);
+        if (mode != MODE_FOOT) {
+            Vehicle *v = &g->veh[g->p.veh];
+            snprintf(hb, sizeof(hb), "%d KM/H", (int)(fabsf(v->speed) * 3.6f + 0.5f));
+            ui_text(R, hb, W - 24, H - 80, 34, 1, 1, 1, 0.9f, 2);
+        }
         return;
     }
     /* sticks */
@@ -875,6 +1141,7 @@ static void draw_hud(void) {
         }
     }
 }
+
 
 /* missie i is vrij als het de eerste is, als hij al eens gehaald is, of als de vorige gehaald is */
 static int mission_unlocked(int i) { return i <= 0 || F.G.completed[i] || F.G.completed[i - 1]; }
@@ -2394,6 +2661,7 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_SLOTS) { slots_tap(x, y, phase); return; }
+    if (F.state == ST_CONTROLS) { controls_tap(x, y, phase); return; }
     if (F.state == ST_NLINPUT) { nl_input_tap(x, y, phase); return; }
     if (F.state == ST_BIGMAP) { bigmap_touch(x, y, phase); return; }
     if (F.state == ST_SHOP) { shop_tap(x, y, phase); return; }
@@ -2446,9 +2714,11 @@ static void menu_tap(float x, float y, int phase) {
             if (x > 180 && x < R->W - 180 && y > ry - 5 && y < ry + 45) hit = i + 1;
         }
         if (hit_text(x, y, "BACK", R->W * 0.5f, R->H - 74.0f + 24, 48)) hit = 10;
+        if (x > R->W - 230.0f && x < R->W - 30.0f && y > 36 && y < 92) hit = 20;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
         if (hit != 9) F.resetArm = 0;
+        if (hit == 20) { F.controlsFrom = F.prevState; set_state(ST_CONTROLS); return; }
         switch (hit) {
         case 1: F.quality = (F.quality + 1) % 3; break;
         case 2: F.tod = (F.tod + 1) % 3; break;
@@ -2503,6 +2773,7 @@ static void menu_tap(float x, float y, int phase) {
 void fe_touch(long id, int phase, float x, float y) {
     int i, slot = -1;
     if (!F.ready || F.at) return;
+    if (id != -77 && phase == TOUCH_BEGIN) P.active = 0;
     for (i = 0; i < NTOUCH; i++) if (F.ts[i].used && F.ts[i].id == id) { slot = i; break; }
     if (phase == TOUCH_BEGIN && slot < 0) {
         for (i = 0; i < NTOUCH; i++) if (!F.ts[i].used) { slot = i; break; }
@@ -2539,6 +2810,7 @@ static void build_input(void) {
     in->switchPressed = F.switchEdge;
     in->run = ctl_down(CTL_RUN);
     F.jumpEdge = F.actionEdge = F.switchEdge = 0;
+    pad_build_input(in);
     if (g_desktop) {
         in->mx = clampf(in->mx + g_dk.mx, -1, 1);
         in->my = clampf(in->my + g_dk.my, -1, 1);
@@ -3146,6 +3418,7 @@ void fe_frame(double now) {
         if ((ev = mp_event()) != NULL && F.state == ST_GAME) game_message(&F.G, ev, 3.0f);
     }
     if (F.mode == 1 && (F.state == ST_GAME || F.state == ST_PAUSE || F.state == ST_BIGMAP)) ns_update(F.G.p.x, F.G.p.z);
+    if (!F.at) pad_tick(dt);
     glViewport(0, 0, g_vpW > 0 ? g_vpW : R->W, g_vpH > 0 ? g_vpH : R->H);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -3183,6 +3456,9 @@ void fe_frame(double now) {
         break;
     case ST_SLOTS:
         ui_begin(R); draw_slots(); ui_flush(R);
+        break;
+    case ST_CONTROLS:
+        ui_begin(R); draw_controls(); ui_flush(R);
         break;
     case ST_CREDITS:
         ui_begin(R); draw_credits(); ui_flush(R);
@@ -3353,6 +3629,7 @@ void fe_frame(double now) {
         plat_loop(LOOP_BIKE, bike, bikeRate);
         plat_loop(LOOP_SIREN, siren, 1.0f);
     }
+    draw_pad_cursor();
     F.lastDC = R->drawCalls;
     if (pendingShot[0]) {
         plat_screenshot(pendingShot, R->W, R->H);
@@ -3415,6 +3692,7 @@ void fe_key_command(int cmd) {
     case ST_SETTINGS: set_state(F.prevState == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
     case ST_MISSIONS: set_state(F.missionsFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
     case ST_SLOTS: F.slotDelArm = 0; set_state(ST_MENU); break;
+    case ST_CONTROLS: if (P.wait) P.wait = 0; else set_state(ST_SETTINGS); break;
     case ST_CREDITS: set_state(ST_MENU); break;
     case ST_NLINPUT: set_state(F.nlInFrom == ST_PAUSE ? ST_PAUSE : ST_MENU); break;
     case ST_MP: if (mp_mode() == MP_JOINING) mp_leave(); mp_lan_listen(0); set_state(ST_MENU); break;

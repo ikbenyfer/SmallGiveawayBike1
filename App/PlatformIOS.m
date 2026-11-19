@@ -107,6 +107,8 @@ void plat_save_int(const char *key, int val) {
 
 void plat_save_flush(void) { [[NSUserDefaults standardUserDefaults] synchronize]; }
 
+const char *plat_key_name(int code) { (void)code; return ""; }
+
 static NSArray *autotest_files(void) {
     NSString *d = docs();
     return @[[d stringByAppendingPathComponent:@"autotest.txt"],

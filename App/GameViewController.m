@@ -1,6 +1,47 @@
 #import "GameViewController.h"
 #import <QuartzCore/QuartzCore.h>
+#import <GameController/GameController.h>
 #include "../Render/frontend.h"
+
+/* MFi-controller (Bluetooth of bedraad): elke frame uitlezen en als Xbox-indeling doorgeven */
+static int g_pauseFrames;
+
+static void poll_controller(void) {
+    NSArray *cs = [GCController controllers];
+    GCController *c = cs.count > 0 ? cs[0] : nil;
+    float ax[6] = {0, 0, 0, 0, 0, 0};
+    unsigned b = 0;
+    if (c) {
+        if (!c.controllerPausedHandler) c.controllerPausedHandler = ^(GCController *ctrl) { (void)ctrl; g_pauseFrames = 3; };
+        if (c.extendedGamepad) {
+            GCExtendedGamepad *e = c.extendedGamepad;
+            ax[0] = e.leftThumbstick.xAxis.value; ax[1] = -e.leftThumbstick.yAxis.value;
+            ax[2] = e.rightThumbstick.xAxis.value; ax[3] = -e.rightThumbstick.yAxis.value;
+            ax[4] = e.leftTrigger.value; ax[5] = e.rightTrigger.value;
+            if (e.buttonA.pressed) b |= 1u << PB_A;
+            if (e.buttonB.pressed) b |= 1u << PB_B;
+            if (e.buttonX.pressed) b |= 1u << PB_X;
+            if (e.buttonY.pressed) b |= 1u << PB_Y;
+            if (e.leftShoulder.pressed) b |= 1u << PB_LB;
+            if (e.rightShoulder.pressed) b |= 1u << PB_RB;
+            if (e.dpad.up.pressed) b |= 1u << PB_UP;
+            if (e.dpad.down.pressed) b |= 1u << PB_DOWN;
+            if (e.dpad.left.pressed) b |= 1u << PB_LEFT;
+            if (e.dpad.right.pressed) b |= 1u << PB_RIGHT;
+        } else if (c.gamepad) {
+            GCGamepad *gp = c.gamepad;
+            ax[0] = gp.dpad.xAxis.value; ax[1] = -gp.dpad.yAxis.value;
+            if (gp.buttonA.pressed) b |= 1u << PB_A;
+            if (gp.buttonB.pressed) b |= 1u << PB_B;
+            if (gp.buttonX.pressed) b |= 1u << PB_X;
+            if (gp.buttonY.pressed) b |= 1u << PB_Y;
+            if (gp.leftShoulder.pressed) b |= 1u << PB_LB;
+            if (gp.rightShoulder.pressed) b |= 1u << PB_RB;
+        }
+    }
+    if (g_pauseFrames > 0) { g_pauseFrames--; if (g_pauseFrames >= 1) b |= 1u << PB_START; }
+    fe_pad_input(c != nil, ax, b, c && c.vendorName ? [c.vendorName UTF8String] : "MFi controller");
+}
 
 @interface GameViewController () {
     EAGLContext *_ctx;
@@ -40,6 +81,7 @@
         fe_init(w, h);
         _started = YES;
     }
+    poll_controller();
     fe_frame(CACurrentMediaTime());
 }
 
