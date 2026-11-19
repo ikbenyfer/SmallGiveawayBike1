@@ -52,9 +52,17 @@ jobs:
             sleep 40
             mkdir -p out
             adb shell screencap -p /sdcard/s1.png && adb pull /sdcard/s1.png out/01_start.png
-            adb shell input tap 960 900 || true
-            sleep 20
-            adb shell screencap -p /sdcard/s2.png && adb pull /sdcard/s2.png out/02_tap.png
+            adb shell wm size
+            SZ=$(adb shell wm size | tail -1 | sed 's/.*: //' | tr -d ''); W=${SZ%x*}; H=${SZ#*x}; if [ $W -lt $H ]; then T=$W; W=$H; H=$T; fi
+            tap() { adb shell input tap $(( W * $1 / 1000 )) $(( H * $2 / 1000 )); }
+            tap 230 900; sleep 4
+            adb shell screencap -p /sdcard/s2.png && adb pull /sdcard/s2.png out/02_play.png
+            tap 500 400; sleep 4
+            adb shell screencap -p /sdcard/s3.png && adb pull /sdcard/s3.png out/03_slot.png
+            sleep 25
+            adb shell screencap -p /sdcard/s4.png && adb pull /sdcard/s4.png out/04_game.png
+            adb shell input keyevent 4; sleep 3
+            adb shell screencap -p /sdcard/s5.png && adb pull /sdcard/s5.png out/05_back.png
             adb logcat -d > out/logcat.txt || true
             grep -E " SGB|SDL|AndroidRuntime|FATAL|DEBUG   :" out/logcat.txt | head -150 || true
             adb shell pidof nl.yf.smallgiveawaybike1 && echo "APP DRAAIT NOG" || echo "APP DRAAIT NIET MEER"
