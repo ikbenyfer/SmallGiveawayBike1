@@ -721,6 +721,10 @@ int main(int argc, char **argv) {
                 float lx = (e.tfinger.x * (float)g_scrW - (float)g_vx) * (float)fe_ui_width() / (float)(g_vw > 0 ? g_vw : 1);
                 float ly = (e.tfinger.y * (float)g_scrH - (float)g_vy) * 768.0f / (float)(g_vh > 0 ? g_vh : 1);
                 int ph = e.type == SDL_FINGERDOWN ? TOUCH_BEGIN : e.type == SDL_FINGERUP ? TOUCH_END : TOUCH_MOVE;
+                if (ph != TOUCH_MOVE) {   /* eerste aanrakingen loggen (handig bij problemen) */
+                    static int nlog;
+                    if (nlog++ < 12) plat_log("touch %s %.0f,%.0f (scherm %dx%d, ui-breedte %d)", ph == TOUCH_BEGIN ? "neer" : "op", lx, ly, g_scrW, g_scrH, fe_ui_width());
+                }
                 fe_touch((long)e.tfinger.fingerId + 1, ph, lx, ly);
                 break;
             }
