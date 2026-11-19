@@ -1,0 +1,66 @@
+name: Android-test (emulator)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android]
+
+jobs:
+  emulator:
+    name: APK starten in een Android-emulator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Pakketten + KVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pil fonts-dejavu-core
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Project klaarzetten en x86_64-APK bouwen
+        shell: bash
+        run: |
+          bash tools/android_prepare.sh
+          echo "NDK_VER=$(basename "$ANDROID_NDK_LATEST_HOME")" >> $GITHUB_ENV
+          cd android-build
+          export NDK_VER="$(basename "$ANDROID_NDK_LATEST_HOME")" SGB_VERSION="$(cat ../VERSION)" SGB_VC=1 SGB_ABIS=x86_64
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../test.apk
+
+      - name: Starten in de emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            adb install -r test.apk
+            adb logcat -c
+            adb shell am start -n nl.yf.smallgiveawaybike1/.SGBActivity
+            sleep 40
+            mkdir -p out
+            adb shell screencap -p /sdcard/s1.png && adb pull /sdcard/s1.png out/01_start.png
+            adb shell input tap 960 900 || true
+            sleep 20
+            adb shell screencap -p /sdcard/s2.png && adb pull /sdcard/s2.png out/02_tap.png
+            adb logcat -d > out/logcat.txt || true
+            grep -E " SGB|SDL|AndroidRuntime|FATAL|DEBUG   :" out/logcat.txt | head -150 || true
+            adb shell pidof nl.yf.smallgiveawaybike1 && echo "APP DRAAIT NOG" || echo "APP DRAAIT NIET MEER"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test
+          path: out
