@@ -667,6 +667,12 @@ int main(int argc, char **argv) {
         int mdx = 0, mdy = 0;
         static int edgeJump, edgeAction, edgeSwitch;
         while (SDL_PollEvent(&e)) {
+#ifdef __ANDROID__
+            {   /* eerste events loggen (diagnose) */
+                static int nev;
+                if (nev++ < 40 && e.type != SDL_FINGERMOTION && e.type != SDL_MOUSEMOTION) plat_log("event 0x%x", e.type);
+            }
+#endif
             switch (e.type) {
             case SDL_QUIT: running = 0; break;
             case SDL_CONTROLLERDEVICEADDED: pad_open_first(); break;
@@ -776,6 +782,13 @@ int main(int argc, char **argv) {
         }
         pad_poll();
         fe_frame(plat_time());
+#ifdef __ANDROID__
+        {   /* elke 10 s: draait de lus nog? */
+            static int frames; static double lastT;
+            frames++;
+            if (plat_time() - lastT > 10.0) { plat_log("lus: %d frames, scherm %dx%d", frames, g_scrW, g_scrH); frames = 0; lastT = plat_time(); }
+        }
+#endif
         SDL_GL_SwapWindow(win);
         if (g_autotestDone && g_autotest) { static int quitT; if (++quitT > 90) running = 0; }
         if (fe_should_quit()) running = 0;
