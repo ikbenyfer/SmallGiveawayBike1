@@ -11,6 +11,7 @@
 #include "mp.h"
 #include "../Game/home.h"
 #include "../Game/biz.h"
+#include "../Game/stores.h"
 #define NL_MAX_AREAS 64
 #define NL_DL_R 2
 
@@ -60,6 +61,7 @@ static struct {
     char shopMsg[96];
     float atMaxSpeed;
     int atShot2, bizShop, atBiz, controlsFrom;
+    long atMoney0;
     int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
@@ -644,7 +646,7 @@ static void draw_minimap(void) {
         }
     }
     if (!g->nl) {
-        V3 pts[5 + BIZ_COUNT];
+        V3 pts[6 + BIZ_COUNT];
         int q;
         static const float bc[4][3] = {{0.95f, 0.15f, 0.15f}, {0.2f, 0.75f, 0.3f}, {1.0f, 0.55f, 0.1f}, {0.2f, 0.45f, 1.0f}};
         pts[0] = g->w->poi[POI_GUNSHOP];
@@ -653,12 +655,19 @@ static void draw_minimap(void) {
         pts[3] = g->w->poi[POI_CUSTOMS];
         home_door(g->homeLvl, &pts[4].x, &pts[4].z);
         for (q = 0; q < BIZ_COUNT; q++) pts[5 + q] = g->w->poi[biz_poi(q)];
-        for (q = 0; q < 5 + BIZ_COUNT; q++) {
+        pts[5 + BIZ_COUNT] = g->w->poi[POI_MART];
+        for (q = 0; q < 6 + BIZ_COUNT; q++) {
             float rx = pts[q].x - px, rz = pts[q].z - pz;
             float sx = (rx * rt.x + rz * rt.z) / rad, sy = -(rx * f.x + rz * f.z) / rad;
             float m = fmaxf(fabsf(sx), fabsf(sy));
             if (m > 0.9f) { sx = sx / m * 0.9f; sy = sy / m * 0.9f; }
             (void)bc;
+            if (q == 5 + BIZ_COUNT) {   /* v4.0 GIVEAWAY MART: groene stip */
+                ui_circle(R, cx + sx * half, cy + sy * half, 10, 0, 0, 0, 0.85f);
+                ui_circle(R, cx + sx * half, cy + sy * half, 8, 0.25f, 0.85f, 0.35f, 1);
+                ui_circle(R, cx + sx * half, cy + sy * half, 3, 1, 1, 1, 1);
+                continue;
+            }
             ui_icon(R, q >= 5 ? ICON_BURGER + (q - 5) : (q == 0 ? ICON_GUN : (q == 1 ? ICON_BANK : (q == 2 ? ICON_CAR : (q == 3 ? ICON_CUSTOMS : ICON_HOME)))),
                     cx + sx * half, cy + sy * half, q >= 5 ? 20 : 24, 1);
         }
@@ -1642,6 +1651,13 @@ static void draw_bigmap(void) {
             bm_w2s(px2, pz2, &sx, &sy);
             ui_icon(R, q < 4 ? icons[q] : (q == 4 ? ICON_HOME : ICON_BURGER + (q - 5)), sx, sy, q >= 5 ? 34 : 40, 1);
             ui_text(R, q < 5 ? names[q] : biz_name(q - 5), sx, sy + 18, 16, 1, 1, 1, 1, 1);
+        }
+        {   /* v4.0 GIVEAWAY MART */
+            bm_w2s(w->poi[POI_MART].x, w->poi[POI_MART].z, &sx, &sy);
+            ui_circle(R, sx, sy, 15, 0, 0, 0, 0.85f);
+            ui_circle(R, sx, sy, 12, 0.25f, 0.85f, 0.35f, 1);
+            ui_text(R, "$", sx, sy - 9, 18, 1, 1, 1, 1, 1);
+            ui_text(R, store_name(STORE_MART), sx, sy + 18, 16, 1, 1, 1, 1, 1);
         }
     }
     /* speler */
@@ -3139,8 +3155,11 @@ static void autotest_tick(float dt) {
             game_teleport(g, g->w->poi[POI_GUNSHOP].x, g->w->poi[POI_GUNSHOP].z + 3.0f, PI_F);
             F.atStep++;
         }
-        else if (F.atStep == 71) {
-            game_teleport(g, g->w->poi[POI_GUNSHOP].x, g->w->poi[POI_GUNSHOP].z, PI_F);
+        else if (F.atStep == 71) {   /* v4.0: naar binnen en naar de toonbank lopen */
+            V3 sp[4]; int sk[4], q, ns; float sr[4];
+            game_store_enter(g, STORE_GUN);
+            ns = store_markers(STORE_GUN, sp, sk, sr, 4);
+            for (q = 0; q < ns; q++) if (sk[q] == SM_COUNTER) game_teleport(g, sp[q].x, sp[q].z, 0);
             F.atStep++;
         }
         else if (F.atStep == 72 && g->owned[1]) {
@@ -3325,17 +3344,76 @@ static void autotest_tick(float dt) {
             F.atStep++;
         }
         else if (F.atStep == 114 && t > F.atT3 + 1.2f) { g->camYaw = PI_F * 0.42f; at_shot("38_villa_outside"); F.atT3 = t; F.atStep++; }
-        else if (F.atStep == 120) {   /* naar de volgende winkel */
+        else if (F.atStep == 120) {   /* naar de volgende winkel (v4.0: binnen naar de toonbank) */
             V3 pp = g->w->poi[biz_poi(F.atBiz)];
             g->money += 50000;
-            game_teleport(g, pp.x, pp.z, 0);
+            if (F.atBiz == BIZ_SPRAY) game_teleport(g, pp.x, pp.z, 0);
+            else {
+                V3 sp[4]; int sk[4], q, ns; float sr[4];
+                int st = F.atBiz - BIZ_BURGER + STORE_BURGER;
+                game_store_enter(g, st);
+                ns = store_markers(st, sp, sk, sr, 4);
+                for (q = 0; q < ns; q++) if (sk[q] == SM_COUNTER) game_teleport(g, sp[q].x, sp[q].z, 0);
+            }
             F.atT3 = t;
             F.atStep++;
         }
         else if (F.atStep == 121 && F.state == ST_GAME && t > F.atT3 + 1.5f) {
-            game_teleport(g, g->p.x, g->p.z + 6.0f, 0);   /* van de ring af */
+            V3 pp = g->w->poi[biz_poi(F.atBiz)];
+            float side = fmodf(pp.z - ROADW, PITCH) < BLOCKW * 0.5f ? -1.0f : 1.0f;
+            game_teleport(g, pp.x, pp.z + side * 4.0f, 0);   /* van de ring af, weer buiten */
             F.atBiz++;
-            F.atStep = F.atBiz < BIZ_COUNT ? 120 : 122;
+            if (F.atBiz >= BIZ_COUNT) { F.atBiz = 0; F.atStep = 130; } else F.atStep = 120;
+        }
+        else if (F.atStep == 130) {   /* v4.0: elke winkel van binnen bekijken */
+            game_store_enter(g, F.atBiz);
+            g->camYaw = 0.0f; g->camPitch = 0.25f;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 131 && t > F.atT3 + 1.2f) {
+            char nm[48];
+            snprintf(nm, sizeof(nm), "46_store_%d_%s", F.atBiz, F.atBiz == STORE_MART ? "mart" : (F.atBiz == STORE_GUN ? "guns" : "biz"));
+            g->camYaw = 0.0f;
+            rep("Winkel %s: binnen=%d (verwacht %d)", store_name(F.atBiz), game_store_inside(g), F.atBiz + 1);
+            at_shot(nm);
+            F.atT3 = t;
+            if (F.atBiz == STORE_MART) F.atStep = 132;
+            else { F.atBiz++; F.atStep = 130; }
+        }
+        else if (F.atStep == 132) {   /* kassa overvallen */
+            V3 sp[4]; int sk[4], q, ns; float sr[4];
+            F.atMoney0 = g->money;
+            ns = store_markers(STORE_MART, sp, sk, sr, 4);
+            for (q = 0; q < ns; q++) if (sk[q] == SM_ROB) game_teleport(g, sp[q].x, sp[q].z, 0);
+            g->camYaw = 0.7f;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 133 && t > F.atT3 + 1.5f) {
+            rep("Supermarkt-overval: geld +%ld (10000 verwacht), sterren=%d, overvallen=%d", g->money - F.atMoney0, g->wanted, g->statRobs);
+            g->camYaw = 0.7f;
+            at_shot("47_mart_robbed");
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 134 && t > F.atT3 + 0.3f) {
+            V3 sp[4]; int sk[4], q, ns; float sr[4];
+            ns = store_markers(STORE_MART, sp, sk, sr, 4);
+            for (q = 0; q < ns; q++) if (sk[q] == SM_EXIT) game_teleport(g, sp[q].x, sp[q].z, PI_F);
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 135 && t > F.atT3 + 1.5f) {
+            int k;
+            rep("Uit de supermarkt: buiten=%d, op (%.0f, %.0f), sterren=%d", !game_store_inside(g), g->p.x, g->p.z, g->wanted);
+            g->camYaw = 0.0f;
+            at_shot("48_mart_outside");
+            g->wanted = 0;
+            for (k = 0; k < MAX_POLICE; k++) g->veh[g->firstPolice + k].active = 0;
+            for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) g->ped[k].active = 0;
+            F.atT3 = t;
+            F.atStep = 122;
         }
         else if (F.atStep == 122) {   /* thuis: luxe spullen bekijken */
             float x0, z0, x1, z1;

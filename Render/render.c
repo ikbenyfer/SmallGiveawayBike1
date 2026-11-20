@@ -1,6 +1,7 @@
 #include "render.h"
 #include "../Game/home.h"
 #include "../Game/biz.h"
+#include "../Game/stores.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -279,6 +280,7 @@ void r_build_models(Renderer *r) {
     BUILD(r->tracer, model_tracer(&m));
     for (i = 0; i < 3; i++) { BUILD(r->homeExt[i], home_build_exterior(&m, i)); BUILD(r->homeInt[i], home_build_interior(&m, i)); }
     for (i = 0; i < 4; i++) BUILD(r->homeGar[i], home_build_garage(&m, i));
+    for (i = 0; i < STORE_COUNT; i++) BUILD(r->store[i], store_build(&m, i));
     for (i = 0; i < 15; i++) BUILD(r->decor[i / 5][i % 5], home_build_decor(&m, i / 5, i % 5));
 #undef BUILD
     mb_free(&m);
@@ -722,6 +724,22 @@ void r_draw_scene(Renderer *r, Game *g) {
             draw_mesh(r, &r->homeGar[gl], &id);
             for (d = 0; d < 5; d++) if ((g->decor >> d) & 1) draw_mesh(r, &r->decor[hl][d], &id);
         }
+        /* v4.0: winkel van binnen + verkoper achter de toonbank */
+        if (r->cam.z < STORE_ZONE_Z) {
+            int s = store_at(r->cam.x, r->cam.z);
+            if (!s) s = game_store_inside(g);
+            if (s) {
+                float cx, cz, ch;
+                int scared = s - 1 == STORE_MART && g->clerkScare > 0;
+                draw_mesh(r, &r->store[s - 1], &id);
+                store_clerk(s - 1, &cx, &cz, &ch);
+                draw_char(r, (s * 4 + 1) % CHAR_VARIANTS, m4_trs_y(cx, 0, cz, ch), scared ? 0 : g->time * 0.3f, scared ? 2 : 0, 0,
+                          s - 1 == STORE_GUN ? WP_SHOTGUN : 0, 0);
+                if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
+                    shadows[nsh] = v3(cx, 0, cz); shs[nsh][0] = 0.45f; shs[nsh][1] = 0.45f; shs[nsh][2] = 0; nsh++;
+                }
+            }
+        }
     }
     /* voetgangers */
     for (i = 0; i < MAX_PED; i++) {
@@ -896,6 +914,34 @@ void r_draw_scene(Renderer *r, Game *g) {
                 m = m4_mul(m4_trs_y(pp.x, 0, pp.z, 0), m4_scale(rs, 1.6f, rs));
                 tint(r, cr * 0.22f, cg * 0.22f, cb * 0.22f);
                 draw_mesh(r, &r->cp, &m);
+            }
+        }
+        if (!g->nl) {   /* v4.0: markers binnen in een winkel, en de deur van de GIVEAWAY MART */
+            V3 sp[4];
+            int sk[4], q, ns, si = game_store_inside(g);
+            float sr[4], pulse = 0.75f + 0.25f * sinf(t * 4.0f);
+            M4 m;
+            if (si) {
+                ns = store_markers(si - 1, sp, sk, sr, 4);
+                for (q = 0; q < ns; q++) {
+                    float cr, cg, cb;
+                    if (sk[q] == SM_EXIT) { cr = 0.3f; cg = 1.0f; cb = 0.4f; }
+                    else if (sk[q] == SM_ROB) { cr = g->robArmed ? 1.0f : 0.4f; cg = g->robArmed ? 0.15f : 0.4f; cb = g->robArmed ? 0.1f : 0.4f; }
+                    else store_color(si - 1, &cr, &cg, &cb);
+                    m = m4_mul(m4_trs_y(sp[q].x, 0.06f, sp[q].z, t), m4_scale(sr[q] * 0.9f, 1, sr[q] * 0.9f));
+                    tint(r, cr * pulse, cg * pulse, cb * pulse);
+                    draw_mesh(r, &r->marker, &m);
+                }
+            } else {
+                V3 gm = g->w->poi[POI_MART];
+                if (sphere_visible(r, gm.x, 1, gm.z, 3, fogEnd)) {
+                    m = m4_mul(m4_trs_y(gm.x, world_ground_y(g->w, gm.x, gm.z) + 0.06f, gm.z, t), m4_scale(1.8f, 1, 1.8f));
+                    tint(r, 0.25f * pulse, 0.85f * pulse, 0.35f * pulse);
+                    draw_mesh(r, &r->marker, &m);
+                    m = m4_mul(m4_trs_y(gm.x, 0, gm.z, 0), m4_scale(1.8f, 1.6f, 1.8f));
+                    tint(r, 0.05f, 0.2f, 0.08f);
+                    draw_mesh(r, &r->cp, &m);
+                }
             }
         }
         if (!g->nl && g->mission < 0) {

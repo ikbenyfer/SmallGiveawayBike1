@@ -147,6 +147,9 @@ typedef struct {
     int cardio, tough, outfits, outfit, decor;
     float boostT;
     int bizOpen, inBiz;   /* bizOpen = winkel + 1 (frontend opent het menu) */
+    /* v4.0: binnen in winkels lopen; GIVEAWAY MART overvallen */
+    int storeMarker, robArmed, statRobs;
+    float storeCool, clerkScare;
 } Game;
 
 void game_init(Game *g, World *w);
@@ -162,6 +165,8 @@ void game_start_mission(Game *g, int m);
 void game_message(Game *g, const char *txt, float t);
 void game_sfx(Game *g, int id, float x, float z);
 void game_add_wanted(Game *g, int n);
+int game_store_inside(const Game *g);   /* winkel + 1 als de speler binnen in een winkel staat */
+void game_store_enter(Game *g, int store);
 enum { WP_NONE = 0, WP_PISTOL, WP_SMG, WP_SHOTGUN, WP_COUNT };
 typedef struct { const char *name; int price, ammoPrice, ammoPack; float damage, delay, range, spread; int pellets; } WeaponDef;
 extern const WeaponDef WEAPONS[WP_COUNT];

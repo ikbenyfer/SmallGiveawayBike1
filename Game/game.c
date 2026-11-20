@@ -1,4 +1,5 @@
 #include "game.h"
+#include "stores.h"
 #include "home.h"
 #include "biz.h"
 #include "models.h"
@@ -375,6 +376,7 @@ static void player_pos(const Game *g, float *x, float *z) {
     if (g->p.veh >= 0) { *x = g->veh[g->p.veh].x; *z = g->veh[g->p.veh].z; }
     else { *x = g->p.x; *z = g->p.z; }
     if (!g->nl && *x < HOME_ZONE_X) { home_door(g->homeLvl, x, z); return; }
+    if (!g->nl && *z < STORE_ZONE_Z) { int s = store_at(*x, *z); if (s) { V3 d = g->w->poi[store_poi(s - 1)]; *x = d.x; *z = d.z; } }
 }
 
 static void update_missions(Game *g, float dt) {
@@ -1097,6 +1099,97 @@ static void home_tick(Game *g, float dt) {
     }
 }
 
+/* ------------------------------------------------------------------ v4.0: winkels van binnen */
+
+int game_store_inside(const Game *g) {
+    if (g->nl || g->p.veh >= 0) return 0;
+    return store_at(g->p.x, g->p.z);
+}
+
+static void store_go(Game *g, float x, float z, float h) {
+    game_teleport(g, x, z, h);
+    g->camPos = v3(x - sinf(h) * 3.0f, 2.2f, z - cosf(h) * 3.0f);
+    g->p.speed = 0;
+    g->storeCool = 0.8f;
+}
+
+void game_store_enter(Game *g, int s) {
+    float x, z, h;
+    char b[96];
+    store_entry(s, &x, &z, &h);
+    store_go(g, x, z, h);
+    g->storeMarker = SM_NONE;
+    if (s == STORE_MART) {
+        g->robArmed = 1;
+        g->clerkScare = 0;
+        game_message(g, "GIVEAWAY MART - walk to the register to rob it ($10,000)", 3.0f);
+    } else {
+        snprintf(b, sizeof(b), "%s - walk to the counter", store_name(s));
+        game_message(g, b, 2.0f);
+    }
+}
+
+/* naar buiten: net voor de deur op de stoep, met je rug naar de winkel */
+static void store_leave(Game *g, int s) {
+    V3 d = g->w->poi[store_poi(s)];
+    float side = fmodf(d.z - ROADW, PITCH) < BLOCKW * 0.5f ? -1.0f : 1.0f;
+    store_go(g, d.x, d.z + side * 1.4f, side < 0 ? PI_F : 0.0f);
+    g->inShop = 0; g->inBiz = 0;
+}
+
+static void store_rob(Game *g) {
+    float x, z, h;
+    if (!g->robArmed) { game_message(g, "The register is empty. Come back later!", 2.0f); return; }
+    g->robArmed = 0;
+    g->clerkScare = 6.0f;
+    g->money += MART_LOOT;
+    g->moneyFlash = 1.5f;
+    g->statRobs++;
+    store_clerk(STORE_MART, &x, &z, &h);
+    game_sfx(g, SFX_CASH, x, z);
+    g->crimeCool = 0;
+    game_add_wanted(g, 2);
+    banner(g, "STORE ROBBED!", "+$10,000 - get out and lose the cops", 1, 3.0f);
+}
+
+static void store_tick(Game *g, float dt) {
+    V3 pos[4];
+    int kind[4], n, i, s, cur = SM_NONE;
+    float rad[4];
+    if (g->nl) return;
+    if (g->storeCool > 0) g->storeCool -= dt;
+    if (g->clerkScare > 0) g->clerkScare -= dt;
+    s = game_store_inside(g);
+    if (!s) {
+        /* in de stad: door een winkeldeur lopen = naar binnen */
+        g->storeMarker = SM_NONE;
+        if (g->p.veh >= 0 || g->storeCool > 0) return;
+        for (i = 0; i < STORE_COUNT; i++) {
+            V3 d = g->w->poi[store_poi(i)];
+            float dx = g->p.x - d.x, dz = g->p.z - d.z;
+            if (dx * dx + dz * dz < 1.3f * 1.3f) { game_store_enter(g, i); return; }
+        }
+        return;
+    }
+    s--;
+    if (g->storeCool > 0) return;
+    n = store_markers(s, pos, kind, rad, 4);
+    for (i = 0; i < n; i++) {
+        float dx = g->p.x - pos[i].x, dz = g->p.z - pos[i].z;
+        if (dx * dx + dz * dz < rad[i] * rad[i]) { cur = kind[i]; break; }
+    }
+    if (cur != g->storeMarker) {
+        g->storeMarker = cur;
+        if (cur == SM_NONE) return;
+        if (cur == SM_EXIT) store_leave(g, s);
+        else if (cur == SM_ROB) store_rob(g);
+        else if (cur == SM_COUNTER) {
+            if (s == STORE_GUN) g->shopOpen = 1;
+            else g->bizOpen = s - STORE_BURGER + BIZ_BURGER + 1;
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ update */
 
 static void update_player_foot(Game *g, const Input *in, float dt) {
@@ -1136,7 +1229,7 @@ static void update_player_foot(Game *g, const Input *in, float dt) {
     if (p->y <= ground) { p->y = ground; p->vy = 0; p->onGround = 1; }
     else if (p->y > ground + 0.05f) p->onGround = 0;
     world_push_circle(g->w, &p->x, &p->z, 0.35f, p->y, &nx, &nz);
-    if (!g->nl) home_push(g->homeLvl, g->garLvl, &p->x, &p->z, 0.35f);
+    if (!g->nl) { home_push(g->homeLvl, g->garLvl, &p->x, &p->z, 0.35f); store_push(&p->x, &p->z, 0.35f); }
     for (i = 0; i < g->nveh; i++) {
         Vehicle *v = &g->veh[i];
         float dx, dz, d2, rr;
@@ -1171,7 +1264,8 @@ static void update_camera(Game *g, const Input *in, float dt) {
     V3 target;
     float wantDist = mode == MODE_CAR ? 8.0f : (mode == MODE_BIKE ? 5.8f : 4.6f);
     int indoors = !g->nl && game_home_inside(g);
-    if (indoors) wantDist = mode == MODE_CAR ? 6.0f : 3.3f;
+    int inStore = game_store_inside(g);
+    if (indoors || inStore) wantDist = mode == MODE_CAR ? 6.0f : 3.3f;
     float lx = in->lx, ly = in->ly;
     if (mode == MODE_FOOT) target = v3(g->p.x, g->p.y + 1.55f, g->p.z);
     else {
@@ -1208,6 +1302,12 @@ static void update_camera(Game *g, const Input *in, float dt) {
             want.x = clampf(want.x, x0 + 0.3f, x1 - 0.3f);
             want.z = clampf(want.z, z0 + 0.3f, z1 - 0.3f);
             want.y = fminf(want.y, 2.75f);
+        } else if (inStore) {
+            float x0, z0, x1, z1;
+            store_room(inStore - 1, &x0, &z0, &x1, &z1);
+            want.x = clampf(want.x, x0 + 0.3f, x1 - 0.3f);
+            want.z = clampf(want.z, z0 + 0.3f, z1 - 0.3f);
+            want.y = fminf(want.y, STORE_H - 0.5f);
         }
         g->camPos = want;
         g->camTarget = target;
@@ -1795,6 +1895,7 @@ static void update_police_and_health(Game *g, float dt) {
         if (dx * dx + dz * dz < 40.0f * 40.0f) near = 1;
         if (dx * dx + dz * dz < 2.0f * 2.0f) close = 1;
     }
+    if (game_store_inside(g)) close = 0;   /* binnen in een winkel: agenten wachten buiten bij de deur */
     if (g->wanted > 0) {
         if (near) g->evadeT = 0;
         else {
@@ -2000,28 +2101,20 @@ void game_update(Game *g, const Input *in, float dt) {
     update_shops(g);
     update_police_and_health(g, dt);
     if (!g->nl) update_missions(g, dt);
-    /* wapenwinkel: binnenlopen opent het winkelmenu */
-    if (!g->nl && g->p.veh < 0) {
-        float dx = g->p.x - g->w->poi[POI_GUNSHOP].x, dz = g->p.z - g->w->poi[POI_GUNSHOP].z;
-        int in2 = dx * dx + dz * dz < 2.2f * 2.2f;
-        if (in2 && !g->inShop) g->shopOpen = 1;
-        g->inShop = in2;
-    }
-    /* v3.2 winkels: binnenlopen (of inrijden bij BLOCK SPRAY) opent het menu */
+    /* v4.0: wapenwinkel en winkels lopen via store_tick (deur -> binnen -> toonbank).
+     * BLOCK SPRAY blijft een drive-in: inrijden opent het menu */
+    store_tick(g, dt);
     if (!g->nl) {
-        int k, cur = 0;
+        int cur = 0;
         float qx = g->p.veh >= 0 ? g->veh[g->p.veh].x : g->p.x, qz = g->p.veh >= 0 ? g->veh[g->p.veh].z : g->p.z;
-        for (k = 0; k < BIZ_COUNT; k++) {
-            V3 pp = g->w->poi[biz_poi(k)];
-            float dx = qx - pp.x, dz = qz - pp.z, rr = k == BIZ_SPRAY ? 3.2f : 2.0f;
-            if (k != BIZ_SPRAY && g->p.veh >= 0) continue;
-            if (dx * dx + dz * dz < rr * rr) { cur = k + 1; break; }
-        }
+        V3 pp = g->w->poi[biz_poi(BIZ_SPRAY)];
+        float dx = qx - pp.x, dz = qz - pp.z;
+        if (dx * dx + dz * dz < 3.2f * 3.2f) cur = BIZ_SPRAY + 1;
         if (cur && cur != g->inBiz) {
             g->bizOpen = cur;
             if (g->p.veh >= 0) g->veh[g->p.veh].speed = 0;
         }
-        g->inBiz = cur;
+        if (!game_store_inside(g)) g->inBiz = cur;
     }
     update_camera(g, in, dt);
 

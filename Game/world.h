@@ -36,6 +36,7 @@ enum {
     POI_SPAWN = 0, POI_PLAZA, POI_PIZZA, POI_GARAGE, POI_STAGE, POI_BIKESHOP,
     POI_REDCAR, POI_GIVEAWAY_BIKE, POI_BANK, POI_VAULT, POI_GUNSHOP, POI_DEALER, POI_CUSTOMS,
     POI_BURGER, POI_GYM, POI_DRIP, POI_BLING, POI_SPRAY,   /* v3.2: winkels (zelfde volgorde als BIZ_*) */
+    POI_MART,                                              /* v4.0: GIVEAWAY MART (supermarkt) */
     POI_COUNT
 };
 

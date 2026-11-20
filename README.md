@@ -14,6 +14,15 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v4.0.0: winkels van binnen + GIVEAWAY MART
+
+- Je loopt nu echt naar binnen in de winkels: BLOCK ARMS (wapens), GIVEAWAY BURGER, BLOCK GYM, DRIP en BLING. Loop door de deur-marker en je staat in de winkel.
+- Binnen staat een verkoper achter de toonbank. Loop naar de gekleurde marker bij de toonbank, dan opent het winkelmenu. Met de groene marker bij de deur ga je weer naar buiten.
+- Nieuw: de **GIVEAWAY MART**, een supermarkt met schappen, koelingen, groente en fruit en een kassa. Op de kaart is het de groene stip met een $.
+- Je kunt de kassa van de GIVEAWAY MART elk moment overvallen: loop naar de rode marker bij de kassa en je krijgt **$10.000** en 2 politiesterren. De kassa vult zich weer als je de winkel uitloopt en opnieuw naar binnen gaat.
+- Binnen kan de politie je niet arresteren, maar ze wachten buiten bij de deur.
+- BLOCK SPRAY blijft een drive-in.
+
 ## Android-versie
 Dit is dezelfde game voor Android-telefoons en -tablets (Android 5.0 of nieuwer, ARM 32- en 64-bit). Hij is gebouwd met SDL2 en OpenGL ES 2, net als op de iPad.
 - **Installeren:** download de `.apk` uit de release op je telefoon en open hem. Android vraagt dan om **installeren uit onbekende bronnen** toe te staan.

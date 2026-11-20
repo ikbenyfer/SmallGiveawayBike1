@@ -280,6 +280,17 @@ static void gen_shops(float ix0, float iz0, float ix1, float iz1, Rng *r, int bi
                 W->poi[POI_PIZZA] = v3((x0 + x1) * 0.5f, 0, iz0 - SIDEWALK * 0.5f - 0.3f);
                 mb_box(cur, v3(x0 + 1, CURB + 4.2f, z0 - 0.4f), v3(x1 - 1, CURB + 5.2f, z0 - 0.1f), col_e(230, 40, 40, 220), 0);
             }
+            if (bi == 4 && bj == 2 && side == 0 && s == 1) {
+                /* v4.0 GIVEAWAY MART: groene lichtbak, grote etalageramen, glazen schuifdeur */
+                float cx = (x0 + x1) * 0.5f;
+                W->poi[POI_MART] = v3(cx, 0, iz0 - SIDEWALK * 0.5f - 0.3f);
+                mb_box(cur, v3(x0 + 0.4f, CURB + 3.9f, z0 - 0.5f), v3(x1 - 0.4f, CURB + 5.3f, z0 - 0.1f), col_e(60, 200, 90, 230), 0);
+                mb_box(cur, v3(cx - 2.6f, CURB + 4.35f, z0 - 0.55f), v3(cx + 2.6f, CURB + 4.85f, z0 - 0.5f), col_e(250, 250, 250, 255), 0);
+                mb_box(cur, v3(x0 + 0.4f, CURB + 2.9f, z0 - 1.6f), v3(x1 - 0.4f, CURB + 3.05f, z0), col(40, 130, 60), 0);
+                mb_box(cur, v3(x0 + 0.3f, CURB, z0 - 0.06f), v3(x1 - 0.3f, CURB + 2.8f, z0 - 0.02f), col_e(190, 220, 240, 120), 0);
+                mb_quad(cur, v3(cx - 1.0f, CURB, z0 - 0.08f), v3(cx + 1.0f, CURB, z0 - 0.08f),
+                        v3(cx + 1.0f, CURB + 2.4f, z0 - 0.08f), v3(cx - 1.0f, CURB + 2.4f, z0 - 0.08f), v3(0, 0, -1), col_e(230, 245, 255, 170));
+            }
             if (bi == 1 && bj == 4 && side == 1 && s == 1) {
                 W->poi[POI_BIKESHOP] = v3((x0 + x1) * 0.5f, 0, iz1 + SIDEWALK * 0.5f + 0.3f);
             }

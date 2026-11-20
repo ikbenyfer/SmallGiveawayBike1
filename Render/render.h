@@ -34,6 +34,7 @@ typedef struct {
     GMesh cash, gift, cp, arrow, shadow, marker, siren, gun, tracer, spoiler, weapon[4];
     GMesh carBody[CAR_MODELS], carDetail[CAR_MODELS], moto[MOTO_MODELS];
     GMesh carBodyLo[CAR_MODELS], carDetailLo[CAR_MODELS], motoLo[MOTO_MODELS];
+    GMesh store[6];   /* v4.0: winkel-interieurs (STORE_COUNT) */
     GMesh homeExt[3], homeInt[3], homeGar[4];   /* eigen huis: buiten, binnen, ondergrondse garage */
     GMesh decor[3][5];                            /* luxe spullen uit BLING, per huisgrootte */
     struct RWorld {
