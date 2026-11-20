@@ -391,6 +391,31 @@ jobs:
           name: SmallGiveawayBike1-Quest
           path: SmallGiveawayBike1-Quest.apk
 
+  switch:
+    name: Nintendo Switch-versie (homebrew .nro)
+    runs-on: ubuntu-24.04
+    container: devkitpro/devkita64:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pakketten (portlibs en Python voor de plaatjes)
+        run: |
+          dkp-pacman -Syu --noconfirm --needed switch-sdl2 switch-sdl2_mixer switch-mesa switch-curl switch-zlib switch-pkg-config || true
+          apt-get update && apt-get install -y python3 python3-pil fonts-dejavu-core make
+
+      - name: romfs + icoon klaarzetten
+        run: bash tools/switch_prepare.sh
+
+      - name: Bouwen (.nro)
+        run: |
+          make -f Switch/Makefile -j4
+          ls -l SmallGiveawayBike1.nro
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SmallGiveawayBike1-Switch
+          path: SmallGiveawayBike1.nro
+
   release:
     name: GitHub-release (iPad + Windows + Linux + Android + Quest)
     needs: [preview, build, windows, linux, android, quest]

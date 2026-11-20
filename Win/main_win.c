@@ -1,6 +1,8 @@
 /* Windows-versie: SDL2 (venster, toetsenbord/muis, geluid via SDL_mixer), desktop-OpenGL,
  * WinHTTP (Windows) of libcurl (Linux, bouwen met -DSGB_LINUX_GL) voor de echte NL-kaart. Opslag in %APPDATA%\SmallGiveawayBike1.
- * Android (__ANDROID__): zelfde code met OpenGL ES 2, touch, bestanden uit de APK-assets en HTTP via Java (SGBActivity.httpGet). */
+ * Android (__ANDROID__): zelfde code met OpenGL ES 2, touch, bestanden uit de APK-assets en HTTP via Java (SGBActivity.httpGet).
+ * Nintendo Switch (__SWITCH__, homebrew .nro via devkitPro/libnx): OpenGL ES 2 (mesa), Joy-Cons, touchscreen,
+ * bestanden uit romfs:/, opslag in sdmc:/switch/SmallGiveawayBike1, HTTP via libcurl. */
 #ifdef _WIN32
 #include "glwin.h"
 #include <winhttp.h>
@@ -16,6 +18,9 @@
 #include <android/log.h>
 #else
 #include <curl/curl.h>
+#endif
+#ifdef __SWITCH__
+#include <switch.h>
 #endif
 #include <pthread.h>
 #include <unistd.h>
@@ -564,7 +569,8 @@ static void pad_poll(void) {
 
 static void *getproc(const char *n) { return SDL_GL_GetProcAddress(n); }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(__SWITCH__)
+#define SGB_TOUCH 1
 static int g_scrW = 1, g_scrH = 1, g_vx, g_vy, g_vw = 1, g_vh = 1;   /* scherm en 4:3-beeld in pixels */
 #endif
 
@@ -586,6 +592,12 @@ int main(int argc, char **argv) {
 #elif defined(__ANDROID__)
     snprintf(exe, sizeof(exe), ".");
     slash = NULL;
+#elif defined(__SWITCH__)
+    romfsInit();
+    socketInitializeDefault();
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    snprintf(exe, sizeof(exe), "romfs:");
+    slash = NULL;
 #else
     {
         ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
@@ -595,7 +607,11 @@ int main(int argc, char **argv) {
     curl_global_init(CURL_GLOBAL_DEFAULT);
 #endif
     if (slash) *slash = 0;
+#ifdef __SWITCH__
+    snprintf(DATA, sizeof(DATA), "romfs:");   /* alle bestanden zitten in de romfs van de .nro */
+#else
     snprintf(DATA, sizeof(DATA), "%s" SEP "data", exe);
+#endif
     if (!BASE[0]) {
 #ifdef _WIN32
         if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, BASE) != S_OK) snprintf(BASE, sizeof(BASE), "%s", exe);
@@ -603,6 +619,8 @@ int main(int argc, char **argv) {
 #elif defined(__ANDROID__)
         const char *ip = SDL_AndroidGetInternalStoragePath();
         snprintf(BASE, sizeof(BASE), "%s", ip ? ip : ".");
+#elif defined(__SWITCH__)
+        snprintf(BASE, sizeof(BASE), "sdmc:/switch/SmallGiveawayBike1");
 #else
         const char *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
         if (xdg && xdg[0]) snprintf(BASE, sizeof(BASE), "%s/SmallGiveawayBike1", xdg);
@@ -616,6 +634,9 @@ int main(int argc, char **argv) {
     }
     settings_load();
 
+#ifdef __SWITCH__
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+#endif
 #ifdef __ANDROID__
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
@@ -625,7 +646,15 @@ int main(int argc, char **argv) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", SDL_GetError(), NULL);
         return 1;
     }
-#ifdef __ANDROID__
+#ifdef __SWITCH__
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    win = SDL_CreateWindow("Small Giveaway Bike 1", 0, 0, 1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
+    (void)W; (void)H;
+#elif defined(__ANDROID__)
     android_jni_init();
     (void)W; (void)H;
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -653,7 +682,7 @@ int main(int argc, char **argv) {
         }
     }
     ctx = SDL_GL_CreateContext(win);
-#ifdef __ANDROID__
+#ifdef SGB_TOUCH
     if (!ctx) {   /* sommige toestellen hebben geen 24-bits diepte */
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
         ctx = SDL_GL_CreateContext(win);
@@ -670,8 +699,8 @@ int main(int argc, char **argv) {
     }
     SDL_GL_SetSwapInterval(1);
     plat_log("GL: %s / %s", glGetString(GL_RENDERER), glGetString(GL_VERSION));
-#ifdef __ANDROID__
-    fe_set_desktop(0);   /* touch-knoppen op het scherm */
+#ifdef SGB_TOUCH
+    fe_set_desktop(0);   /* touch-knoppen op het scherm (verdwijnen zodra je een controller gebruikt) */
 #else
     fe_set_desktop(1);
 #endif
@@ -734,7 +763,7 @@ int main(int argc, char **argv) {
                 }
                 break;
             case SDL_MOUSEWHEEL: fe_mouse_wheel((float)e.wheel.y); break;
-#ifdef __ANDROID__
+#ifdef SGB_TOUCH
             case SDL_FINGERDOWN:
             case SDL_FINGERMOTION:
             case SDL_FINGERUP: {
@@ -779,7 +808,7 @@ int main(int argc, char **argv) {
         {
             int dw, dh;
             SDL_GL_GetDrawableSize(win, &dw, &dh);
-#ifdef __ANDROID__
+#ifdef SGB_TOUCH
             {   /* breedbeeld vult het hele scherm; smaller dan 4:3 (zelden) krijgt randen boven en onder */
                 int vw = dw, vh = dh;
                 if (dw * 3 < dh * 4) vh = dw * 3 / 4;
@@ -802,5 +831,9 @@ int main(int argc, char **argv) {
     SDL_GL_DeleteContext(ctx);
     SDL_DestroyWindow(win);
     SDL_Quit();
+#ifdef __SWITCH__
+    socketExit();
+    romfsExit();
+#endif
     return 0;
 }
