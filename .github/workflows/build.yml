@@ -201,7 +201,7 @@ jobs:
           cp deps/SDL2-2.30.9/x86_64-w64-mingw32/bin/SDL2.dll $P/
           cp deps/SDL2_mixer-2.8.0/x86_64-w64-mingw32/bin/SDL2_mixer.dll $P/
           python3 tools/linux_assets.py $P/data
-          cp Resources/sfx_*.wav Resources/music.mp3 Resources/nl_hb.pak Resources/nl_hb_map.txt $P/data/
+          cp Resources/sfx_*.wav Resources/vo_*.mp3 Resources/music.mp3 Resources/nl_hb.pak Resources/nl_hb_map.txt $P/data/
           cat > $P/LEESMIJ.txt <<'TXT'
           Small Giveaway Bike 1 - Windows-versie
           =======================================
@@ -259,7 +259,7 @@ jobs:
           mkdir -p $P/data
           cp SmallGiveawayBike1 $P/
           python3 tools/linux_assets.py $P/data
-          cp Resources/sfx_*.wav Resources/music.mp3 Resources/nl_hb.pak Resources/nl_hb_map.txt $P/data/
+          cp Resources/sfx_*.wav Resources/vo_*.mp3 Resources/music.mp3 Resources/nl_hb.pak Resources/nl_hb_map.txt $P/data/
           cat > $P/LEESMIJ.txt <<'TXT'
           Small Giveaway Bike 1 - Linux-versie (x64)
           ==========================================

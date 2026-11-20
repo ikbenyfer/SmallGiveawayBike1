@@ -14,6 +14,19 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v4.5.0: stemmen en cutscenes
+
+- **Cutscenes voor elke missie:** voordat een missie begint, staat je contact voor je en vertelt hij of zij de opdracht. Je ziet zwarte filmbalken, camerashots over de schouder en ondertitels. Tik (of druk op spring/actie) om over te slaan.
+- **Personages met een eigen stem:** de Giveaway Guy, Mama Rosa, Coach Dre, Rico, Big T, Nina, de politie, de verkopers en jijzelf.
+- **Tijdens de missies:** je contact praat mee bij belangrijke checkpoints, bij het alarm, als de kluis open is, en bij gehaald of mislukt.
+- **Losse stemmen in de stad:**
+  - Je zegt iets bij instappen, als de politie komt of je ze kwijt bent, bij gearresteerd worden en als je geld oppakt.
+  - Voetgangers roepen als er geschoten wordt.
+  - Verkopers groeten je als je binnenkomt.
+  - Bij de overval van de GIVEAWAY MART zeg je "Empty the register!" en de kassamedewerker reageert.
+- Alle gesproken tekst staat ook als ondertitel in beeld. De muziek gaat zachter als er iemand praat.
+- De stemmen zijn lokaal gemaakt met Kokoro TTS (`tools/make_voices.py`).
+
 ## v4.0.0: winkels van binnen + GIVEAWAY MART
 
 - Je loopt nu echt naar binnen in de winkels: BLOCK ARMS (wapens), GIVEAWAY BURGER, BLOCK GYM, DRIP en BLING. Loop door de deur-marker en je staat in de winkel.

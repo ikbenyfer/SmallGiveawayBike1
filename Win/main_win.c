@@ -315,8 +315,29 @@ void plat_loop(int sid, float vol, float rate) {
     Mix_Volume(sid, (int)(vol * MIX_MAX_VOLUME));
 }
 
+static Mix_Chunk *voice;
+static int voiceCh = -1;
+
+static int voice_playing(void) { return voice && voiceCh >= 0 && Mix_Playing(voiceCh) && Mix_GetChunk(voiceCh) == voice; }
+
+void plat_voice(const char *key, float vol) {
+    char nm[96], p[MAX_PATH];
+    if (!audioOk) return;
+    if (voice_playing()) Mix_HaltChannel(voiceCh);
+    if (voice) { Mix_FreeChunk(voice); voice = NULL; }
+    voiceCh = -1;
+    if (!key || vol <= 0.01f) return;
+    snprintf(nm, sizeof(nm), "vo_%s.mp3", key);
+    res_path(p, sizeof(p), nm);
+    voice = Mix_LoadWAV(p);
+    if (!voice) { plat_log("stem niet geladen: %s (%s)", nm, Mix_GetError()); return; }
+    voiceCh = Mix_PlayChannel(-1, voice, 0);
+    if (voiceCh >= 0) Mix_Volume(voiceCh, (int)((vol > 1.0f ? 1.0f : vol) * MIX_MAX_VOLUME));
+}
+
 void plat_music(int on) {
     if (!audioOk || !music) return;
+    Mix_VolumeMusic(voice_playing() ? 28 : 70);   /* zachter tijdens een stem */
     if (on) {
         if (!Mix_PlayingMusic()) Mix_PlayMusic(music, -1);
         else if (Mix_PausedMusic()) Mix_ResumeMusic();

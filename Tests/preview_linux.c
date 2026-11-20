@@ -74,7 +74,9 @@ void plat_save_int(const char *key, int val) { (void)key; (void)val; }
 void plat_save_flush(void) {}
 const char *plat_key_name(int code) { (void)code; return ""; }
 int plat_autotest_requested(void) { return autotest_on; }
-void plat_autotest_done(void) { autotest_on = 0; }
+int plat_voice_stats(int missing);
+void plat_autotest_done(void) { autotest_on = 0; printf("STEMMEN: %d afgespeeld, %d ontbreken
+", plat_voice_stats(0), plat_voice_stats(1)); }
 
 void plat_write_text(const char *name, const char *text) {
     char p[512];
@@ -196,6 +198,18 @@ void plat_audio_init(const char *const *sfx, int nsfx, const char *const *loops,
 void plat_sfx(int id, float vol) { (void)id; if (vol > 0.01f) sfxPlayed++; }
 void plat_loop(int id, float vol, float rate) { (void)id; (void)rate; if (vol > 0.01f) loopsOn++; }
 void plat_music(int on) { musicOn += on; }
+/* stemmen: tellen en controleren dat het bestand echt in Resources staat */
+static int voicePlayed, voiceMissing;
+void plat_voice(const char *key, float vol) {
+    char p[256];
+    FILE *f;
+    if (!key || vol <= 0.01f) return;
+    snprintf(p, sizeof(p), "Resources/vo_%s.mp3", key);
+    f = fopen(p, "rb");
+    if (f) { fclose(f); voicePlayed++; } else { voiceMissing++; printf("STEM ONTBREEKT: %s
+", p); }
+}
+int plat_voice_stats(int missing) { return missing ? voiceMissing : voicePlayed; }
 int plat_audio_stats(void) { return sfxPlayed; }
 
 void plat_delete_file(const char *name) {

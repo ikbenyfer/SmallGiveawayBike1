@@ -2,6 +2,7 @@
 #include "../Game/home.h"
 #include "../Game/biz.h"
 #include "../Game/stores.h"
+#include "../Game/voice.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -723,6 +724,14 @@ void r_draw_scene(Renderer *r, Game *g) {
             draw_mesh(r, &r->homeInt[hl], &id);
             draw_mesh(r, &r->homeGar[gl], &id);
             for (d = 0; d < 5; d++) if ((g->decor >> d) & 1) draw_mesh(r, &r->decor[hl][d], &id);
+        }
+        /* v4.5: het contact uit de missie-cutscene */
+        if (g->cut) {
+            float cy = world_ground_y(g->w, g->cutX, g->cutZ);
+            draw_char(r, vo_speaker_variant(g->cutSpk), m4_trs_y(g->cutX, cy, g->cutZ, g->cutH), g->time * 0.3f, 0, 0, 0, 0);
+            if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
+                shadows[nsh] = v3(g->cutX, cy, g->cutZ); shs[nsh][0] = 0.45f; shs[nsh][1] = 0.45f; shs[nsh][2] = 0; nsh++;
+            }
         }
         /* v4.0: winkel van binnen + verkoper achter de toonbank */
         if (r->cam.z < STORE_ZONE_Z) {

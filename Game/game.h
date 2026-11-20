@@ -150,6 +150,13 @@ typedef struct {
     /* v4.0: binnen in winkels lopen; GIVEAWAY MART overvallen */
     int storeMarker, robArmed, statRobs;
     float storeCool, clerkScare;
+    /* v4.5: stemmen en cutscenes (zie voice.h) */
+    int voReq;                    /* regel die de frontend moet afspelen: -1 niets, -2 stoppen */
+    int voLine, voPrio; float voT;   /* huidige ondertitel en hoe lang nog */
+    int voQ[4], voQP[4], voQn;
+    float barkCool;
+    int cut, cutMission, cutIdx, cutSkip, cutSpk, noCutscenes;
+    float cutT, cutLineT, cutShotT, cutX, cutZ, cutH;
 } Game;
 
 void game_init(Game *g, World *w);
@@ -161,7 +168,8 @@ int game_near_vehicle(const Game *g);
 /* actief checkpoint (voor kaart/pijl); geeft aantal punten in out (max 8) */
 int game_targets(const Game *g, V3 *out, int max);
 void game_teleport(Game *g, float x, float z, float h);
-void game_start_mission(Game *g, int m);
+void game_start_mission(Game *g, int m);   /* met cutscene (als die er is) */
+void game_mission_begin(Game *g, int m);   /* direct, zonder cutscene */
 void game_message(Game *g, const char *txt, float t);
 void game_sfx(Game *g, int id, float x, float z);
 void game_add_wanted(Game *g, int n);

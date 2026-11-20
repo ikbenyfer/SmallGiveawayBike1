@@ -28,5 +28,5 @@ done
 A=$P/app/src/main/assets
 mkdir -p $A
 python3 tools/linux_assets.py $A
-cp Resources/sfx_*.wav Resources/music.mp3 Resources/nl_hb.pak Resources/nl_hb_map.txt $A/
+cp Resources/sfx_*.wav Resources/vo_*.mp3 Resources/music.mp3 Resources/nl_hb.pak Resources/nl_hb_map.txt $A/
 ls $A | head -50

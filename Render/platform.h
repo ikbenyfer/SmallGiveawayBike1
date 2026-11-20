@@ -47,5 +47,8 @@ void plat_audio_init(const char *const *sfx, int nsfx, const char *const *loops,
 void plat_sfx(int id, float vol);
 void plat_loop(int id, float vol, float rate);   /* vol 0 = stil */
 void plat_music(int on);
+/* v4.5 stemmen: vo_<key>.mp3 uit de bundel; er speelt er maar een tegelijk (een nieuwe stopt de vorige).
+ * Zolang er gesproken wordt, gaat de muziek zachter. key NULL = stoppen. */
+void plat_voice(const char *key, float vol);
 
 #endif

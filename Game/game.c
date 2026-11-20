@@ -1,5 +1,6 @@
 #include "game.h"
 #include "stores.h"
+#include "voice.h"
 #include "home.h"
 #include "biz.h"
 #include "models.h"
@@ -330,6 +331,12 @@ static void setup_missions(Game *g) {
 
 void game_start_mission(Game *g, int m) {
     if (m < 0 || m >= NMISSIONS) return;
+    if (!g->noCutscenes && !g->nl && m < VO_MISSIONS && VO_MIS[m].nintro > 0) { cut_start(g, m); return; }
+    game_mission_begin(g, m);
+}
+
+void game_mission_begin(Game *g, int m) {
+    if (m < 0 || m >= NMISSIONS) return;
     g->mission = m;
     g->mstep = 0;
     g->mmask = 0;
@@ -354,8 +361,10 @@ static void mission_end(Game *g, int ok) {
         g->statMissionsPassed++;
         snprintf(b, sizeof(b), "+$%d", rew);
         banner(g, "MISSION PASSED", b, 1, 4.0f);
+        if (m < VO_MISSIONS) vo_say(g, VO_MIS[m].pass, VP_MISSION);
     } else {
         banner(g, "MISSION FAILED", "Out of time. Try again from the MISSIONS menu.", 0, 4.0f);
+        if (m < VO_MISSIONS) vo_say(g, VO_MIS[m].fail, VP_MISSION);
         game_sfx(g, SFX_FAIL, g->p.x, g->p.z);
     }
     g->mission = -1;
@@ -405,6 +414,7 @@ static void update_missions(Game *g, float dt) {
                     if (!need_ok(g, c->need)) { if (g->msgT <= 0) game_message(g, c->need == NEED_BIKE ? "You need a bike for this!" : (c->need == NEED_FOOT ? "Get off your vehicle!" : "You need a car for this!"), 2.0f); continue; }
                     g->mmask |= 1u << i;
                     g->mstep++;
+                    if (g->mission < VO_MISSIONS) vo_say(g, VO_MIS[g->mission].step[g->mstep], VP_MISSION);
                     game_sfx(g, SFX_CHECK, px, pz);
                     {
                         char b[64];
@@ -427,6 +437,7 @@ static void update_missions(Game *g, float dt) {
                 g->wanted = 0;
                 game_add_wanted(g, c->alarm);
                 game_message(g, "ALARM! The police are on their way!", 3.0f);
+                if (g->mission < VO_MISSIONS) vo_say(g, VO_MIS[g->mission].alarm, VP_MISSION);
                 game_sfx(g, SFX_ALARM, px, pz);
             }
             if (inside && c->clean && g->wanted > 0) {
@@ -438,6 +449,11 @@ static void update_missions(Game *g, float dt) {
                     g->mstep++;
                     g->alarmDone = 0;   /* volgende kluis/kassa kan weer alarm geven */
                     game_message(g, "Vault open - you got the cash!", 2.5f);
+                    if (g->mission < VO_MISSIONS) {
+                        int sl = g->mstep < MAX_CP + 1 ? VO_MIS[g->mission].step[g->mstep] : -1;
+                        vo_say(g, VO_MIS[g->mission].open, VP_MISSION);
+                        vo_queue(g, sl, VP_MISSION);
+                    }
                     game_sfx(g, SFX_CASH, px, pz);
                     if (g->mstep >= m->ncp) mission_end(g, 1);
                 }
@@ -447,6 +463,7 @@ static void update_missions(Game *g, float dt) {
                 } else {
                     g->mstep++;
                     if (g->mstep < m->ncp) game_sfx(g, SFX_CHECK, px, pz);
+                    if (g->mstep < m->ncp && g->mission < VO_MISSIONS) vo_say(g, VO_MIS[g->mission].step[g->mstep], VP_MISSION);
                     if (g->mstep >= m->ncp) mission_end(g, 1);
                 }
             }
@@ -531,6 +548,7 @@ static void enter_vehicle(Game *g, int idx) {
     g->p.vy = 0;
     g->statEnter++;
     game_sfx(g, SFX_DOOR, v->x, v->z);
+    vo_bark(g, v->type == VEH_BIKE ? VB_BIKEIN : VB_CARIN, 0.3f);
 }
 
 static void exit_vehicle(Game *g) {
@@ -616,7 +634,7 @@ static void vehicle_world_collide(Game *g, Vehicle *v) {
         if (v->hitcool <= 0 && g->p.veh >= 0 && v == &g->veh[g->p.veh]) {
             float imp = fabsf(v->speed) * fabsf(d);
             if (imp > 7.0f) game_damage(g, (imp - 7.0f) * 2.5f);
-            if (imp > 4.0f) game_sfx(g, SFX_CRASH, v->x, v->z);
+            if (imp > 4.0f) { game_sfx(g, SFX_CRASH, v->x, v->z); if (v == &g->veh[g->p.veh] || g->p.veh < 0) vo_bark(g, VB_CRASH, 0.2f); }
         }
         if (v->hitcool <= 0) {
             if ((d < -0.6f && v->speed > 0) || (d > 0.6f && v->speed < 0)) v->speed = -v->speed * 0.25f;
@@ -941,6 +959,7 @@ void game_init(Game *g, World *w) {
     g->w = w;
     g->rng.s = 20261118u;
     g->mission = -1;
+    g->voReq = -1; g->voLine = -1;
     g->nl = w->real;
     g->autoAim = 1;
     g->p.x = w->poi[POI_SPAWN].x;
@@ -1040,6 +1059,7 @@ static void home_action(Game *g, int kind) {
         if (g->wanted > 0) { game_message(g, "The police are watching - lose them first!", 2.0f); break; }
         home_room(g->homeLvl, &x0, &z0, &x1, &z1);
         home_go(g, x0 + 2.0f, (z0 + z1) * 0.5f, PI_F * 0.5f, "Home sweet home");
+        vo_bark(g, VB_HOME, 0.6f);
         break;
     case HM_RAMP:
         if (g->wanted > 0) { game_message(g, "The police are watching - lose them first!", 2.0f); break; }
@@ -1119,6 +1139,10 @@ void game_store_enter(Game *g, int s) {
     store_entry(s, &x, &z, &h);
     store_go(g, x, z, h);
     g->storeMarker = SM_NONE;
+    {
+        static const int greet[STORE_COUNT] = {VB_STORE_GUN, VB_STORE_BURGER, VB_STORE_GYM, VB_STORE_DRIP, VB_STORE_BLING, VB_STORE_MART};
+        vo_say(g, vo_pick(g, greet[s]), VP_MISSION);
+    }
     if (s == STORE_MART) {
         g->robArmed = 1;
         g->clerkScare = 0;
@@ -1139,7 +1163,9 @@ static void store_leave(Game *g, int s) {
 
 static void store_rob(Game *g) {
     float x, z, h;
-    if (!g->robArmed) { game_message(g, "The register is empty. Come back later!", 2.0f); return; }
+    if (!g->robArmed) { game_message(g, "The register is empty. Come back later!", 2.0f); vo_say(g, vo_pick(g, VB_ROB_EMPTY), VP_MISSION); return; }
+    vo_say(g, vo_pick(g, VB_ROB_YOU), VP_MISSION);
+    vo_queue(g, vo_pick(g, VB_ROB_CLERK), VP_MISSION);
     g->robArmed = 0;
     g->clerkScare = 6.0f;
     g->money += MART_LOOT;
@@ -1374,7 +1400,7 @@ static void peds_panic(Game *g, float x, float z) {
         if (!p->active || p->state == PED_DOWN) continue;
         dx = p->x - x; dz = p->z - z;
         if (dx * dx + dz * dz < 28.0f * 28.0f) {
-            if (p->state != PED_FLEE && g->screamCool <= 0) { game_sfx(g, SFX_SCREAM, p->x, p->z); g->screamCool = 2.5f; }
+            if (p->state != PED_FLEE && g->screamCool <= 0) { game_sfx(g, SFX_SCREAM, p->x, p->z); g->screamCool = 2.5f; vo_bark(g, VB_SHOOT, 0.3f); }
             p->state = PED_FLEE; p->timer = 5.0f; p->h = atan2f(dx, dz);
         }
     }
@@ -1775,6 +1801,7 @@ static void update_shops(Game *g) {
 
 void game_add_wanted(Game *g, int n) {
     if (g->crimeCool > 0 && n < 2) return;
+    if (g->wanted == 0) vo_bark(g, VB_WANTED, 0.8f);
     g->wanted += n;
     if (g->wanted > 3) g->wanted = 3;
     g->evadeT = 0;
@@ -1793,7 +1820,7 @@ void game_damage(Game *g, float amount) {
     if (g->health < 0) g->health = 0;
     g->hurtT = 0;
     g->hurtFlash = 0.6f;
-    if (g->hurtSndCool <= 0) { game_sfx(g, SFX_HURT, g->p.x, g->p.z); g->hurtSndCool = 0.5f; }
+    if (g->hurtSndCool <= 0) { game_sfx(g, SFX_HURT, g->p.x, g->p.z); g->hurtSndCool = 0.5f; vo_bark(g, VB_HURT, 0.35f); }
 }
 
 static void respawn(Game *g, const char *title, const char *sub) {
@@ -1903,7 +1930,7 @@ static void update_police_and_health(Game *g, float dt) {
             if (g->evadeT > 10.0f) {
                 g->wanted--;
                 g->evadeT = 0;
-                if (g->wanted == 0) game_message(g, "You lost the police!", 2.5f);
+                if (g->wanted == 0) { game_message(g, "You lost the police!", 2.5f); vo_bark(g, VB_LOSTCOPS, 1.0f); }
             }
         }
         /* gewapend te voet: de politie arresteert niet, maar schiet */
@@ -1917,6 +1944,7 @@ static void update_police_and_health(Game *g, float dt) {
             g->money -= fine;
             snprintf(b, sizeof(b), "The police caught you. Fine: -$%ld", fine);
             respawn(g, "BUSTED", b);
+            vo_say(g, vo_pick(g, VB_BUSTED), VP_MISSION);
             return;
         }
     } else g->bustT = 0;
@@ -1954,7 +1982,7 @@ static void update_police_and_health(Game *g, float dt) {
 
     g->hurtT += dt;
     if (g->hurtT > 5.0f && g->health < 100.0f) g->health = fminf(100.0f, g->health + 4.0f * dt);
-    if (g->health <= 0) respawn(g, "KNOCKED OUT", "You got hurt too badly. Back to the plaza.");
+    if (g->health <= 0) { respawn(g, "KNOCKED OUT", "You got hurt too badly. Back to the plaza."); vo_say(g, vo_pick(g, VB_WASTED), VP_MISSION); }
 }
 
 void game_start_mission_at(Game *g, int m) {
@@ -1999,8 +2027,15 @@ void game_start_mission_at(Game *g, int m) {
 void game_update(Game *g, const Input *in, float dt) {
     int i;
     float px, pz;
+    Input still;
     if (dt > 0.1f) dt = 0.1f;
     g->time += dt;
+    vo_tick(g, dt);
+    if (g->cut) {   /* v4.5 cutscene: de wereld loopt door, de speler staat stil */
+        cut_update(g, in, dt);
+        memset(&still, 0, sizeof(still));
+        if (g->cut) in = &still;
+    }
     if (g->p.cool > 0) g->p.cool -= dt;
     if (g->p.anT > 0) { g->p.anT -= dt; if (g->p.anT <= 0) { g->p.anT = 0; g->p.anKind = 0; } }
     if (g->msgT > 0) g->msgT -= dt;
@@ -2091,6 +2126,7 @@ void game_update(Game *g, const Input *in, float dt) {
             g->moneyFlash = 1.2f;
             g->cashTimer[i] = 120.0f;
             g->statCash++;
+            vo_bark(g, VB_CASH, 0.5f);
             game_sfx(g, SFX_CASH, px, pz);
             snprintf(b, sizeof(b), "+$%d", val);
             game_message(g, b, 1.2f);
@@ -2117,6 +2153,7 @@ void game_update(Game *g, const Input *in, float dt) {
         if (!game_store_inside(g)) g->inBiz = cur;
     }
     update_camera(g, in, dt);
+    if (g->cut) cut_camera(g);
 
     /* geldteller loopt op */
     if (g->moneyShown < g->money) {

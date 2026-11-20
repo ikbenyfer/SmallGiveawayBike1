@@ -385,8 +385,22 @@ void plat_loop(int sid, float vol, float rate) {
     if (!pl.playing) [pl play];
 }
 
+static AVAudioPlayer *gVoice;
+
+void plat_voice(const char *key, float vol) {
+    @autoreleasepool {
+        if (gVoice) { [gVoice stop]; gVoice = nil; }
+        if (!key || vol <= 0.01f) return;
+        gVoice = load_player([NSString stringWithFormat:@"vo_%s.mp3", key], NO);
+        if (!gVoice) return;
+        gVoice.volume = vol > 1.0f ? 1.0f : vol;
+        [gVoice play];
+    }
+}
+
 void plat_music(int on) {
     if (!gMusic) return;
+    gMusic.volume = (gVoice && gVoice.playing) ? 0.22f : 0.55f;   /* zachter tijdens een stem */
     if (on && !gMusic.playing) [gMusic play];
     else if (!on && gMusic.playing) [gMusic pause];
 }

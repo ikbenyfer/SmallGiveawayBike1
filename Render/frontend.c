@@ -12,6 +12,7 @@
 #include "../Game/home.h"
 #include "../Game/biz.h"
 #include "../Game/stores.h"
+#include "../Game/voice.h"
 #define NL_MAX_AREAS 64
 #define NL_DL_R 2
 
@@ -335,6 +336,7 @@ void fe_background(void) {
 static void load_slot(void) {
     int i, done;
     game_init(&F.G, &F.W);
+    F.G.noCutscenes = F.at;   /* autotest: cutscenes alleen in de eigen teststap */
     if (!F.at) {
         F.G.money = sload("money", 0);
         F.G.moneyShown = F.G.money;
@@ -960,6 +962,51 @@ static void controls_tap(float x, float y, int phase) {
     } else if (hit == 1899) set_state(ST_SETTINGS);
 }
 
+/* v4.5 ondertitel: naam in kleur, tekst eronder, netjes afgebroken */
+static void draw_subtitle(int line, float y, float alpha, int cutStyle) {
+    Renderer *R = &F.R;
+    float W = (float)R->W, size = cutStyle ? 26.0f : 21.0f, maxw = cutStyle ? (W < 1100 ? W - 120 : 980) : (W - 440 < 760 ? W - 440 : 760);
+    char rows[4][160], word[64];
+    const char *s, *t;
+    int nr = 0, k, spk;
+    float bw = 0;
+    if (line < 0 || line >= VO_LINES) return;
+    spk = VO[line].spk;
+    rows[0][0] = 0;
+    for (s = VO[line].text; *s && nr < 4;) {
+        char tryb[200];
+        int n = 0;
+        while (*s == ' ') s++;
+        for (t = s; *t && *t != ' ' && n < 63; t++) word[n++] = *t;
+        word[n] = 0;
+        if (!n) break;
+        snprintf(tryb, sizeof(tryb), "%s%s%s", rows[nr], rows[nr][0] ? " " : "", word);
+        if (rows[nr][0] && ui_text_w(R, tryb, size) > maxw) { nr++; if (nr >= 4) break; snprintf(rows[nr], sizeof(rows[nr]), "%s", word); }
+        else snprintf(rows[nr], sizeof(rows[nr]), "%s", tryb);
+        s = t;
+    }
+    if (nr < 4 && rows[nr][0]) nr++;
+    for (k = 0; k < nr; k++) { float w2 = ui_text_w(R, rows[k], size); if (w2 > bw) bw = w2; }
+    if (!cutStyle) ui_rect(R, W * 0.5f - bw * 0.5f - 18, y - size - 14, bw + 36, size * 1.25f * nr + size + 26, 0, 0, 0, 0.55f * alpha);
+    {
+        float cr = spk == VS_YOU ? 0.45f : (spk == VS_COP ? 0.4f : 1.0f), cg = spk == VS_YOU ? 0.85f : (spk == VS_COP ? 0.6f : 0.82f), cb = spk == VS_YOU ? 1.0f : (spk == VS_COP ? 1.0f : 0.25f);
+        ui_text(R, VO_SPK_NAME[spk], W * 0.5f, y - size - 6, size * 0.75f, cr, cg, cb, alpha, 1);
+    }
+    for (k = 0; k < nr; k++) ui_text(R, rows[k], W * 0.5f, y + k * size * 1.25f, size, 1, 1, 1, alpha, 1);
+}
+
+static void draw_cutscene(void) {
+    Renderer *R = &F.R;
+    Game *g = &F.G;
+    float W = (float)R->W, H = (float)R->H, k = clampf(g->cutT / 0.5f, 0, 1), bar = H * 0.13f * k;
+    ui_rect(R, 0, 0, W, bar, 0, 0, 0, 1);
+    ui_rect(R, 0, H - bar, W, bar, 0, 0, 0, 1);
+    if (g->cutIdx < 0 && g->cutMission >= 0 && g->cutMission < NMISSIONS)
+        ui_text(R, g->mdef[g->cutMission].title, W * 0.5f, H * 0.5f - 20, 44, 1, 0.85f, 0.25f, clampf(g->cutT * 2.0f, 0, 1), 1);
+    if (g->cutIdx >= 0 && g->voT > 0) draw_subtitle(g->voLine, H - bar - 70, 1, 1);
+    ui_text(R, "TAP TO SKIP", W - 30, H - bar * 0.5f - 10, 18, 1, 1, 1, 0.55f + 0.25f * sinf(g->cutT * 3.0f), 2);
+}
+
 static void draw_hud(void) {
     Renderer *R = &F.R;
     Game *g = &F.G;
@@ -967,6 +1014,9 @@ static void draw_hud(void) {
     char b[96];
     int mode = game_mode(g);
     float x, y, r;
+
+    if (g->cut) { draw_cutscene(); return; }
+    if (g->voT > 0 && g->voLine >= 0) draw_subtitle(g->voLine, H - 150, clampf(g->voT / 0.3f, 0, 1), 0);
 
     draw_minimap();
     if (F.showFps) {
@@ -2568,6 +2618,11 @@ static void stick_value(float bx, float by, float kx, float ky, float *ox, float
 
 static void game_touch(TSlot *s, int phase) {
     Renderer *R = &F.R;
+    if (F.G.cut) {   /* v4.5: tikken = cutscene overslaan */
+        s->ctl = CTL_UI;
+        if (phase == TOUCH_BEGIN && F.G.cutT > 0.4f) F.G.cutSkip = 1;
+        return;
+    }
     if (phase == TOUCH_BEGIN) {
         static const int order[8] = {CTL_PAUSE, CTL_GAS, CTL_BRAKE, CTL_JUMP, CTL_ACTION, CTL_FIRE, CTL_WSWITCH, CTL_RUN};
         int k;
@@ -3413,6 +3468,31 @@ static void autotest_tick(float dt) {
             for (k = 0; k < MAX_POLICE; k++) g->veh[g->firstPolice + k].active = 0;
             for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) g->ped[k].active = 0;
             F.atT3 = t;
+            F.atStep = 140;
+        }
+        else if (F.atStep == 140) {   /* v4.5: cutscene voor missie 1 bekijken */
+            g->noCutscenes = 0;
+            game_start_mission_at(g, 0);
+            rep("Cutscene gestart: cut=%d, missie=%d (nog -1 verwacht), contact %s", g->cut, g->mission, VO_SPK_NAME[g->cutSpk]);
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 141 && t > F.atT3 + 0.7f) { at_shot("50_cutscene_wide"); F.atStep++; }
+        else if (F.atStep == 142 && g->cutIdx == 0 && g->cutShotT > 1.2f) { at_shot("51_cutscene_contact"); F.atStep++; }
+        else if (F.atStep == 143 && ((g->cutIdx == 2 && g->cutShotT > 0.8f) || t > F.atT3 + 30.0f)) { at_shot("52_cutscene_player"); F.atStep++; }
+        else if (F.atStep == 144 && ((g->cutIdx == 3 && g->cutShotT > 1.0f) || t > F.atT3 + 40.0f)) {
+            rep("Cutscene: regel %d van %d, ondertitel '%s'", g->cutIdx + 1, VO_MIS[0].nintro, g->voLine >= 0 ? VO[g->voLine].text : "-");
+            g->cutSkip = 1;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 145 && t > F.atT3 + 0.6f) {
+            rep("Cutscene overgeslagen: cut=%d, missie=%d (0 verwacht)", g->cut, g->mission);
+            at_shot("53_after_cutscene");
+            g->mission = -1;
+            g->noCutscenes = 1;
+            vo_stop(g);
+            F.atT3 = t;
             F.atStep = 122;
         }
         else if (F.atStep == 122) {   /* thuis: luxe spullen bekijken */
@@ -3715,6 +3795,10 @@ void fe_frame(double now) {
         float eng = 0, engRate = 1, bike = 0, bikeRate = 1, siren = 0;
         int i;
         plat_music(F.musicOn && playing);
+        if (g->voReq != -1 && F.loadDone) {   /* v4.5 stemmen */
+            plat_voice(g->voReq >= 0 && F.sfxOn ? VO[g->voReq].key : NULL, 1.0f);
+            g->voReq = -1;
+        }
         if (F.sfxOn && F.state == ST_GAME && F.loadDone) {
             for (i = 0; i < g->nsfx; i++) {
                 float dx = g->sfxx[i] - g->p.x, dz = g->sfxz[i] - g->p.z;
