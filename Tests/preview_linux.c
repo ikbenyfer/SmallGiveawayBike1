@@ -75,8 +75,7 @@ void plat_save_flush(void) {}
 const char *plat_key_name(int code) { (void)code; return ""; }
 int plat_autotest_requested(void) { return autotest_on; }
 int plat_voice_stats(int missing);
-void plat_autotest_done(void) { autotest_on = 0; printf("STEMMEN: %d afgespeeld, %d ontbreken
-", plat_voice_stats(0), plat_voice_stats(1)); }
+void plat_autotest_done(void) { autotest_on = 0; printf("STEMMEN: %d afgespeeld, %d ontbreken\n", plat_voice_stats(0), plat_voice_stats(1)); }
 
 void plat_write_text(const char *name, const char *text) {
     char p[512];
@@ -206,8 +205,7 @@ void plat_voice(const char *key, float vol) {
     if (!key || vol <= 0.01f) return;
     snprintf(p, sizeof(p), "Resources/vo_%s.mp3", key);
     f = fopen(p, "rb");
-    if (f) { fclose(f); voicePlayed++; } else { voiceMissing++; printf("STEM ONTBREEKT: %s
-", p); }
+    if (f) { fclose(f); voicePlayed++; } else { voiceMissing++; printf("STEM ONTBREEKT: %s\n", p); }
 }
 int plat_voice_stats(int missing) { return missing ? voiceMissing : voicePlayed; }
 int plat_audio_stats(void) { return sfxPlayed; }
