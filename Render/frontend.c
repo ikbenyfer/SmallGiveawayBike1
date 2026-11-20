@@ -61,7 +61,7 @@ static struct {
     char shopMsg[96];
     float atMaxSpeed;
     int atShot2, bizShop, atBiz, controlsFrom;
-    long atMoney0;
+    long atMart0;
     int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
@@ -3383,7 +3383,7 @@ static void autotest_tick(float dt) {
         }
         else if (F.atStep == 132) {   /* kassa overvallen */
             V3 sp[4]; int sk[4], q, ns; float sr[4];
-            F.atMoney0 = g->money;
+            F.atMart0 = g->money;
             ns = store_markers(STORE_MART, sp, sk, sr, 4);
             for (q = 0; q < ns; q++) if (sk[q] == SM_ROB) game_teleport(g, sp[q].x, sp[q].z, 0);
             g->camYaw = 0.7f;
@@ -3391,7 +3391,7 @@ static void autotest_tick(float dt) {
             F.atStep++;
         }
         else if (F.atStep == 133 && t > F.atT3 + 1.5f) {
-            rep("Supermarkt-overval: geld +%ld (10000 verwacht), sterren=%d, overvallen=%d", g->money - F.atMoney0, g->wanted, g->statRobs);
+            rep("Supermarkt-overval: geld +%ld (10000 verwacht), sterren=%d, overvallen=%d", g->money - F.atMart0, g->wanted, g->statRobs);
             g->camYaw = 0.7f;
             at_shot("47_mart_robbed");
             F.atT3 = t;
