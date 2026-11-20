@@ -73,8 +73,11 @@ typedef struct {
         int drew;                                     /* r_draw_scene is deze frame gebruikt */
         int hidePlayer;                               /* first person: eigen lichaam niet tekenen */
         int hands; M4 hand[2];                        /* handen op de controllers (wereldmatrix) */
+        int fist[2];                                  /* hand dicht (grip ingedrukt / wapen vast) */
+        int weaponOn; M4 weapon;                      /* wapen: -Z = loop, +Y = boven, oorsprong = greep */
+        int wheelOn; M4 wheel;                        /* stuur van de auto (first person) */
     } vr;
-    GMesh handMesh[2];
+    GMesh handMesh[4], wheelMesh;   /* 0/1 open links/rechts, 2/3 vuist links/rechts */
 } Renderer;
 
 int r_init(Renderer *r, int w, int h);          /* shaders, basistexturen, logo + achtergrond */

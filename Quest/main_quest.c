@@ -7,6 +7,8 @@
  * - First person: je zit in het hoofd van je personage; je handen volgen de controllers, het wapen zit
  *   in je rechterhand en je richt ermee. Rechterstick links/rechts = draaien in stappen.
  * - Wisselen: rechter stick indrukken (R3).
+ * - v5.1 first person: met de grip-knoppen pak je het stuur van de auto of het stuur van de fiets/motor
+ *   en stuur je echt met je handen; wapens zitten in je vuist, SMG en shotgun kun je met twee handen vasthouden.
  *
  * Knoppen (Xbox-indeling voor het spel): A springen, B rennen, X wapen wisselen, Y in/uitstappen,
  * rechtertrekker schieten/gas, linkertrekker remmen, linker stick indrukken kaart, menuknop pauze.
@@ -427,10 +429,19 @@ static struct {
     XrFrameState fs;
     /* invoer */
     XrActionSet aset;
-    XrAction aMove, aLook, aTrigL, aTrigR, aGripL, aGripR, aA, aB, aX, aY, aMenu, aStickL, aStickR, aAim, aHaptic;
+    XrAction aMove, aLook, aTrigL, aTrigR, aGripL, aGripR, aA, aB, aX, aY, aMenu, aStickL, aStickR, aAim, aGrip, aHaptic;
     XrPath hand[2];
-    XrSpace aimSpace[2];
+    XrSpace aimSpace[2], gripSpace[2];
     XrPosef aimLocal[2]; int aimOk[2];
+    XrPosef gripLocal[2]; int gripOk[2];
+    M4 handLocal[2];      /* hand in LOCAL: positie van de grip-pose, richting van de aim-pose */
+    /* sturen (first person) */
+    int grab[2]; float grabA[2], grabW[2], grabZ[2];
+    float wheel;          /* stuurhoek auto (rad, + = linksom) */
+    float bar;            /* stuur fiets/motor (-1..1) */
+    int steering;
+    int twoHand; M4 offHand;   /* tweehandig wapen: richting uit beide handen */
+    double lastT;
     /* rig */
     int firstPerson;
     float fpYaw;          /* first person te voet: kijkrichting van het lichaam (snap-turn) */
@@ -612,6 +623,7 @@ static void input_init(void) {
     X.aStickL = mk_action("stick_left_click", XR_ACTION_TYPE_BOOLEAN_INPUT, 0);
     X.aStickR = mk_action("stick_right_click", XR_ACTION_TYPE_BOOLEAN_INPUT, 0);
     X.aAim = mk_action("aim", XR_ACTION_TYPE_POSE_INPUT, 1);
+    X.aGrip = mk_action("grip_pose", XR_ACTION_TYPE_POSE_INPUT, 1);
     X.aHaptic = mk_action("haptic", XR_ACTION_TYPE_VIBRATION_OUTPUT, 1);
 #define BIND(A, P) do { b[n].action = (A); b[n].binding = path(P); n++; } while (0)
     BIND(X.aMove, "/user/hand/left/input/thumbstick");
@@ -629,6 +641,8 @@ static void input_init(void) {
     BIND(X.aStickR, "/user/hand/right/input/thumbstick/click");
     BIND(X.aAim, "/user/hand/left/input/aim/pose");
     BIND(X.aAim, "/user/hand/right/input/aim/pose");
+    BIND(X.aGrip, "/user/hand/left/input/grip/pose");
+    BIND(X.aGrip, "/user/hand/right/input/grip/pose");
     BIND(X.aHaptic, "/user/hand/left/output/haptic");
     BIND(X.aHaptic, "/user/hand/right/output/haptic");
 #undef BIND
@@ -642,6 +656,8 @@ static void input_init(void) {
         sp.subactionPath = X.hand[k];
         sp.poseInActionSpace.orientation.w = 1;
         XRC(xrCreateActionSpace(X.sess, &sp, &X.aimSpace[k]));
+        sp.action = X.aGrip;
+        XRC(xrCreateActionSpace(X.sess, &sp, &X.gripSpace[k]));
     }
     at.countActionSets = 1;
     at.actionSets = &X.aset;
@@ -704,6 +720,11 @@ static void rig_update(Game *g) {
     }
 }
 
+/* stuur in de LOCAL-ruimte (t.o.v. je hoofd op de bestuurdersplek) */
+#define WHEEL_X 0.0f
+#define WHEEL_Y (-0.42f)
+#define WHEEL_Z (-0.42f)
+
 /* Renderer.vr.begin: na game_update, vlak voor het tekenen van de ogen */
 static void vr_begin(void *rp, void *gp, void *u) {
     Renderer *r = (Renderer *)rp;
@@ -719,7 +740,33 @@ static void vr_begin(void *rp, void *gp, void *u) {
     }
     r->vr.hidePlayer = X.firstPerson;
     r->vr.hands = X.firstPerson && X.aimOk[0] && X.aimOk[1];
-    for (k = 0; k < 2; k++) if (X.aimOk[k]) r->vr.hand[k] = m4_mul(X.rig, pose_mat(X.aimLocal[k]));
+    for (k = 0; k < 2; k++) {
+        if (X.aimOk[k]) r->vr.hand[k] = m4_mul(X.rig, X.handLocal[k]);
+        r->vr.fist[k] = X.grab[k];
+    }
+    r->vr.weaponOn = 0;
+    r->vr.wheelOn = 0;
+    if (!r->vr.hands) return;
+    if (g->p.veh < 0 && g->weapon > WP_NONE) {
+        r->vr.weaponOn = 1;
+        r->vr.fist[1] = 1;
+        r->vr.weapon = r->vr.hand[1];
+        if (X.twoHand) {
+            M4 lh;
+            V3 f;
+            r->vr.weapon = m4_mul(X.rig, X.offHand);   /* richting volgt beide handen */
+            r->vr.hand[1] = r->vr.weapon;
+            lh = r->vr.weapon;                          /* linkerhand op de voorgreep */
+            f = mat_fwd(lh);
+            lh.m[12] += f.x * 0.26f; lh.m[13] += f.y * 0.26f; lh.m[14] += f.z * 0.26f;
+            r->vr.hand[0] = lh;
+            r->vr.fist[0] = 1;
+        }
+    }
+    if (g->p.veh >= 0 && !(g->p.anT > 0) && g->veh[g->p.veh].type == VEH_CAR) {
+        r->vr.wheelOn = 1;
+        r->vr.wheel = m4_mul(X.rig, m4_mul(m4_translate(WHEEL_X, WHEEL_Y, WHEEL_Z), m4_mul(m4_rot_x(-0.35f), m4_rot_z(X.wheel))));
+    }
 }
 
 static void vr_bind_eye(int eye, void *u) {
@@ -795,6 +842,18 @@ static void do_input(Game *g, XrPosef head) {
         X.aimOk[k] = XR_SUCCEEDED(xrLocateSpace(X.aimSpace[k], X.local, X.fs.predictedDisplayTime, &sl)) &&
                      (sl.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) && (sl.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT);
         if (X.aimOk[k]) X.aimLocal[k] = sl.pose;
+        sl.type = XR_TYPE_SPACE_LOCATION; sl.next = NULL;
+        X.gripOk[k] = XR_SUCCEEDED(xrLocateSpace(X.gripSpace[k], X.local, X.fs.predictedDisplayTime, &sl)) &&
+                      (sl.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT);
+        if (X.gripOk[k]) X.gripLocal[k] = sl.pose;
+        if (X.aimOk[k]) {
+            X.handLocal[k] = pose_mat(X.aimLocal[k]);
+            if (X.gripOk[k]) {   /* hand zit in de greep, niet voor op de controller */
+                X.handLocal[k].m[12] = X.gripLocal[k].position.x;
+                X.handLocal[k].m[13] = X.gripLocal[k].position.y;
+                X.handLocal[k].m[14] = X.gripLocal[k].position.z;
+            }
+        }
     }
     mv = get_v(X.aMove); lk = get_v(X.aLook);
     /* first/third person wisselen: rechter stick indrukken */
@@ -839,6 +898,63 @@ static void do_input(Game *g, XrPosef head) {
         if (X.trigWas) { fe_touch(-77, TOUCH_END, 0, 0); X.trigWas = 0; }
         fe_vr_pointer(0, 0, 0);
     }
+    {   /* v5.1: sturen met je handen (first person, grip ingedrukt) */
+        double now = plat_time();
+        float dt = X.lastT > 0 ? (float)(now - X.lastT) : 0.016f, gripv[2], sum = 0;
+        int veh = inGame && X.firstPerson && g->p.veh >= 0 && !(g->p.anT > 0);
+        int car = veh && g->veh[g->p.veh].type == VEH_CAR, n = 0;
+        if (dt > 0.1f) dt = 0.1f;
+        X.lastT = now;
+        gripv[0] = get_f(X.aGripL); gripv[1] = get_f(X.aGripR);
+        for (k = 0; k < 2; k++) {
+            int on = gripv[k] > (X.grab[k] ? 0.35f : 0.6f) && X.aimOk[k];
+            V3 hp = mat_pos(X.handLocal[k]);
+            if (!veh) { X.grab[k] = on; continue; }
+            if (car) {
+                /* hoek van je hand rond het midden van het stuur (gezien vanaf de bestuurder) */
+                float a = atan2f(hp.y - WHEEL_Y, hp.x - WHEEL_X);
+                if (on && !X.grab[k]) { X.grabA[k] = a; X.grabW[k] = X.wheel; }
+                if (on) {
+                    float d = a - X.grabA[k];
+                    while (d > PI_F) d -= 2 * PI_F;
+                    while (d < -PI_F) d += 2 * PI_F;
+                    sum += X.grabW[k] + d; n++;
+                }
+            } else {
+                /* fiets/motor: rechterhand naar je toe (of linkerhand van je af) = naar rechts */
+                if (on && !X.grab[k]) { X.grabZ[k] = hp.z; X.grabW[k] = X.bar; }
+                if (on) { sum += X.grabW[k] + (hp.z - X.grabZ[k]) * (k ? 1.0f : -1.0f) / 0.16f; n++; }
+            }
+            X.grab[k] = on;
+        }
+        X.steering = n > 0;
+        if (car) {
+            if (n) X.wheel = clampf(sum / n, -2.6f, 2.6f);
+            else X.wheel *= expf(-5.0f * dt);   /* loslaten: stuur draait terug */
+            if (n) axes[0] = clampf(-X.wheel / 1.7f, -1, 1);
+        } else if (veh) {
+            if (n) X.bar = clampf(sum / n, -1, 1);
+            else X.bar *= expf(-6.0f * dt);
+            if (n) axes[0] = X.bar;
+        } else { X.wheel = 0; X.bar = 0; }
+    }
+    /* tweehandig wapen: linkerhand (grip) vlak bij de voorkant van een SMG of shotgun */
+    X.twoHand = 0;
+    if (inGame && X.firstPerson && g->p.veh < 0 && (g->weapon == WP_SMG || g->weapon == WP_SHOTGUN) && X.grab[0] && X.aimOk[1]) {
+        M4 rh = X.handLocal[1];
+        V3 rp = mat_pos(rh), lp = mat_pos(X.handLocal[0]), fg = v3add(rp, v3scale(mat_fwd(rh), 0.26f));
+        if (v3len(v3sub(lp, fg)) < 0.22f) {
+            V3 f = v3norm(v3sub(lp, rp)), up = v3(rh.m[4], rh.m[5], rh.m[6]), bz = v3scale(f, -1.0f), x;
+            up = v3norm(v3sub(up, v3scale(f, v3dot(up, f))));
+            x = v3(up.y * bz.z - up.z * bz.y, up.z * bz.x - up.x * bz.z, up.x * bz.y - up.y * bz.x);   /* x = up x z */
+            X.offHand = m4_identity();
+            X.offHand.m[0] = x.x; X.offHand.m[1] = x.y; X.offHand.m[2] = x.z;
+            X.offHand.m[4] = up.x; X.offHand.m[5] = up.y; X.offHand.m[6] = up.z;
+            X.offHand.m[8] = bz.x; X.offHand.m[9] = bz.y; X.offHand.m[10] = bz.z;
+            X.offHand.m[12] = rp.x; X.offHand.m[13] = rp.y; X.offHand.m[14] = rp.z;
+            X.twoHand = 1;
+        }
+    }
     fe_pad_input(1, axes, btn, "Meta Quest Touch");
     /* first person te voet: lopen waar je naar kijkt, richten met de rechterhand */
     g->vrAim = 0;
@@ -848,10 +964,11 @@ static void do_input(Game *g, XrPosef head) {
         hw = m4_mul(X.rig, pose_mat(head));
         g->camYaw = yaw_of(mat_fwd(hw));
         if (X.aimOk[1]) {
-            M4 aw = m4_mul(X.rig, pose_mat(X.aimLocal[1]));
+            M4 aw = m4_mul(X.rig, X.twoHand ? X.offHand : X.handLocal[1]);
+            V3 f = mat_fwd(aw);
             g->vrAim = 1;
-            g->vrAimYaw = yaw_of(mat_fwd(aw));
-            g->vrMuzzle = mat_pos(aw);
+            g->vrAimYaw = yaw_of(f);
+            g->vrMuzzle = v3add(mat_pos(aw), v3scale(f, 0.25f));
         }
     }
     if (g->statShots != X.lastShots) { if (g->statShots > X.lastShots) haptic(1, 0.6f, 0.05f); X.lastShots = g->statShots; }
@@ -995,6 +1112,14 @@ void android_main(struct android_app *app) {
         chain_make(&X.ui, UI_W, UI_H, 0, 0);
         input_init();
         X.firstPerson = plat_load_int("vr_fp", 0);
+        fe_set_pad_name(PB_BACK, "L-STICK PRESS");
+        fe_set_pad_name(PB_START, "MENU");
+        fe_set_pad_name(PB_LT, "L-TRIGGER");
+        fe_set_pad_name(PB_RT, "R-TRIGGER");
+        fe_set_pad_name(PB_LB, "L-GRIP");
+        fe_set_pad_name(PB_RB, "R-GRIP");
+        fe_set_pad_name(PB_L3, "L-STICK");
+        fe_set_pad_name(PB_R3, "R-STICK");
         X.lastVeh = -2;
         X.uiPose = ident_pose(); X.uiPose.position.z = -UI_DIST;
         glBindFramebuffer(GL_FRAMEBUFFER, X.ui.fbo[0]);

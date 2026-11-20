@@ -166,6 +166,41 @@ static void model_vr_hand(MeshB *m, float side) {
     mb_capsule(m, v3(0, -0.01f, 0.09f), v3(0, -0.01f, 0.2f), 0.045f, 0.05f, 12, sleeve);
 }
 
+/* dichte hand om een greep (de greep loopt van onder naar boven door de vuist, bij de oorsprong) */
+static void model_vr_fist(MeshB *m, float side) {
+    Col skin = col(196, 140, 104), sleeve = col(60, 140, 80);
+    int k;
+    SQ s = sq(v3(0.035f * side, 0.0f, 0.045f), v3(0.028f, 0.045f, 0.05f), 0.5f, 0.6f, skin);
+    s.su = 12; s.sv = 8; mb_sq(m, &s);   /* handpalm naast de greep */
+    for (k = 0; k < 4; k++) {   /* vingers om de greep heen gekruld */
+        float y = 0.03f - k * 0.02f;
+        mb_capsule(m, v3(0.035f * side, y, 0.02f), v3(0.0f, y, -0.03f), 0.0105f, 0.0105f, 8, skin);
+        mb_capsule(m, v3(0.0f, y, -0.03f), v3(-0.03f * side, y - 0.005f, -0.005f), 0.0105f, 0.0095f, 8, skin);
+    }
+    mb_capsule(m, v3(0.02f * side, 0.045f, 0.03f), v3(-0.025f * side, 0.05f, -0.01f), 0.012f, 0.011f, 8, skin);   /* duim */
+    mb_capsule(m, v3(0.035f * side, 0.0f, 0.1f), v3(0.035f * side, -0.01f, 0.21f), 0.045f, 0.05f, 12, sleeve);
+}
+
+/* stuur (in het XY-vlak, naar de bestuurder toe = +Z) */
+static void model_vr_wheel(MeshB *m) {
+    Col rim = col(30, 30, 34), spoke = col(70, 70, 76);
+    int k;
+    const float R = 0.19f;
+    for (k = 0; k < 24; k++) {
+        float a0 = k * 2 * PI_F / 24, a1 = (k + 1) * 2 * PI_F / 24;
+        mb_capsule(m, v3(cosf(a0) * R, sinf(a0) * R, 0), v3(cosf(a1) * R, sinf(a1) * R, 0), 0.016f, 0.016f, 8, rim);
+    }
+    for (k = 0; k < 3; k++) {
+        float a = -PI_F * 0.5f + k * PI_F * 2.0f / 3.0f + PI_F;
+        mb_capsule(m, v3(0, 0, 0), v3(cosf(a) * R, sinf(a) * R, 0), 0.012f, 0.012f, 6, spoke);
+    }
+    {
+        SQ s = sq(v3(0, 0, 0.01f), v3(0.05f, 0.05f, 0.03f), 0.5f, 0.8f, spoke);
+        mb_sq(m, &s);
+    }
+    mb_box(m, v3(-0.012f, R - 0.02f, -0.005f), v3(0.012f, R + 0.02f, 0.02f), col_e(220, 40, 40, 80), 0);   /* streep bovenop */
+}
+
 int r_init(Renderer *r, int w, int h) {
     uint8_t wpx[4] = {255, 255, 255, 255};
     memset(r, 0, sizeof(*r));
@@ -298,6 +333,8 @@ void r_build_models(Renderer *r) {
     for (i = 0; i < 4; i++) BUILD(r->homeGar[i], home_build_garage(&m, i));
     for (i = 0; i < STORE_COUNT; i++) BUILD(r->store[i], store_build(&m, i));
     for (i = 0; i < 2; i++) BUILD(r->handMesh[i], model_vr_hand(&m, i ? 1.0f : -1.0f));
+    for (i = 0; i < 2; i++) BUILD(r->handMesh[2 + i], model_vr_fist(&m, i ? 1.0f : -1.0f));
+    BUILD(r->wheelMesh, model_vr_wheel(&m));
     for (i = 0; i < 15; i++) BUILD(r->decor[i / 5][i % 5], home_build_decor(&m, i / 5, i % 5));
 #undef BUILD
     mb_free(&m);
@@ -1052,11 +1089,13 @@ static void draw_scene_one(Renderer *r, Game *g) {
         glUniform1f(r->wUnlit, 0.0f);
         tint(r, 1, 1, 1);
         glDisable(GL_CULL_FACE);
-        for (k = 0; k < 2; k++) draw_mesh(r, &r->handMesh[k], &r->vr.hand[k]);
-        if (g->weapon > WP_NONE && g->weapon < WP_COUNT && g->p.veh < 0) {
-            M4 wm = m4_mul(r->vr.hand[1], m4_mul(m4_rot_x(PI_F * 0.5f), m4_translate(0, 0.62f, 0.0f)));
+        for (k = 0; k < 2; k++) draw_mesh(r, &r->handMesh[(r->vr.fist[k] ? 2 : 0) + k], &r->vr.hand[k]);
+        if (r->vr.weaponOn && g->weapon > WP_NONE && g->weapon < WP_COUNT) {
+            /* wapenmodel: loop langs -Y, greep op y = -0.62 -> loop langs -Z, greep in de vuist */
+            M4 wm = m4_mul(r->vr.weapon, m4_mul(m4_rot_x(PI_F * 0.5f), m4_translate(0, 0.615f, -0.045f)));
             draw_mesh(r, &r->weapon[g->weapon], &wm);
         }
+        if (r->vr.wheelOn) draw_mesh(r, &r->wheelMesh, &r->vr.wheel);
         glEnable(GL_CULL_FACE);
     }
     glBindBuffer(GL_ARRAY_BUFFER, 0);

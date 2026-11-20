@@ -876,6 +876,7 @@ static void pad_build_input(Input *in) {
 }
 
 /* v5.0 VR: toegang voor de Quest-laag, en de laserpointer als cursor */
+void fe_set_pad_name(int b, const char *name) { if (b >= 0 && b < PB_COUNT && name) PB_NAMES[b] = name; }
 void *fe_renderer(void) { return &F.R; }
 void *fe_game(void) { return &F.G; }
 int fe_in_game(void) { return F.loadDone && F.state == ST_GAME; }

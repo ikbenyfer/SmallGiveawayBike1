@@ -43,5 +43,6 @@ void *fe_renderer(void);   /* Renderer * */
 void *fe_game(void);       /* Game * */
 int fe_in_game(void);      /* 1 = rondlopen/rijden (geen menu) */
 void fe_vr_pointer(int on, float x, float y);   /* laserpointer als cursor (UI-coordinaten) */
+void fe_set_pad_name(int b, const char *name);   /* knopnaam in de HUD (Quest: L-STICK, MENU, ...) */
 
 #endif
