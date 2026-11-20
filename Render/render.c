@@ -335,6 +335,15 @@ void r_build_models(Renderer *r) {
     for (i = 0; i < 2; i++) BUILD(r->handMesh[i], model_vr_hand(&m, i ? 1.0f : -1.0f));
     for (i = 0; i < 2; i++) BUILD(r->handMesh[2 + i], model_vr_fist(&m, i ? 1.0f : -1.0f));
     BUILD(r->wheelMesh, model_vr_wheel(&m));
+    for (i = 0; i < BIKE_VARIANTS; i++) {
+        g_modelPart = 1; BUILD(r->bikeBody[i], model_bike(&m, i));
+        g_modelPart = 2; BUILD(r->bikeFront[i], model_bike(&m, i));
+    }
+    for (i = 0; i < MOTO_MODELS; i++) {
+        g_modelPart = 1; BUILD(r->motoBody[i], model_moto(&m, i));
+        g_modelPart = 2; BUILD(r->motoFront[i], model_moto(&m, i));
+    }
+    g_modelPart = 0;
     for (i = 0; i < 15; i++) BUILD(r->decor[i / 5][i % 5], home_build_decor(&m, i / 5, i % 5));
 #undef BUILD
     mb_free(&m);
@@ -741,7 +750,20 @@ static void draw_scene_one(Renderer *r, Game *g) {
         if (!v->active) continue;
         if (!sphere_visible(r, v->x, v->y + 0.8f, v->z, 2.5f, fogEnd)) continue;
         m = m4_trs_y(v->x, v->y, v->z, v->h);
-        if (v->type == VEH_BIKE) {
+        if (v->type == VEH_BIKE && r->vr.eye && r->vr.hidePlayer && i == g->p.veh) {
+            /* VR first person (Quest): niet schuin hangen; voorwiel, vork en stuur draaien mee met het stuur */
+            int moto = v->custom && IS_MOTO(v->model);
+            float piv = moto ? 0.6f : 0.48f, ang = -v->steer * 0.55f;
+            M4 fm = m4_mul(m, m4_mul(m4_translate(0, 0, piv), m4_mul(m4_rot_y(ang), m4_translate(0, 0, -piv))));
+            if (moto) {
+                int k = (v->model - CAR_MODELS) % MOTO_MODELS;
+                draw_mesh(r, &r->motoBody[k], &m);
+                draw_mesh(r, &r->motoFront[k], &fm);
+            } else {
+                draw_mesh(r, &r->bikeBody[v->variant % BIKE_VARIANTS], &m);
+                draw_mesh(r, &r->bikeFront[v->variant % BIKE_VARIANTS], &fm);
+            }
+        } else if (v->type == VEH_BIKE) {
             m = m4_mul(m, m4_rot_z(v->lean));
             int rider = i == g->p.veh && !(g->p.anT > 0 && g->p.anKind == 2) && !r->vr.hidePlayer;
             int hiV = near_cam(r, &m, LOD_VEH);
@@ -1085,6 +1107,8 @@ static void draw_scene_one(Renderer *r, Game *g) {
     }
     if (r->vr.eye && r->vr.hands) {   /* v5.0: handen (en het wapen in de rechterhand) */
         int k;
+        /* in een voertuig: handen en stuur altijd zichtbaar (niet achter de motorkap of het frame) */
+        if (g->p.veh >= 0) glClear(GL_DEPTH_BUFFER_BIT);
         glUseProgram(r->progW);
         glUniform1f(r->wUnlit, 0.0f);
         tint(r, 1, 1, 1);

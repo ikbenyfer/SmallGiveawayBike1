@@ -77,6 +77,7 @@ typedef struct {
         int weaponOn; M4 weapon;                      /* wapen: -Z = loop, +Y = boven, oorsprong = greep */
         int wheelOn; M4 wheel;                        /* stuur van de auto (first person) */
     } vr;
+    GMesh bikeBody[BIKE_VARIANTS], bikeFront[BIKE_VARIANTS], motoBody[MOTO_MODELS], motoFront[MOTO_MODELS];   /* VR: voorkant draait mee */
     GMesh handMesh[4], wheelMesh;   /* 0/1 open links/rechts, 2/3 vuist links/rechts */
 } Renderer;
 

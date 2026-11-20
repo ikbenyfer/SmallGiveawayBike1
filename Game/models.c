@@ -511,6 +511,12 @@ void model_weapon(MeshB *m, int w) {
 
 /* ---------------------------------------------------------------- fiets */
 
+/* v5.1.1 (Quest): 0 = hele fiets/motor, 1 = alles behalve de voorkant, 2 = alleen de voorkant
+ * (voorwiel, vork en stuur), zodat die in VR mee kan draaien met het stuur */
+int g_modelPart;
+#define FRONT if (g_modelPart != 1)
+#define BODY if (g_modelPart != 2)
+
 void model_bike(MeshB *m, int v) {
     static const int frames[BIKE_VARIANTS][3] = {{210, 30, 36}, {30, 170, 190}, {240, 200, 40}, {235, 235, 235}};
     Col fc, dark = col(25, 25, 28), metal = col(178, 178, 184);
@@ -521,8 +527,15 @@ void model_bike(MeshB *m, int v) {
     fc = col(frames[v][0], frames[v][1], frames[v][2]);
     rear = v3(0, r, -0.52f); front = v3(0, r, 0.55f);
     crank = v3(0, 0.30f, -0.05f); seat = v3(0, 0.92f, -0.22f); head = v3(0, 0.88f, 0.42f);
+    FRONT mb_wheel(m, front, r, 0.05f, dark, metal, 8);
+    FRONT mb_rtube(m, v3(0.025f, 0.9f, 0.42f), v3(0.025f, r, 0.55f), 0.014f, 0.012f, 6, metal);
+    FRONT mb_rtube(m, v3(-0.025f, 0.9f, 0.42f), v3(-0.025f, r, 0.55f), 0.014f, 0.012f, 6, metal);
+    FRONT mb_rtube(m, head, v3(0, 1.04f, 0.38f), 0.018f, 0.018f, 6, metal);
+    FRONT mb_capsule(m, v3(-0.27f, 1.05f, 0.36f), v3(0.27f, 1.05f, 0.36f), 0.016f, 0.016f, 8, metal);
+    FRONT for (i = -1; i <= 1; i += 2) mb_capsule(m, v3(0.2f * i, 1.05f, 0.36f), v3(0.29f * i, 1.05f, 0.36f), 0.024f, 0.024f, 8, dark);  /* handvatten */
+    FRONT blob(m, v3(0, 0.86f, 0.47f), v3(0.04f, 0.04f, 0.03f), 0.7f, 0.7f, 8, 4, col_e(255, 240, 200, 255));   /* lampje */
+    if (g_modelPart == 2) return;
     mb_wheel(m, rear, r, 0.05f, dark, metal, 8);
-    mb_wheel(m, front, r, 0.05f, dark, metal, 8);
     mb_rtube(m, v3(0.03f, r, -0.52f), v3(0.03f, 0.30f, -0.05f), 0.016f, 0.016f, 6, fc);
     mb_rtube(m, v3(-0.03f, r, -0.52f), v3(-0.03f, 0.30f, -0.05f), 0.016f, 0.016f, 6, fc);
     mb_rtube(m, v3(0.03f, r, -0.52f), seat, 0.015f, 0.015f, 6, fc);
@@ -530,11 +543,6 @@ void model_bike(MeshB *m, int v) {
     mb_capsule(m, crank, seat, 0.026f, 0.024f, 8, fc);
     mb_capsule(m, crank, head, 0.03f, 0.028f, 8, fc);
     mb_capsule(m, v3(0, 0.84f, -0.2f), head, 0.024f, 0.024f, 8, fc);
-    mb_rtube(m, v3(0.025f, 0.9f, 0.42f), v3(0.025f, r, 0.55f), 0.014f, 0.012f, 6, metal);
-    mb_rtube(m, v3(-0.025f, 0.9f, 0.42f), v3(-0.025f, r, 0.55f), 0.014f, 0.012f, 6, metal);
-    mb_rtube(m, head, v3(0, 1.04f, 0.38f), 0.018f, 0.018f, 6, metal);
-    mb_capsule(m, v3(-0.27f, 1.05f, 0.36f), v3(0.27f, 1.05f, 0.36f), 0.016f, 0.016f, 8, metal);
-    for (i = -1; i <= 1; i += 2) mb_capsule(m, v3(0.2f * i, 1.05f, 0.36f), v3(0.29f * i, 1.05f, 0.36f), 0.024f, 0.024f, 8, dark);  /* handvatten */
     {
         SQ s = sq(v3(0, 0.965f, -0.24f), v3(0.075f, 0.03f, 0.13f), 0.5f, 0.6f, dark);
         s.bx = 1.0f; s.tx = 1.0f; s.bz = 1.0f; s.su = 12; s.sv = 4;
@@ -552,7 +560,6 @@ void model_bike(MeshB *m, int v) {
         blob(m, v3(0, 0.73f, -0.46f), v3(0.16f, 0.1f, 0.16f), 0.25f, 0.25f, 12, 4, col(232, 232, 226));
         blob(m, v3(0, 0.735f, -0.46f), v3(0.165f, 0.104f, 0.032f), 0.25f, 0.25f, 12, 4, col(200, 30, 30));
     }
-    blob(m, v3(0, 0.86f, 0.47f), v3(0.04f, 0.04f, 0.03f), 0.7f, 0.7f, 8, 4, col_e(255, 240, 200, 255));   /* lampje */
 }
 
 /* ---------------------------------------------------------------- motor */
@@ -565,20 +572,30 @@ void model_moto(MeshB *m, int k) {
     V3 rear = v3(0, r, -0.70f), front = v3(0, r, 0.72f), head = v3(0, 0.98f, 0.52f);
     SQ s;
     int i;
-    mb_wheel(m, rear, r, 0.17f, dark, metal, 5);
-    mb_wheel(m, front, r, 0.13f, dark, metal, 5);
-    mb_lathe(m, rear, 0, (const float[]){0, 0.12f, 0.12f, 0}, (const float[]){0.09f, 0.09f, 0.1f, 0.1f},
-             (const Col[]){metal, metal, metal, metal}, 4, 14);   /* remschijf */
-    mb_lathe(m, front, 0, (const float[]){0, 0.14f, 0.14f, 0}, (const float[]){0.07f, 0.07f, 0.08f, 0.08f},
+    FRONT mb_wheel(m, front, r, 0.13f, dark, metal, 5);
+    FRONT mb_lathe(m, front, 0, (const float[]){0, 0.14f, 0.14f, 0}, (const float[]){0.07f, 0.07f, 0.08f, 0.08f},
              (const Col[]){metal, metal, metal, metal}, 4, 14);
-    for (i = -1; i <= 1; i += 2) {
-        mb_rtube(m, v3(0.075f * i, r, -0.70f), v3(0.075f * i, 0.42f, -0.18f), 0.03f, 0.035f, 8, engine);   /* achterbrug */
+    FRONT for (i = -1; i <= 1; i += 2) {
         mb_rtube(m, v3(0.075f * i, 1.0f, 0.5f), v3(0.075f * i, r, 0.72f), 0.03f, 0.026f, 8, metal);         /* voorvork */
         mb_capsule(m, v3(0.2f * i, 1.07f, 0.44f), v3(0.36f * i, 1.07f, 0.42f), 0.025f, 0.025f, 8, dark);   /* handvat */
+    }
+    FRONT mb_capsule(m, v3(-0.22f, 1.06f, 0.46f), v3(0.22f, 1.06f, 0.46f), 0.02f, 0.02f, 8, metal);   /* stuur */
+    FRONT mb_capsule(m, head, v3(0, 1.06f, 0.46f), 0.035f, 0.03f, 8, dark);
+    FRONT mb_lathe(m, v3(0, 0.93f, 0.6f), 2, (const float[]){0.075f, 0.08f, 0.06f, 0},
+             (const float[]){-0.05f, 0.03f, 0.075f, 0.08f},
+             (const Col[]){metal, metal, col_e(255, 245, 210, 255), col_e(255, 245, 210, 255)}, 4, 14);   /* koplamp */
+    if (k != 1) {
+        FRONT blob(m, v3(0, 0.98f, 0.36f), v3(0.08f, 0.05f, 0.06f), 0.6f, 0.6f, 10, 4, dark);   /* klokjes */
+        FRONT blob(m, v3(0, 0.72f, 0.72f), v3(0.07f, 0.03f, 0.2f), 0.5f, 0.6f, 10, 4, bc);    /* spatbord */
+    }
+    if (g_modelPart == 2) return;
+    mb_wheel(m, rear, r, 0.17f, dark, metal, 5);
+    mb_lathe(m, rear, 0, (const float[]){0, 0.12f, 0.12f, 0}, (const float[]){0.09f, 0.09f, 0.1f, 0.1f},
+             (const Col[]){metal, metal, metal, metal}, 4, 14);   /* remschijf */
+    for (i = -1; i <= 1; i += 2) {
+        mb_rtube(m, v3(0.075f * i, r, -0.70f), v3(0.075f * i, 0.42f, -0.18f), 0.03f, 0.035f, 8, engine);   /* achterbrug */
         mb_rtube(m, v3(0.09f * i, 0.55f, -0.62f), v3(0.13f * i, 0.32f, -0.68f), 0.025f, 0.025f, 6, metal); /* veerpoot */
     }
-    mb_capsule(m, v3(-0.22f, 1.06f, 0.46f), v3(0.22f, 1.06f, 0.46f), 0.02f, 0.02f, 8, metal);   /* stuur */
-    mb_capsule(m, head, v3(0, 1.06f, 0.46f), 0.035f, 0.03f, 8, dark);
     /* motorblok met cilinders */
     blob(m, v3(0, 0.42f, -0.04f), v3(0.17f, 0.2f, 0.25f), 0.35f, 0.35f, 14, 6, engine);
     {
@@ -605,10 +622,6 @@ void model_moto(MeshB *m, int k) {
     mb_lathe(m, v3(0.22f, 0.42f, -0.62f), 2, (const float[]){0, 0.035f, 0.06f, 0.07f, 0.065f, 0},
              (const float[]){-0.2f, -0.2f, -0.18f, 0.1f, 0.28f, 0.3f},
              (const Col[]){dark, dark, metal, metal, metal, metal}, 6, 12);
-    /* koplamp */
-    mb_lathe(m, v3(0, 0.93f, 0.6f), 2, (const float[]){0.075f, 0.08f, 0.06f, 0},
-             (const float[]){-0.05f, 0.03f, 0.075f, 0.08f},
-             (const Col[]){metal, metal, col_e(255, 245, 210, 255), col_e(255, 245, 210, 255)}, 4, 14);
     if (k == 1) {   /* superbike: kuip, ruitje en zijkuipen */
         s = sq(v3(0, 0.82f, 0.55f), v3(0.24f, 0.3f, 0.2f), 0.45f, 0.55f, bc);
         s.tx = 0.6f; s.shear = -0.12f; s.su = 16; s.sv = 8; mb_sq(m, &s);
@@ -616,11 +629,10 @@ void model_moto(MeshB *m, int k) {
         s.shear = -0.06f; s.su = 12; s.sv = 4; mb_sq(m, &s);
         for (i = -1; i <= 1; i += 2) blob(m, v3(0.19f * i, 0.5f, 0.1f), v3(0.05f, 0.18f, 0.32f), 0.4f, 0.5f, 10, 6, bc);
         blob(m, v3(0, 0.6f, 0.64f), v3(0.1f, 0.03f, 0.02f), 0.6f, 0.6f, 8, 3, col_e(255, 245, 210, 255));
-    } else {
-        blob(m, v3(0, 0.98f, 0.36f), v3(0.08f, 0.05f, 0.06f), 0.6f, 0.6f, 10, 4, dark);   /* klokjes */
-        blob(m, v3(0, 0.72f, 0.72f), v3(0.07f, 0.03f, 0.2f), 0.5f, 0.6f, 10, 4, bc);    /* spatbord */
     }
 }
+#undef FRONT
+#undef BODY
 
 /* ---------------------------------------------------------------- auto's */
 

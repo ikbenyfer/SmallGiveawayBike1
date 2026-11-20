@@ -46,7 +46,8 @@ void model_siren(MeshB *m);
 #define MOTO_MODELS 2     /* 4 STREET 600, 5 DRAGON 1000R (motoren bij de dealer) */
 #define DEALER_MODELS (CAR_MODELS + MOTO_MODELS)
 #define IS_MOTO(model) ((model) >= CAR_MODELS)
-void model_moto(MeshB *m, int k);   /* k = 0..MOTO_MODELS-1 */
+void model_moto(MeshB *m, int k);
+extern int g_modelPart;   /* v5.1.1: 0 heel, 1 zonder voorkant, 2 alleen voorkant (fiets/motor) */   /* k = 0..MOTO_MODELS-1 */
 void model_moto_lo(MeshB *m, int k);
 #define NPAINTS 10
 #define NNEONS 6
