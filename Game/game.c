@@ -1133,7 +1133,7 @@ void game_store_enter(Game *g, int s) {
 static void store_leave(Game *g, int s) {
     V3 d = g->w->poi[store_poi(s)];
     float side = fmodf(d.z - ROADW, PITCH) < BLOCKW * 0.5f ? -1.0f : 1.0f;
-    store_go(g, d.x, d.z + side * 1.4f, side < 0 ? PI_F : 0.0f);
+    store_go(g, d.x, d.z + side * 2.3f, side < 0 ? PI_F : 0.0f);
     g->inShop = 0; g->inBiz = 0;
 }
 
