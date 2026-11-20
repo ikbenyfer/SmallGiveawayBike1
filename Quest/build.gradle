@@ -1,0 +1,53 @@
+// app/build.gradle van de Meta Quest-versie (VR). Gradle-skelet komt uit het SDL-sjabloon (zie tools/quest_prepare.sh).
+apply plugin: 'com.android.application'
+
+android {
+    namespace "nl.yf.smallgiveawaybike1.vr"
+    compileSdkVersion 34
+    if (System.getenv("NDK_VER")) ndkVersion System.getenv("NDK_VER")
+    defaultConfig {
+        applicationId "nl.yf.smallgiveawaybike1.vr"
+        minSdkVersion 29
+        targetSdkVersion 32
+        versionCode((System.getenv("SGB_VC") ?: "1") as int)
+        versionName(System.getenv("SGB_VERSION") ?: "dev")
+        externalNativeBuild {
+            ndkBuild {
+                arguments "APP_PLATFORM=android-29"
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+    signingConfigs {
+        rel {
+            if (System.getenv("KS_FILE")) {
+                storeFile file(System.getenv("KS_FILE"))
+                storePassword System.getenv("KS_PASS")
+                keyAlias "sgb"
+                keyPassword System.getenv("KS_PASS")
+                storeType "pkcs12"
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig System.getenv("KS_FILE") ? signingConfigs.rel : signingConfigs.debug
+        }
+    }
+    externalNativeBuild {
+        ndkBuild {
+            path 'jni/Android.mk'
+        }
+    }
+    androidResources {
+        noCompress 'raw', 'pak', 'mp3', 'wav', 'txt'
+    }
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+}

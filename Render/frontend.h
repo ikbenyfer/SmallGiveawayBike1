@@ -38,4 +38,10 @@ void fe_raw_key(int code);                           /* desktop: elke ingedrukte
 int fe_bind_waiting(void);                           /* CONTROLS wacht op een knop/toets */
 int fe_should_quit(void);
 
+/* v5.0 VR (Meta Quest) */
+void *fe_renderer(void);   /* Renderer * */
+void *fe_game(void);       /* Game * */
+int fe_in_game(void);      /* 1 = rondlopen/rijden (geen menu) */
+void fe_vr_pointer(int on, float x, float y);   /* laserpointer als cursor (UI-coordinaten) */
+
 #endif

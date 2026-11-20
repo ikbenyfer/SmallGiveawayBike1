@@ -344,9 +344,56 @@ jobs:
           name: SmallGiveawayBike1-Android
           path: SmallGiveawayBike1-Android.apk
 
+  quest:
+    name: Meta Quest-versie (VR-APK, OpenXR)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: Quest/build.gradle
+
+      - name: Pakketten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pil fonts-dejavu-core unzip
+
+      - name: Quest-project klaarzetten (Gradle-skelet + OpenXR-loader)
+        shell: bash
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          bash tools/quest_prepare.sh
+          echo "NDK_VER=$(basename "$ANDROID_NDK_LATEST_HOME")" >> $GITHUB_ENV
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/sgb.p12"
+            echo "KS_FILE=$RUNNER_TEMP/sgb.p12" >> $GITHUB_ENV
+          fi
+
+      - name: Quest-APK bouwen
+        working-directory: quest-build
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          export SGB_VERSION="$(cat ../VERSION)" SGB_VC="${{ github.run_number }}"
+          chmod +x gradlew
+          for i in 1 2 3; do ./gradlew --no-daemon assembleRelease && break; echo "poging $i mislukt, opnieuw"; sleep 30; done
+          cp app/build/outputs/apk/release/app-release.apk ../SmallGiveawayBike1-Quest.apk
+          ls -l ../SmallGiveawayBike1-Quest.apk
+          unzip -l ../SmallGiveawayBike1-Quest.apk | grep -E "lib/arm64-v8a/|classes.dex"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SmallGiveawayBike1-Quest
+          path: SmallGiveawayBike1-Quest.apk
+
   release:
-    name: GitHub-release (iPad + Windows + Linux + Android)
-    needs: [preview, build, windows, linux, android]
+    name: GitHub-release (iPad + Windows + Linux + Android + Quest)
+    needs: [preview, build, windows, linux, android, quest]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
@@ -374,4 +421,4 @@ jobs:
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Small Giveaway Bike 1 $TAG" --notes-file notes.md --latest \
             art/SmallGiveawayBike1/*.ipa art/SmallGiveawayBike1/*.deb \
-            art/SmallGiveawayBike1-Windows/*.zip art/SmallGiveawayBike1-Linux/*.tar.gz art/SmallGiveawayBike1-Android/*.apk
+            art/SmallGiveawayBike1-Windows/*.zip art/SmallGiveawayBike1-Linux/*.tar.gz art/SmallGiveawayBike1-Android/*.apk art/SmallGiveawayBike1-Quest/*.apk

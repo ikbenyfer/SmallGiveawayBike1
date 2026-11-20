@@ -875,6 +875,15 @@ static void pad_build_input(Input *in) {
     P.edgeJump = P.edgeAction = P.edgeSwitch = 0;
 }
 
+/* v5.0 VR: toegang voor de Quest-laag, en de laserpointer als cursor */
+void *fe_renderer(void) { return &F.R; }
+void *fe_game(void) { return &F.G; }
+int fe_in_game(void) { return F.loadDone && F.state == ST_GAME; }
+void fe_vr_pointer(int on, float x, float y) {
+    P.active = 1;   /* VR: nooit touch-knoppen tonen */
+    if (on) { P.cx = clampf(x, 0, (float)F.R.W); P.cy = clampf(y, 0, (float)F.R.H); }
+}
+
 static void draw_pad_cursor(void) {
     Renderer *R = &F.R;
     if (!P.connected || !P.active || F.state == ST_GAME || F.state == ST_LOGO || F.state == ST_LOAD) return;
@@ -999,8 +1008,11 @@ static void draw_cutscene(void) {
     Renderer *R = &F.R;
     Game *g = &F.G;
     float W = (float)R->W, H = (float)R->H, k = clampf(g->cutT / 0.5f, 0, 1), bar = H * 0.13f * k;
-    ui_rect(R, 0, 0, W, bar, 0, 0, 0, 1);
-    ui_rect(R, 0, H - bar, W, bar, 0, 0, 0, 1);
+    if (R->vr.active) bar = H * 0.06f * k;   /* VR: geen filmbalken voor je ogen, alleen ruimte voor de tekst */
+    else {
+        ui_rect(R, 0, 0, W, bar, 0, 0, 0, 1);
+        ui_rect(R, 0, H - bar, W, bar, 0, 0, 0, 1);
+    }
     if (g->cutIdx < 0 && g->cutMission >= 0 && g->cutMission < NMISSIONS)
         ui_text(R, g->mdef[g->cutMission].title, W * 0.5f, H * 0.5f - 20, 44, 1, 0.85f, 0.25f, clampf(g->cutT * 2.0f, 0, 1), 1);
     if (g->cutIdx >= 0 && g->voT > 0) draw_subtitle(g->voLine, H - bar - 70, 1, 1);
@@ -3614,7 +3626,7 @@ void fe_frame(double now) {
     panel_off();
     if (panel_state(F.state) && F.state != ST_PAUSE && F.state != ST_SHOP && F.state != ST_BIZ && F.state != ST_HOME &&
         F.state != ST_DEALER && F.state != ST_CUSTOMS && !(F.state == ST_MISSIONS && F.missionsFrom == ST_PAUSE)) panel_on();
-    glClearColor(0, 0, 0, 1);
+    glClearColor(0, 0, 0, R->vr.active ? 0.0f : 1.0f);   /* VR: UI-laag is doorzichtig waar niets getekend wordt */
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     switch (F.state) {

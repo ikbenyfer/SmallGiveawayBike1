@@ -61,6 +61,20 @@ typedef struct {
     float skyTop[3], skyHor[3], fogCol[3], sun[3], sunCol[3], amb[3], emis;
 
     int drawCalls, drawnChunks, drawnTris;
+
+    /* v5.0 VR (Meta Quest): r_draw_scene tekent de wereld per oog in de FBO die bind_eye klaarzet */
+    struct RVr {
+        int active, eye;                              /* eye: 0 = gewoon scherm, 1/2 = linker/rechter oog */
+        void (*begin)(void *r, void *g, void *u);     /* zet view/proj/pos voor beide ogen (na game_update) */
+        void (*bind_eye)(int eye, void *u);           /* bindt FBO van het oog, viewport, wist kleur + diepte */
+        void (*bind_ui)(void *u);                     /* terug naar de UI-FBO (HUD en menu's) */
+        void *u;
+        M4 view[2], proj[2]; V3 pos[2];
+        int drew;                                     /* r_draw_scene is deze frame gebruikt */
+        int hidePlayer;                               /* first person: eigen lichaam niet tekenen */
+        int hands; M4 hand[2];                        /* handen op de controllers (wereldmatrix) */
+    } vr;
+    GMesh handMesh[2];
 } Renderer;
 
 int r_init(Renderer *r, int w, int h);          /* shaders, basistexturen, logo + achtergrond */

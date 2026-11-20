@@ -157,6 +157,8 @@ typedef struct {
     float barkCool;
     int cut, cutMission, cutIdx, cutSkip, cutSpk, noCutscenes;
     float cutT, cutLineT, cutShotT, cutX, cutZ, cutH;
+    /* v5.0 VR: richten met de rechtercontroller (first person) */
+    int vrAim; float vrAimYaw; V3 vrMuzzle;
 } Game;
 
 void game_init(Game *g, World *w);

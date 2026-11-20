@@ -1547,7 +1547,7 @@ static void update_weapons(Game *g, const Input *in, float dt) {
     {
         /* Richten. Auto-aim AAN: eerst politie (agenten en politieauto's) in de kijkrichting, pas als die er
          * niet is gewone mensen. Auto-aim UIT: alleen wat precies in de schietlijn van de camera staat. */
-        V3 cf = fwd_of(g->camYaw), muzzle = v3(g->p.x, g->p.y + 1.35f, g->p.z), aim = v3(0, 0, 0);
+        V3 cf = fwd_of(g->vrAim ? g->vrAimYaw : g->camYaw), muzzle = g->vrAim ? g->vrMuzzle : v3(g->p.x, g->p.y + 1.35f, g->p.z), aim = v3(0, 0, 0);
         float best = 1e9f;
         int bestPed = -1, bestVeh = -1, i, pel, pass, npass = g->autoAim ? 2 : 1;
         for (pass = 0; pass < npass && bestPed < 0 && bestVeh < 0; pass++) {

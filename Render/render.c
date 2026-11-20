@@ -151,6 +151,21 @@ static void make_soft(Tex *t, int ring) {
 
 void r_resize(Renderer *r, int w, int h) { r->W = w; r->H = h; }
 
+/* v5.0 VR-hand in de ruimte van de controller (OpenXR aim-pose: -Z wijst naar voren, +Y omhoog).
+ * side -1 = links, +1 = rechts. Handpalm met vingers en een duim, plus een stukje mouw. */
+static void model_vr_hand(MeshB *m, float side) {
+    Col skin = col(196, 140, 104), sleeve = col(60, 140, 80);
+    int k;
+    SQ s = sq(v3(0, -0.01f, 0.03f), v3(0.042f, 0.024f, 0.055f), 0.5f, 0.6f, skin);
+    s.su = 12; s.sv = 8; mb_sq(m, &s);
+    for (k = 0; k < 4; k++) {
+        float x = (-0.03f + k * 0.02f) * side, len = k == 1 || k == 2 ? 0.075f : 0.062f;
+        mb_capsule(m, v3(x, -0.005f, -0.02f), v3(x, -0.03f, -0.02f - len), 0.0105f, 0.0095f, 8, skin);
+    }
+    mb_capsule(m, v3(-0.04f * side, -0.008f, 0.04f), v3(-0.06f * side, -0.0f, -0.005f), 0.012f, 0.011f, 8, skin);   /* duim */
+    mb_capsule(m, v3(0, -0.01f, 0.09f), v3(0, -0.01f, 0.2f), 0.045f, 0.05f, 12, sleeve);
+}
+
 int r_init(Renderer *r, int w, int h) {
     uint8_t wpx[4] = {255, 255, 255, 255};
     memset(r, 0, sizeof(*r));
@@ -282,6 +297,7 @@ void r_build_models(Renderer *r) {
     for (i = 0; i < 3; i++) { BUILD(r->homeExt[i], home_build_exterior(&m, i)); BUILD(r->homeInt[i], home_build_interior(&m, i)); }
     for (i = 0; i < 4; i++) BUILD(r->homeGar[i], home_build_garage(&m, i));
     for (i = 0; i < STORE_COUNT; i++) BUILD(r->store[i], store_build(&m, i));
+    for (i = 0; i < 2; i++) BUILD(r->handMesh[i], model_vr_hand(&m, i ? 1.0f : -1.0f));
     for (i = 0; i < 15; i++) BUILD(r->decor[i / 5][i % 5], home_build_decor(&m, i / 5, i % 5));
 #undef BUILD
     mb_free(&m);
@@ -558,7 +574,26 @@ static void draw_shadow(Renderer *r, float x, float y, float z, float sx, float 
     draw_mesh(r, &r->shadow, &m);
 }
 
+static void draw_scene_one(Renderer *r, Game *g);
+
 void r_draw_scene(Renderer *r, Game *g) {
+    if (r->vr.active) {
+        int e;
+        if (r->vr.begin) r->vr.begin(r, g, r->vr.u);
+        for (e = 0; e < 2; e++) {
+            r->vr.bind_eye(e, r->vr.u);
+            r->vr.eye = e + 1;
+            draw_scene_one(r, g);
+        }
+        r->vr.eye = 0;
+        r->vr.drew = 1;
+        if (r->vr.bind_ui) r->vr.bind_ui(r->vr.u);
+        return;
+    }
+    draw_scene_one(r, g);
+}
+
+static void draw_scene_one(Renderer *r, Game *g) {
     float aspect = (float)r->W / (float)(r->H > 0 ? r->H : 1);
     float fogEnd = g->drawDist, fogStart = g->drawDist * 0.45f;
     float t = g->time;
@@ -569,13 +604,20 @@ void r_draw_scene(Renderer *r, Game *g) {
 
     r->drawnChunks = 0; r->drawnTris = 0;
     g_animT = g->time;
-    r->cam = g->camPos;
-    r->proj = m4_perspective(58.0f * PI_F / 180.0f, aspect, 0.3f, g->drawDist + 40.0f);
-    r->view = m4_lookat(g->camPos, g->camTarget, v3(0, 1, 0));
+    if (r->vr.eye) {   /* VR: matrices van het oog; de lucht is de wiskleur van bind_eye */
+        r->cam = r->vr.pos[r->vr.eye - 1];
+        r->proj = r->vr.proj[r->vr.eye - 1];
+        r->view = r->vr.view[r->vr.eye - 1];
+    } else {
+        r->cam = g->camPos;
+        r->proj = m4_perspective(58.0f * PI_F / 180.0f, aspect, 0.3f, g->drawDist + 40.0f);
+        r->view = m4_lookat(g->camPos, g->camTarget, v3(0, 1, 0));
+    }
     r->vp = m4_mul(r->proj, r->view);
     extract_planes(r);
 
-    /* lucht als verloop (2D) */
+    /* lucht als verloop (2D); in VR niet (de horizon kantelt dan mee met je hoofd) */
+    if (!r->vr.eye) {
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);
@@ -613,6 +655,7 @@ void r_draw_scene(Renderer *r, Game *g) {
         }
     }
     ui_flush(r);
+    }
 
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -630,7 +673,7 @@ void r_draw_scene(Renderer *r, Game *g) {
     glUniform3f(r->wSun, r->sun[0], r->sun[1], r->sun[2]);
     glUniform3f(r->wSunCol, r->sunCol[0], r->sunCol[1], r->sunCol[2]);
     glUniform3f(r->wAmb, r->amb[0], r->amb[1], r->amb[2]);
-    glUniform3f(r->wCam, g->camPos.x, g->camPos.y, g->camPos.z);
+    glUniform3f(r->wCam, r->cam.x, r->cam.y, r->cam.z);
     glUniform2f(r->wFog, fogStart, fogEnd);
     glUniform3f(r->wFogCol, r->fogCol[0], r->fogCol[1], r->fogCol[2]);
     glUniform1f(r->wEmis, r->emis);
@@ -644,8 +687,8 @@ void r_draw_scene(Renderer *r, Game *g) {
         draw_mesh(r, &rw->ground, &id);
         for (i = 0; i < RW_SLOTS; i++) {
             const float *b = rw->chb[i];
-            float cx = clampf(g->camPos.x, b[0], b[3]), cz = clampf(g->camPos.z, b[2], b[5]);
-            float dx = cx - g->camPos.x, dz = cz - g->camPos.z;
+            float cx = clampf(r->cam.x, b[0], b[3]), cz = clampf(r->cam.z, b[2], b[5]);
+            float dx = cx - r->cam.x, dz = cz - r->cam.z;
             if (rw->chunk[i].count <= 0) continue;
             if (dx * dx + dz * dz > (fogEnd + 10) * (fogEnd + 10)) continue;
             if (!box_visible(r, b)) continue;
@@ -663,7 +706,7 @@ void r_draw_scene(Renderer *r, Game *g) {
         m = m4_trs_y(v->x, v->y, v->z, v->h);
         if (v->type == VEH_BIKE) {
             m = m4_mul(m, m4_rot_z(v->lean));
-            int rider = i == g->p.veh && !(g->p.anT > 0 && g->p.anKind == 2);
+            int rider = i == g->p.veh && !(g->p.anT > 0 && g->p.anKind == 2) && !r->vr.hidePlayer;
             int hiV = near_cam(r, &m, LOD_VEH);
             if (v->custom && IS_MOTO(v->model)) {
                 int k = (v->model - CAR_MODELS) % MOTO_MODELS;
@@ -797,9 +840,11 @@ void r_draw_scene(Renderer *r, Game *g) {
         }
     }
     /* speler te voet */
-    if (g->p.anT > 0 && g->p.anKind > 0 && g->p.anVeh >= 0 && g->p.anVeh < g->nveh && g->veh[g->p.anVeh].active) {
+    if (r->vr.hidePlayer) {
+        /* first person: geen eigen lichaam */
+    } else if (g->p.anT > 0 && g->p.anKind > 0 && g->p.anVeh >= 0 && g->p.anVeh < g->nveh && g->veh[g->p.anVeh].active) {
         draw_player_transition(r, g);
-    } else if (mode == MODE_FOOT) {
+    } else if (mode == MODE_FOOT && !r->vr.hidePlayer) {
         M4 m = m4_trs_y(g->p.x, g->p.y, g->p.z, g->p.h);
         float ground = world_ground_y(g->w, g->p.x, g->p.z);
         draw_char(r, biz_outfit_variant(g->outfit), m, g->p.anim, g->p.onGround ? 0 : 2, 0, g->weapon % WP_COUNT, g->p.onGround ? fabsf(g->p.speed) : 0);
@@ -984,7 +1029,7 @@ void r_draw_scene(Renderer *r, Game *g) {
                 tint(r, rr * 0.25f, gr * 0.2f, 0.04f);
                 draw_mesh(r, &r->cp, &m);
             } else {
-                float cdx = g->camPos.x - tg[k].x, cdz = g->camPos.z - tg[k].z;
+                float cdx = r->cam.x - tg[k].x, cdz = r->cam.z - tg[k].z;
                 float pdx = g->p.x - tg[k].x, pdz = g->p.z - tg[k].z;
                 if (pdx * pdx + pdz * pdz < rad * rad) { cdx = 0; cdz = 0; }   /* speler staat erin: geen zuil */
                 m = m4_mul(m4_trs_y(tg[k].x, 0, tg[k].z, 0), m4_scale(rad, 4.5f, rad));
@@ -999,6 +1044,19 @@ void r_draw_scene(Renderer *r, Game *g) {
         glUniform1f(r->wUnlit, 0.0f);
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
+        glEnable(GL_CULL_FACE);
+    }
+    if (r->vr.eye && r->vr.hands) {   /* v5.0: handen (en het wapen in de rechterhand) */
+        int k;
+        glUseProgram(r->progW);
+        glUniform1f(r->wUnlit, 0.0f);
+        tint(r, 1, 1, 1);
+        glDisable(GL_CULL_FACE);
+        for (k = 0; k < 2; k++) draw_mesh(r, &r->handMesh[k], &r->vr.hand[k]);
+        if (g->weapon > WP_NONE && g->weapon < WP_COUNT && g->p.veh < 0) {
+            M4 wm = m4_mul(r->vr.hand[1], m4_mul(m4_rot_x(PI_F * 0.5f), m4_translate(0, 0.62f, 0.0f)));
+            draw_mesh(r, &r->weapon[g->weapon], &wm);
+        }
         glEnable(GL_CULL_FACE);
     }
     glBindBuffer(GL_ARRAY_BUFFER, 0);

@@ -14,6 +14,26 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v5.0.0: Meta Quest (VR)
+
+Er is nu een aparte VR-versie voor de Meta Quest 2, 3, 3S en Pro: `SmallGiveawayBike1-Quest.apk`. Die zet je er met sideloaden op (ontwikkelaarsmodus + SideQuest of `adb install`). De app heet "Giveaway Bike VR" en staat onder Onbekende bronnen.
+
+- **Third person (standaard):** je kijkt vanaf de gewone volgcamera achter je personage. Met je hoofd kijk je vrij rond en de rechterstick draait de camera.
+- **First person:** je zit in het hoofd van je personage. Je handen volgen de controllers en je wapen zit in je rechterhand: je richt en schiet met je hand, en de trekker trilt bij elk schot. In auto's en op de fiets zit je op de bestuurdersplek. De rechterstick draait je in stappen van 30 graden.
+- **Wisselen** tussen first en third person: druk de rechterstick in.
+- **Knoppen:**
+  - Linkerstick: lopen of sturen.
+  - A: springen.
+  - B: rennen.
+  - X: wapen wisselen.
+  - Y: in- of uitstappen.
+  - Rechtertrekker: schieten of gas.
+  - Linkertrekker: remmen.
+  - Linkerstick indrukken: kaart.
+  - Menuknop: pauze.
+- **Menu's en winkels** zweven als scherm voor je. Je wijst met de laser van je rechtercontroller en klikt met de trekker (of A).
+- De HUD (geld, kaart, ondertitels) zweeft voor je ogen. Stemmen, muziek en geluid werken gewoon.
+
 ## v4.5.0: stemmen en cutscenes
 
 - **Cutscenes voor elke missie:** voordat een missie begint, staat je contact voor je en vertelt hij of zij de opdracht. Je ziet zwarte filmbalken, camerashots over de schouder en ondertitels. Tik (of druk op spring/actie) om over te slaan.
