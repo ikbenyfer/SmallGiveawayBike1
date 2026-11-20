@@ -417,7 +417,7 @@ jobs:
           VER="$(cat VERSION 2>/dev/null || echo 1.2)"
           TAG="v$VER"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then TAG="v$VER-build.${{ github.run_number }}"; fi
-          printf 'Automatische build van main (%s).\n\n%s\n\nBestanden:\n- iPad (iOS 9, armv7): SmallGiveawayBike1.ipa of de .deb\n- Windows (x64): SmallGiveawayBike1-Windows.zip\n- Linux (x64): SmallGiveawayBike1-Linux.tar.gz\n- Android (5.0+, telefoon/tablet): SmallGiveawayBike1-Android.apk\n' "${GITHUB_SHA:0:7}" "$MSG" > notes.md
+          printf 'Automatische build van main (%s).\n\n%s\n\nBestanden:\n- iPad (iOS 9, armv7): SmallGiveawayBike1.ipa of de .deb\n- Windows (x64): SmallGiveawayBike1-Windows.zip\n- Linux (x64): SmallGiveawayBike1-Linux.tar.gz\n- Android (5.0+, telefoon/tablet): SmallGiveawayBike1-Android.apk\n- Meta Quest (VR, Quest 2/3/Pro): SmallGiveawayBike1-Quest.apk (sideloaden)\n' "${GITHUB_SHA:0:7}" "$MSG" > notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Small Giveaway Bike 1 $TAG" --notes-file notes.md --latest \
             art/SmallGiveawayBike1/*.ipa art/SmallGiveawayBike1/*.deb \
