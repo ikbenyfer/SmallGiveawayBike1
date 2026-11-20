@@ -197,6 +197,10 @@ long plat_memory_kb(void) {
     PROCESS_MEMORY_COUNTERS pmc;
     if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) return (long)(pmc.WorkingSetSize / 1024);
     return -1;
+#elif defined(__SWITCH__)
+    u64 used = 0;
+    svcGetInfo(&used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
+    return (long)(used / 1024);
 #else
     long pages = 0, rss = 0;
     FILE *f = fopen("/proc/self/statm", "r");
