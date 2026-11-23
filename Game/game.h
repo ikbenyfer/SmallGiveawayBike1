@@ -12,7 +12,7 @@
 #define MAX_COPS 4      /* laatste 4 voetganger-plekken: agenten */
 #define MAX_TRACERS 12
 #define MAX_TRAFFIC 10
-#define NMISSIONS 22
+#define NMISSIONS 30   /* v6.1.0: +8 in de nieuwe wijken (max 31: voortgang is een bitmasker) */
 #define MAX_CP 10
 
 enum { NEED_ANY = 0, NEED_BIKE = 1, NEED_CAR = 2, NEED_FOOT = 3 };
@@ -53,6 +53,7 @@ typedef struct {
     float tx, tz, stuck, ghost, hitcool;
     float slip;        /* v6.0.1: zijwaartse snelheid (driften) */
     int phys, fly;     /* v6.0.4: rijdt met physics (pm = modelmatrix); vliegend (vleugels + jet) */
+    float vy, fp, fr;  /* v6.1.0: arcade-vliegen: verticale snelheid, neus op/neer, rollen */
     M4 pm;
 } Vehicle;
 
@@ -129,7 +130,7 @@ typedef struct {
     RemotePlayer remote[MAX_REMOTE];
     struct { int target; float dmg; } hitq[8];
     int nhit;
-    struct GarageCar { int exists, model, paint, eng, hand, neon, spoiler; } garage[MAX_OWNED];
+    struct GarageCar { int exists, model, paint, eng, hand, neon, spoiler, fly; } garage[MAX_OWNED];
     int dealerOpen, inDealer, customsOpen, inCustoms;
     int wanted;
     float evadeT, bustT, crimeCool, ramCool;
@@ -212,7 +213,7 @@ int game_home_upgrade(Game *g, int house);   /* 1 gelukt, 0 te weinig geld, -1 a
 int game_home_inside(const Game *g);         /* 0 buiten, 1 in huis, 2 in de garage */
 int game_buy_car(Game *g, int model);
 void game_sell_car(Game *g, int slot);
-int game_custom_price(const Game *g, int item);   /* 0 lak, 1 motor, 2 handling, 3 neon, 4 spoiler */
+int game_custom_price(const Game *g, int item);   /* 0 lak, 1 motor, 2 handling, 3 neon, 4 spoiler, 5 vleugels+jet */
 int game_custom(Game *g, int item);
 void game_damage(Game *g, float amount);
 /* missie starten vanuit het keuzescherm: speler naar het startpunt (evt. met voertuig) */

@@ -4,14 +4,22 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* v6.1.0: 14x14. Linksboven (0-6, 0-6) is de oude stad; O = vrij perceel (BLOCK SPRAY en je eigen huis) */
 static const char *LAYOUT[NB] = {
-    "HHHPHHH",
-    "HHHPHHH",
-    "SLSASDS",
-    "ADSCDAL",
-    "DSAPDGA",
-    "LADSADS",
-    "PDSLDAP",
+    "HHHPHHH" "HHPHHHH",
+    "HHHPHHH" "HAPHAHH",
+    "SLSASDS" "OASSDAH",
+    "ADSCDAL" "OLDSADH",
+    "DSAPDGA" "DSAPDAH",
+    "LADSADS" "ADSDLPH",
+    "PDSLDAP" "HADSAHH",
+    "HHADSAH" "PDSADAH",
+    "HAPDSLA" "DSDPDSH",
+    "HHSADAD" "ASDLSAH",
+    "HPHDSAP" "DADSAPH",
+    "HHHASHA" "LDAHPHH",
+    "HHPHHPH" "HHAHHHH",
+    "HHHHHHH" "HPHHHPH",
 };
 
 static World *W;
@@ -352,7 +360,7 @@ static void gen_shops(float ix0, float iz0, float ix1, float iz1, Rng *r, int bi
             }
             {   /* v3.2: nieuwe winkels met een lichtbak en luifel in hun eigen kleur */
                 static const int sh[4][5] = {   /* blok i, blok j, kant, plek, poi */
-                    {0, 2, 0, 1, POI_BURGER}, {6, 2, 0, 0, POI_GYM}, {3, 5, 0, 1, POI_DRIP}, {6, 5, 1, 1, POI_BLING}};
+                    {0, 2, 0, 1, POI_BURGER}, {10, 2, 0, 1, POI_GYM}, {4, 10, 0, 1, POI_DRIP}, {11, 9, 0, 1, POI_BLING}};   /* v6.1.0: verspreid */
                 static const int sc[4][3] = {{240, 150, 30}, {40, 200, 220}, {230, 60, 160}, {250, 215, 60}};
                 int q;
                 for (q = 0; q < 4; q++) {
@@ -701,6 +709,15 @@ static void gen_block(int i, int j) {
     int k;
     r.s = 1234567u + (uint32_t)i * 7919u + (uint32_t)j * 104729u;
     at((bx0 + bx1) * 0.5f, (bz0 + bz1) * 0.5f);
+    if (t == 'O') {   /* v6.1.0: vrij perceel (huis van de speler / BLOCK SPRAY) */
+        int k2;
+        for (k2 = 0; k2 < 6; k2++) {
+            float x = rng_range(&r, bx0 + 31.0f, bx1 - 3.0f), z = rng_range(&r, bz0 + 3.0f, bz1 - 3.0f);
+            at(x, z);
+            tree(x, z, &r);
+        }
+        return;
+    }
     /* stoeptegel-plaat met stoeprand */
     g_meshMat = MAT_CONCRETE;
     mb_box2(cur, v3(bx0, 0, bz0), v3(bx1, CURB, bz1), col(158, 156, 150), col(118, 116, 110), BOX_NOBOTTOM);
@@ -783,7 +800,7 @@ static void gen_outer(void) {
     float lo = -30.0f, hi = MAPW + 30.0f;
     r.s = 424242u;
     /* bomenrij rondom */
-    for (k = 0; k < 120; k++) {
+    for (k = 0; k < 240; k++) {
         float t = rng_f(&r) * 4.0f, d = rng_range(&r, 4.0f, 26.0f);
         float x, z;
         int side = (int)t;
@@ -792,7 +809,7 @@ static void gen_outer(void) {
         else if (side == 1) { x = MAPW + d; z = u; }
         else if (side == 2) { x = u; z = MAPW + d; }
         else { x = -d; z = u; }
-        if (x > 401.0f && x < 437.0f && z > 172.0f && z < 226.0f) continue;   /* perceel van het eigen huis */
+        if (x > 401.0f && x < 437.0f && z > 175.5f && z < 229.5f) continue;   /* perceel van het eigen huis */
         if (x > 401.0f && x < 437.0f && z > 116.0f && z < 146.0f) continue;   /* BLOCK SPRAY */
         at(x, z);
         tree(x, z, &r);
@@ -844,11 +861,11 @@ static void gen_outer(void) {
     /* grondplaat + heuvels aan de horizon (altijd getekend) */
     {
         MeshB *g = &W->ground;
-        float big = 900.0f, c = MAPW * 0.5f;
+        float big = MAPW + 500.0f, c = MAPW * 0.5f;
         mb_flat(g, c - big, c - big, c + big, c + big, -0.02f, col(78, 120, 64));
         for (k = 0; k < 26; k++) {
             float a = k * (2 * PI_F / 26) + rng_range(&r, -0.1f, 0.1f);
-            float d = rng_range(&r, 330.0f, 420.0f);
+            float d = MAPW * 0.5f + rng_range(&r, 150.0f, 240.0f);
             float hx = c + cosf(a) * d, hz = c + sinf(a) * d;
             mb_cone(g, v3(hx, -1, hz), rng_range(&r, 50, 90), rng_range(&r, 25, 60), 6, col(56 + rng_int(&r, 20), 92 + rng_int(&r, 20), 60));
         }
@@ -931,14 +948,14 @@ static void mm_put(World *w, int x, int y, int r, int g, int b) {
 static void build_minimap(void) {
     World *w = W;
     int x, y, i;
-    float span = MAPW + 2 * BORDER, px = span / 256.0f;
-    w->mm = 256;
+    float span = MAPW + 2 * BORDER, px = span / 512.0f;
+    w->mm = 512;
     w->mmOrg = -BORDER;
     w->mmOrgZ = -BORDER;
     w->mmSpan = span;
-    w->minimap = (uint8_t *)malloc(256 * 256 * 4);
-    for (y = 0; y < 256; y++)
-        for (x = 0; x < 256; x++) {
+    w->minimap = (uint8_t *)malloc(512 * 512 * 4);
+    for (y = 0; y < 512; y++)
+        for (x = 0; x < 512; x++) {
             float wx = -BORDER + (x + 0.5f) * px, wz = -BORDER + (y + 0.5f) * px;
             int r = 50, g = 86, b = 52;
             if (wx > -30 && wz > -30 && wx < MAPW + 30 && wz < MAPW + 30) { r = 70; g = 112; b = 64; }
@@ -1015,7 +1032,7 @@ int world_build_step(World *w, int step) {
         /* geld op de stoep */
         r.s = 777u;
         w->ncash = 0;
-        while (w->ncash < 18) {
+        while (w->ncash < 40) {
             int bi = rng_int(&r, NB), bj = rng_int(&r, NB), side = rng_int(&r, 4);
             float t = rng_range(&r, 4.0f, BLOCKW - 4.0f), x, z;
             float bx0 = block_x0(bi), bz0 = block_x0(bj);

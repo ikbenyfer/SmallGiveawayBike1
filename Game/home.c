@@ -5,9 +5,9 @@
 /* ------------------------------------------------------------------ maten */
 
 static const float EXT[HOME_LEVELS][5] = {   /* x0, z0, x1, z1, hoogte */
-    {414.0f, 190.0f, 422.0f, 199.0f, 3.0f},
-    {413.0f, 187.0f, 425.0f, 203.0f, 5.8f},
-    {412.0f, 183.0f, 428.0f, 206.0f, 6.2f},
+    {414.0f, 193.5f, 422.0f, 202.5f, 3.0f},
+    {413.0f, 190.5f, 425.0f, 206.5f, 5.8f},
+    {412.0f, 186.5f, 428.0f, 209.5f, 6.2f},
 };
 static const float ROOM_W[HOME_LEVELS] = {10.0f, 14.0f, 18.0f}, ROOM_D[HOME_LEVELS] = {8.0f, 10.0f, 13.0f};
 #define GAR_X0 (-612.0f)
@@ -72,11 +72,11 @@ static int house_boxes(int lvl, HBox *b, int max) {
 #define B(X0, Z0, X1, Z1) do { if (n < max) { b[n].x0 = (X0); b[n].z0 = (Z0); b[n].x1 = (X1); b[n].z1 = (Z1); n++; } } while (0)
     lvl = clampl(lvl, HOME_LEVELS);
     B(EXT[lvl][0], EXT[lvl][1], EXT[lvl][2], EXT[lvl][3]);
-    B(412.0f, 207.5f, 420.0f, 208.2f);     /* garage-ingang: zijmuren en achterkant */
-    B(412.0f, 215.8f, 420.0f, 216.5f);
-    B(419.3f, 207.5f, 420.0f, 216.5f);
-    B(405.0f, 176.0f, 433.0f, 176.8f);     /* heggen */
-    B(405.0f, 221.2f, 433.0f, 222.0f);
+    B(412.0f, 211.0f, 420.0f, 211.7f);     /* garage-ingang: zijmuren en achterkant */
+    B(412.0f, 219.3f, 420.0f, 220.0f);
+    B(419.3f, 211.0f, 420.0f, 220.0f);
+    B(405.0f, 179.5f, 433.0f, 180.3f);     /* heggen */
+    B(405.0f, 224.7f, 433.0f, 225.5f);
 #undef B
     return n;
 }
@@ -201,13 +201,13 @@ void home_build_exterior(MeshB *m, int lvl) {
     /* tuin, pad, oprit, heggen, brievenbus, bomen */
     mb_flat(m, HOME_PLOT_X0, HOME_PLOT_Z0, HOME_PLOT_X1, HOME_PLOT_Z1, 0.008f, grass);
     mb_flat(m, 403.5f, zc - 0.8f, x0, zc + 0.8f, 0.02f, stone);
-    mb_flat(m, 403.5f, 208.5f, 412.0f, 215.5f, 0.02f, col(120, 120, 124));
-    mb_box(m, v3(405.0f, 0, 176.0f), v3(433.0f, 1.0f, 176.8f), col(60, 120, 60), BOX_NOBOTTOM);
-    mb_box(m, v3(405.0f, 0, 221.2f), v3(433.0f, 1.0f, 222.0f), col(60, 120, 60), BOX_NOBOTTOM);
+    mb_flat(m, 403.5f, 212.0f, 412.0f, 219.0f, 0.02f, col(120, 120, 124));
+    mb_box(m, v3(405.0f, 0, 179.5f), v3(433.0f, 1.0f, 180.3f), col(60, 120, 60), BOX_NOBOTTOM);
+    mb_box(m, v3(405.0f, 0, 224.7f), v3(433.0f, 1.0f, 225.5f), col(60, 120, 60), BOX_NOBOTTOM);
     mb_box(m, v3(405.6f, 0, zc + 1.4f), v3(405.75f, 1.0f, zc + 1.55f), col(60, 60, 64), 0);
     blob(m, v3(405.68f, 1.12f, zc + 1.48f), v3(0.16f, 0.13f, 0.24f), 0.5f, 0.5f, 10, 5, col(200, 40, 40));
-    tree(m, 429.5f, 179.5f);
-    if (lvl < 2) tree(m, 428.5f, 205.0f);
+    tree(m, 429.5f, 183.0f);
+    if (lvl < 2) tree(m, 428.5f, 208.5f);
     /* huis */
     m->ao = 0.2f;
     if (lvl < 2) {
@@ -263,13 +263,13 @@ void home_build_exterior(MeshB *m, int lvl) {
     plant(m, x0 - 0.5f, zc + 1.4f, 1.0f);
     /* ingang van de ondergrondse garage */
     m->ao = 0.15f;
-    mb_box(m, v3(412.0f, 0, 207.5f), v3(420.0f, 2.8f, 216.5f), col(150, 150, 154), BOX_NOBOTTOM);
+    mb_box(m, v3(412.0f, 0, 211.0f), v3(420.0f, 2.8f, 220.0f), col(150, 150, 154), BOX_NOBOTTOM);
     m->ao = 0;
-    wall_quad_x(m, 411.98f, 208.4f, 215.6f, 0.0f, 2.4f, -1, col(14, 14, 16));
+    wall_quad_x(m, 411.98f, 211.9f, 219.1f, 0.0f, 2.4f, -1, col(14, 14, 16));
     for (k = 0; k < 6; k++)   /* geel-zwarte balk boven de ingang */
-        wall_quad_x(m, 411.96f, 208.4f + k * 1.2f, 209.0f + k * 1.2f, 2.42f, 2.7f, -1, col_e(250, 200, 30, 90));
-    mb_flat(m, 405.0f, 208.6f, 412.0f, 215.4f, 0.025f, col(60, 60, 64));
-    for (k = 0; k < 5; k++) mb_flat(m, 405.4f + k * 1.4f, 211.8f, 406.2f + k * 1.4f, 212.2f, 0.03f, col_e(240, 240, 240, 40));
+        wall_quad_x(m, 411.96f, 211.9f + k * 1.2f, 212.5f + k * 1.2f, 2.42f, 2.7f, -1, col_e(250, 200, 30, 90));
+    mb_flat(m, 405.0f, 212.1f, 412.0f, 218.9f, 0.025f, col(60, 60, 64));
+    for (k = 0; k < 5; k++) mb_flat(m, 405.4f + k * 1.4f, 215.3f, 406.2f + k * 1.4f, 215.7f, 0.03f, col_e(240, 240, 240, 40));
 }
 
 /* ------------------------------------------------------------------ binnen */

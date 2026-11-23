@@ -319,6 +319,92 @@ static void setup_missions(Game *g) {
     cp_set(&m->cp[9], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_ANY, "Final step: lose EVERY cop, then hide at the garage");
     m->cp[9].clean = 1;
     m->ncp = 10;
+    /* ---- v6.1.0: nieuwe wijken (22-29) ---- */
+    m = &g->mdef[22];
+    m->title = "EAST SIDE EXPRESS";
+    m->brief = "Welcome to the new east side! Bike race through the fresh streets.";
+    m->giver = v3(road_c(8), 0, road_c(1));
+    m->reward = 900; m->time = 150; m->startVeh = 1;
+    {
+        static const int s[9][2] = {{10, 1}, {12, 1}, {12, 4}, {10, 4}, {10, 6}, {13, 6}, {13, 3}, {11, 2}, {8, 2}};
+        for (i = 0; i < 9; i++) cp_set(&m->cp[i], RC(s[i][0], s[i][1]), 4.0f, NEED_BIKE, "Race: next checkpoint");
+        m->ncp = 9;
+    }
+
+    m = &g->mdef[23];
+    m->title = "HIGHWAY KING";
+    m->brief = "The whole new ring road in one go. Fast car, no brakes!";
+    m->giver = v3(road_c(7), 0, road_c(7));
+    m->reward = 1500; m->time = 200; m->startVeh = 2;
+    {
+        static const int s[8][2] = {{7, 0}, {14, 0}, {14, 7}, {14, 14}, {7, 14}, {0, 14}, {0, 7}, {7, 7}};
+        for (i = 0; i < 8; i++) cp_set(&m->cp[i], RC(s[i][0], s[i][1]), 5.5f, NEED_CAR, "Ring road: next checkpoint");
+        m->ncp = 8;
+    }
+
+    m = &g->mdef[24];
+    m->title = "SOUTH SIDE PIZZA";
+    m->brief = "The new suburbs are hungry. Deliver five pizzas before they get cold.";
+    m->giver = w->poi[POI_PIZZA];
+    m->giver.x += 6.0f;
+    m->reward = 1100; m->time = 230;
+    {
+        static const int s[5][2] = {{2, 13}, {8, 12}, {10, 11}, {12, 11}, {11, 13}};
+        for (i = 0; i < 5; i++) cp_set(&m->cp[i], SW(s[i][0], s[i][1]), 2.8f, NEED_ANY, i < 4 ? "Deliver the pizza" : "Deliver the last pizza");
+        m->ncp = 5;
+    }
+
+    m = &g->mdef[25];
+    m->title = "NEW TOWN MARATHON";
+    m->brief = "On foot through the new south-east blocks. Pace yourself!";
+    m->giver = v3(road_c(8), 0, road_c(8));
+    m->reward = 800; m->time = 170;
+    {
+        static const int s[8][2] = {{9, 8}, {10, 8}, {10, 9}, {11, 9}, {11, 10}, {10, 10}, {9, 10}, {9, 9}};
+        for (i = 0; i < 8; i++) cp_set(&m->cp[i], RC(s[i][0], s[i][1]), 3.0f, NEED_FOOT, "Run to the next checkpoint");
+        m->ncp = 8;
+    }
+
+    m = &g->mdef[26];
+    m->title = "BLING BLING ROBBERY";
+    m->brief = "Hit the jewellery store in the far east, then lose the police and hide at the garage.";
+    m->giver = v3(w->poi[POI_BLING].x + 4.0f, 0, w->poi[POI_BLING].z - 3.0f);
+    m->reward = 4000; m->requireWeapon = 1;
+    cp_set(&m->cp[0], w->poi[POI_BLING].x, w->poi[POI_BLING].z, 2.6f, NEED_FOOT, "Grab the jewels - stay close!");
+    m->cp[0].hold = 12.0f; m->cp[0].alarm = 2;
+    cp_set(&m->cp[1], w->poi[POI_GARAGE].x, w->poi[POI_GARAGE].z, 4.5f, NEED_ANY, "Lose the police, then hide at the garage");
+    m->cp[1].clean = 1;
+    m->ncp = 2;
+
+    m = &g->mdef[27];
+    m->title = "CROSSTOWN TAXI";
+    m->brief = "Long fares from one end of the big city to the other.";
+    m->giver = v3(road_c(5), 0, road_c(9));
+    m->reward = 1300; m->time = 260; m->startVeh = 2;
+    cp_set(&m->cp[0], RC(4, 9), 4.0f, NEED_CAR, "Pick up the passenger");
+    cp_set(&m->cp[1], RC(13, 2), 4.0f, NEED_CAR, "Drop off in the north-east");
+    cp_set(&m->cp[2], RC(12, 5), 4.0f, NEED_CAR, "Next fare: pick up");
+    cp_set(&m->cp[3], RC(1, 12), 4.0f, NEED_CAR, "Drop off in the south-west suburbs");
+    cp_set(&m->cp[4], RC(3, 11), 4.0f, NEED_CAR, "Last fare: pick up");
+    cp_set(&m->cp[5], RC(12, 12), 4.0f, NEED_CAR, "Drop off in the far south-east");
+    m->ncp = 6;
+
+    m = &g->mdef[28];
+    m->title = "FAR EAST FUGITIVE";
+    m->brief = "Two stars in the new part of town. Use the long roads to lose them.";
+    m->giver = v3(road_c(12), 0, road_c(7));
+    m->reward = 2200; m->escape = 2; m->startVeh = 2; m->ncp = 0;
+
+    m = &g->mdef[29];
+    m->title = "GRAND TOUR XL";
+    m->brief = "The ultimate bike tour: every corner of the 4x bigger city.";
+    m->giver = v3(road_c(0), 0, road_c(8));
+    m->reward = 2500; m->time = 420; m->startVeh = 1;
+    {
+        static const int s[10][2] = {{0, 14}, {5, 14}, {10, 14}, {14, 14}, {14, 9}, {14, 4}, {14, 0}, {9, 0}, {4, 0}, {0, 0}};
+        for (i = 0; i < 10; i++) cp_set(&m->cp[i], RC(s[i][0], s[i][1]), 4.5f, NEED_BIKE, "Tour: next checkpoint");
+        m->ncp = 10;
+    }
 #undef SW
 #undef RC
 
@@ -716,10 +802,16 @@ static void traffic_set_target(Vehicle *v) {
     v->phase = 0;
 }
 
+/* v6.1.0: kruispunt/blok in de buurt van de speler kiezen (de stad is groot) */
+static int near_idx(Game *g, float p, int n, int spread) {
+    int c = (int)floorf(p / PITCH) - spread + rng_int(&g->rng, spread * 2 + 1);
+    return c < 0 ? 0 : (c >= n ? n - 1 : c);
+}
+
 static void traffic_spawn(Game *g, Vehicle *v, float px, float pz, int nearOk) {
     int tries;
     for (tries = 0; tries < 30; tries++) {
-        int i = rng_int(&g->rng, NB + 1), j = rng_int(&g->rng, NB + 1), d = rng_int(&g->rng, 4);
+        int i = near_idx(g, px, NB + 1, 3), j = near_idx(g, pz, NB + 1, 3), d = rng_int(&g->rng, 4);
         int ni = i + DIRX[d], nj = j + DIRZ[d];
         V3 a, b, r, p;
         float dx, dz, dist;
@@ -852,7 +944,7 @@ static void spawn_ped_at(Game *g, Ped *p, float x, float z, int flee) {
 static void ped_respawn(Game *g, Ped *p, float px, float pz, int nearOk) {
     int tries;
     for (tries = 0; tries < 20; tries++) {
-        int bi = rng_int(&g->rng, NB), bj = rng_int(&g->rng, NB), c = rng_int(&g->rng, 4);
+        int bi = near_idx(g, px - ROADW, NB, 2), bj = near_idx(g, pz - ROADW, NB, 2), c = rng_int(&g->rng, 4);
         float x0, z0, x1, z1, t = rng_f(&g->rng), x, z, dx, dz, d;
         ped_corner(bi, bj, c, &x0, &z0);
         ped_corner(bi, bj, c + 1, &x1, &z1);
@@ -1262,7 +1354,6 @@ static void store_tick(Game *g, float dt) {
 static float ph_gnd(void *ctx, float x, float z) {
     Game *g = (Game *)ctx;
     float y = world_ground_y(g->w, x, z);
-    if (!g->nl) { float r = ph_ramp_height(x, z); if (r > y) y = r; }
     return y;
 }
 
@@ -1284,7 +1375,61 @@ static void pcar_spawn(Game *g, Vehicle *v) {
     g->flipT = 0;
 }
 
-/* v6.0.4: je eigen voertuig rijdt (en vliegt) met physics */
+/* v6.1.0: arcade-vliegen (geen rigid body meer): op de grond gewoon rijden, UP/DOWN = stijgen/dalen,
+ * niets indrukken = blijven zweven, gas = jet vooruit, sturen = draaien. Het model kantelt alleen voor het oog. */
+static void fly_drive(Game *g, Vehicle *v, const Input *in, float dt) {
+    int bike = v->type == VEH_BIKE;
+    float gy = ph_gnd(g, v->x, v->z);
+    float lift = (in->up ? 1.0f : 0.0f) - (in->down ? 1.0f : 0.0f);
+    float thr = in->gas ? 1.0f : (in->my > 0.5f ? (in->my - 0.3f) / 0.7f : 0.0f);
+    float brk = in->brake ? 1.0f : (in->my < -0.5f ? 1.0f : 0.0f);
+    float steer = clampf(in->mx * 1.15f, -1, 1);
+    if (g->craft.active) { g->craft.active = 0; g->pcarVeh = -1; }
+    if (v->y - gy < 0.4f && lift <= 0 && v->vy <= 0.01f) {   /* op de grond */
+        v->vy = 0;
+        if (fabsf(v->speed) > 26.0f) v->speed = approachf(v->speed, 0, 20.0f * dt);   /* net geland */
+        drive_vehicle(g, v, thr, brk, steer, dt);
+        v->fp = approachf(v->fp, 0, 2.5f * dt);
+        v->fr = bike ? v->lean : approachf(v->fr, 0, 2.5f * dt);
+    } else {
+        float maxF = (bike ? 38.0f : 45.0f) * (v->custom ? 1.0f + 0.05f * v->eng : 1.0f), nx, nz;
+        V3 f;
+        if (thr > 0) v->speed = approachf(v->speed, maxF * thr, 13.0f * dt);
+        else if (brk > 0) v->speed = approachf(v->speed, -6.0f, 11.0f * dt);
+        else v->speed = approachf(v->speed, 0, 2.5f * dt);
+        v->steer = approachf(v->steer, steer, 3.0f * dt);
+        v->h = wrap_angle(v->h - v->steer * 1.55f * dt);
+        v->vy = approachf(v->vy, lift * 9.0f, (lift != 0 ? 14.0f : 7.0f) * dt);
+        f = fwd_of(v->h);
+        v->x += f.x * v->speed * dt;
+        v->z += f.z * v->speed * dt;
+        v->y += v->vy * dt;
+        if (v->y > 230.0f) { v->y = 230.0f; if (v->vy > 0) v->vy = 0; }
+        gy = ph_gnd(g, v->x, v->z);
+        if (v->y < gy) {
+            if (v->vy < -8.0f) { game_sfx(g, SFX_CRASH, v->x, v->z); game_damage(g, (-v->vy - 8.0f) * 2.0f); }
+            v->y = gy; if (v->vy < 0) v->vy = 0;
+        }
+        if (world_push_circle(g->w, &v->x, &v->z, bike ? 0.9f : 1.6f, v->y + 0.4f, &nx, &nz)) {   /* tegen een gebouw */
+            if (fabsf(v->speed) > 12.0f && v->hitcool <= 0) {
+                game_sfx(g, SFX_CRASH, v->x, v->z);
+                game_damage(g, (fabsf(v->speed) - 12.0f) * 1.2f);
+                v->hitcool = 0.6f;
+            }
+            v->speed = approachf(v->speed, 0, 40.0f * dt);
+        }
+        if (v->hitcool > 0) v->hitcool -= dt;
+        if (v->y - gy < 3.0f) collide_vehicles(g, v);
+        v->slip = 0; v->lean = 0;
+        v->wheel += v->speed * dt / 0.34f * 0.2f;
+        v->fp = approachf(v->fp, clampf(-v->vy * 0.035f - thr * 0.06f, -0.45f, 0.45f), 2.0f * dt);
+        v->fr = approachf(v->fr, -v->steer * 0.45f * clampf(fabsf(v->speed) / 10.0f, 0.3f, 1.0f), 2.5f * dt);
+    }
+    v->phys = 1;
+    v->pm = m4_mul(m4_trs_y(v->x, v->y, v->z, v->h), m4_mul(m4_rot_x(v->fp), m4_rot_z(v->fr)));
+}
+
+/* v6.0.4: je eigen voertuig rijdt met physics (instelling VEHICLE PHYSICS) */
 static void pcar_drive(Game *g, Vehicle *v, const Input *in, float dt) {
     Craft *c = &g->craft;
     V3 f, up, mp;
@@ -1337,7 +1482,6 @@ void game_phys_start(Game *g, int here, int kind, int model, int fly) {
     if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; g->veh[g->p.veh].phys = 0; g->p.veh = -1; }
     g->mission = -1; g->cut = 0;
     if (!g->arcade) g->wanted = 0;
-    if (!here) { x = 432.0f; z = 70.0f; h = 0.0f; }
     memset(v, 0, sizeof(*v));
     v->active = 1; v->garageSlot = -1;
     v->fly = fly;
@@ -1851,7 +1995,7 @@ static void place_owned(Game *g, int slot, int atDealer) {
     memset(v, 0, sizeof(*v));
     if (!c->exists) return;
     v->active = 1; v->type = IS_MOTO(c->model) ? VEH_BIKE : VEH_CAR; v->variant = 1; v->custom = 1;
-    v->model = c->model; v->paint = c->paint; v->eng = c->eng; v->hand = c->hand; v->neon = c->neon; v->spoiler = c->spoiler;
+    v->model = c->model; v->paint = c->paint; v->eng = c->eng; v->hand = c->hand; v->neon = c->neon; v->spoiler = c->spoiler; v->fly = c->fly;
     v->garageSlot = slot;
     v->x = g->w->dealerSpot[slot].x; v->z = g->w->dealerSpot[slot].z; v->h = g->w->dealerSpotH;
     if (!atDealer && !g->nl) {   /* plekken in de ondergrondse garage van je huis */
@@ -1879,7 +2023,7 @@ int game_buy_car(Game *g, int model) {
     g->garage[slot].exists = 1;
     g->garage[slot].model = model;
     g->garage[slot].paint = model_default_paint(model);
-    g->garage[slot].eng = g->garage[slot].hand = g->garage[slot].neon = g->garage[slot].spoiler = 0;
+    g->garage[slot].eng = g->garage[slot].hand = g->garage[slot].neon = g->garage[slot].spoiler = g->garage[slot].fly = 0;
     place_owned(g, slot, 1);
     if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; }
     g->p.veh = g->firstOwned + slot;
@@ -1901,13 +2045,15 @@ int game_custom_price(const Game *g, int item) {
     const Vehicle *v;
     if (g->p.veh < 0) return -1;
     v = &g->veh[g->p.veh];
-    if (v->type != VEH_CAR || v->police) return -1;
+    if (v->police) return -1;
+    if (v->type != VEH_CAR && !(item == 5 && v->custom)) return -1;   /* motoren: alleen vleugels + jet */
     switch (item) {
     case 0: return 200;
     case 1: return v->eng < 3 ? ENGINE_PRICE[v->eng] : -1;
     case 2: return v->hand < 3 ? HANDLING_PRICE[v->hand] : -1;
     case 3: return 500;
     case 4: return 400;
+    case 5: return v->fly ? 0 : 25000;   /* v6.1.0: vleugels + jet (uitzetten is gratis) */
     default: return -1;
     }
 }
@@ -1918,17 +2064,18 @@ int game_custom(Game *g, int item) {
     if (price < 0 || g->money < price) return 0;
     v = &g->veh[g->p.veh];
     g->money -= price;
-    if (!v->custom) { v->custom = 1; v->model = 0; v->paint = v->variant % 6; if (v->traffic) v->traffic = 0; }
+    if (!v->custom && v->type == VEH_CAR) { v->custom = 1; v->model = 0; v->paint = v->variant % 6; if (v->traffic) v->traffic = 0; }
     switch (item) {
     case 0: v->paint = (v->paint < 0 ? 0 : v->paint + 1) % NPAINTS; break;
     case 1: v->eng++; break;
     case 2: v->hand++; break;
     case 3: v->neon = (v->neon + 1) % NNEONS; break;
     case 4: v->spoiler = !v->spoiler; break;
+    case 5: v->fly = !v->fly; if (!v->fly) { v->vy = 0; v->fp = v->fr = 0; v->phys = 0; } break;
     }
     if (v->garageSlot >= 0 && v->garageSlot < MAX_OWNED) {
         GarageCar *c = &g->garage[v->garageSlot];
-        c->paint = v->paint; c->eng = v->eng; c->hand = v->hand; c->neon = v->neon; c->spoiler = v->spoiler;
+        c->paint = v->paint; c->eng = v->eng; c->hand = v->hand; c->neon = v->neon; c->spoiler = v->spoiler; c->fly = v->fly;
     }
     return 1;
 }
@@ -2000,7 +2147,7 @@ static void respawn(Game *g, const char *title, const char *sub) {
 static void police_spawn(Game *g, Vehicle *v, float px, float pz) {
     int tries;
     for (tries = 0; tries < 40; tries++) {
-        int i = rng_int(&g->rng, NB + 1), j = rng_int(&g->rng, NB + 1);
+        int i = near_idx(g, px, NB + 1, 2), j = near_idx(g, pz, NB + 1, 2);
         V3 n = node_pos(i, j);
         float dx = n.x - px, dz = n.z - pz, d = sqrtf(dx * dx + dz * dz);
         if (d < 40.0f || d > 100.0f) continue;
@@ -2221,7 +2368,8 @@ void game_update(Game *g, const Input *in, float dt) {
         if (!in->gas && in->my > 0.5f) thr = (in->my - 0.3f) / 0.7f;
         if (!in->brake && in->my < -0.5f) brk = 1.0f;
         g_handbrake = in->jump;
-        if ((g->vphys || v->fly) && !g->nl_noPhys && !(g->p.anT > 0)) pcar_drive(g, v, in, dt);   /* vliegen kan alleen met echte physics */
+        if (v->fly && !(g->p.anT > 0)) fly_drive(g, v, in, dt);   /* v6.1.0: arcade-vliegen */
+        else if (g->vphys && !g->nl_noPhys && !(g->p.anT > 0)) pcar_drive(g, v, in, dt);
         else { if (v->phys) { v->phys = 0; g->craft.active = 0; } drive_vehicle(g, v, thr, brk, clampf(in->mx * 1.15f, -1, 1), dt); }
         g_handbrake = 0;
         if (v->type == VEH_CAR && fabsf(v->slip) > 2.5f && fabsf(v->speed) > 7.0f) {   /* drift-teller */

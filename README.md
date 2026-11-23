@@ -14,6 +14,16 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v6.1.0 (alle platforms, ook de iPad): 4x grotere stad, WINGS + JET en arcade-vliegen
+
+- **De stad is 4x zo groot:** 14 x 14 blokken (796 m) in plaats van 7 x 7 (404 m). De oude stad ligt linksboven, daaromheen liggen nieuwe wijken met winkelstraten, kantoren, parken en buitenwijken. Je huis en BLOCK SPRAY liggen nu midden in de stad.
+- **Winkels zijn meer verspreid:** de sportschool, DRIP en BLING zitten nu in de nieuwe wijken. De minimap en de grote kaart zijn scherper (512 px).
+- **8 nieuwe missies (30 in totaal)** in de nieuwe wijken: EAST SIDE EXPRESS, HIGHWAY KING, SOUTH SIDE PIZZA, NEW TOWN MARATHON, BLING BLING ROBBERY, CROSSTOWN TAXI, FAR EAST FUGITIVE en GRAND TOUR XL. Ze gaan open zodra je WELCOME RIDE hebt gehaald.
+- **BLOCK CUSTOMS: WINGS + JET** ($25.000). Je auto of motor krijgt vleugels en een jet en kan vliegen. Dit wordt in je garage opgeslagen. Uitzetten is gratis.
+- **Vliegen gaat nu arcade-stijl, zonder rare physics.** Op de grond rijd je gewoon. Met UP/DOWN (R/F, PageUp/PageDown, RB/LB of de UP/DOWN-knoppen op het scherm) stijg en daal je. Laat je los, dan blijf je zweven. Met gas vlieg je vooruit en met sturen draai je. Het voertuig helt mee in de bocht.
+- De physics-schansen naast de stad zijn weg, want daar liggen nu de nieuwe wijken.
+- **iPad:** geen HQ-shaders en schaduwen (te zwaar voor de iPad 2). Kwaliteit blijft LOW/MEDIUM/HIGH. Op de andere platforms blijft ULTRA (HQ-shaders) een optie in SETTINGS.
+
 ## v6.0.6 (niet voor de iPad): ARCADE MODE
 
 - **PHYSICS MODE is weg.** Daarvoor in de plaats komt **ARCADE MODE** (menu rechtsboven):

@@ -677,6 +677,10 @@ void r_set_quality(Renderer *r, int q) {
         GLint ok = 0;
         if (r->prog[1]) glGetProgramiv(r->prog[1], GL_LINK_STATUS, &ok);
         r->hq = q >= 2 && ok;
+#ifdef __APPLE__
+        r->hq = 0;   /* v6.1.0: iPad 2: geen HQ-shaders/schaduwen (te zwaar), alleen LOW/MEDIUM/HIGH detail */
+#endif
+        (void)q;
     }
     r->shadowsOn = r->hq;
 #ifdef SGB_HAVE_FBO
@@ -1394,7 +1398,6 @@ static void draw_scene_one(Renderer *r, Game *g) {
             shadows[nsh] = v3(g->p.x, ground, g->p.z); shs[nsh][0] = s; shs[nsh][1] = s; shs[nsh][2] = 0; nsh++;
         }
     }
-    if (!g->nl) { M4 id = m4_identity(); draw_mesh(r, &r->rampMesh, &id); }   /* v6.0.4: schansen bij de stad */
     if (r->pass == 1) {   /* schaduw-pass: alleen gebouwen, voertuigen en mensen */
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glEnable(GL_CULL_FACE);

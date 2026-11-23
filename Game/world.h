@@ -4,15 +4,15 @@
 
 #include "mesh.h"
 
-#define NB 7                 /* blokken per richting */
+#define NB 14                /* blokken per richting (v6.1.0: was 7, nu 4x zo veel oppervlakte) */
 #define ROADW 12.0f          /* breedte weg incl. niets (stoep hoort bij blok) */
 #define BLOCKW 44.0f         /* blok incl. stoep */
 #define PITCH 56.0f
-#define MAPW (NB * PITCH + ROADW) /* 404 m */
+#define MAPW (NB * PITCH + ROADW) /* 796 m (was 404 m) */
 #define BORDER 60.0f
 #define SIDEWALK 2.6f
 #define CURB 0.15f
-#define CHN 8
+#define CHN 16
 #define LANE_OFF 2.9f        /* rijstrook-midden vanaf weg-midden */
 
 enum { BOX_BUILDING = 0, BOX_PROP = 1, BOX_WALL = 2, BOX_TREE = 3, BOX_FENCE = 4 };

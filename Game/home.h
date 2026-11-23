@@ -12,10 +12,10 @@
 /* buiten */
 #define HOME_PLOT_X0 405.0f
 #define HOME_PLOT_X1 433.0f
-#define HOME_PLOT_Z0 176.0f
-#define HOME_PLOT_Z1 222.0f
+#define HOME_PLOT_Z0 179.5f   /* v6.1.0: 3,5 m opgeschoven (grotere stad) */
+#define HOME_PLOT_Z1 225.5f
 #define HOME_RAMP_X 409.5f       /* marker voor de garage-ingang (rijden of lopen) */
-#define HOME_RAMP_Z 212.0f
+#define HOME_RAMP_Z 215.5f
 
 /* binnen (ver weg, buiten de stad) */
 #define HOME_INT_X (-600.0f)

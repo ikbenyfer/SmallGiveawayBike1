@@ -16,7 +16,7 @@ typedef struct {
 } UIVtx;
 
 #define UI_MAX 6000
-#define RW_SLOTS 128
+#define RW_SLOTS 256
 
 enum { TOD_DUSK = 0, TOD_NIGHT = 1, TOD_DAY = 2 };
 

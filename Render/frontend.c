@@ -299,7 +299,7 @@ static void save_all(void) {
                 const struct GarageCar *gc = &F.G.garage[c];
                 char key[16];
                 snprintf(key, sizeof(key), "car%d", c);
-                ssave(key, gc->exists ? (1 | (gc->model << 1) | (gc->paint << 4) | (gc->eng << 9) | (gc->hand << 11) | (gc->neon << 13) | (gc->spoiler << 16)) : 0);
+                ssave(key, gc->exists ? (1 | (gc->model << 1) | (gc->paint << 4) | (gc->eng << 9) | (gc->hand << 11) | (gc->neon << 13) | (gc->spoiler << 16) | (gc->fly << 17)) : 0);
             }
         }
         F.savedMoney = F.G.money; F.savedDone = done;
@@ -406,7 +406,7 @@ static void load_slot(void) {
                 snprintf(key, sizeof(key), "car%d", c);
                 v = sload(key, 0);
                 gc->exists = v & 1; gc->model = (v >> 1) & 7; gc->paint = (v >> 4) & 31; gc->eng = (v >> 9) & 3;
-                gc->hand = (v >> 11) & 3; gc->neon = (v >> 13) & 7; gc->spoiler = (v >> 16) & 1;
+                gc->hand = (v >> 11) & 3; gc->neon = (v >> 13) & 7; gc->spoiler = (v >> 16) & 1; gc->fly = (v >> 17) & 1;
                 if (gc->model >= DEALER_MODELS) gc->model = 0;
                 if (gc->paint >= NPAINTS) gc->paint = 0;
                 if (gc->neon >= NNEONS) gc->neon = 0;
@@ -1413,7 +1413,10 @@ static void draw_hud(void) {
 
 
 /* missie i is vrij als het de eerste is, als hij al eens gehaald is, of als de vorige gehaald is */
-static int mission_unlocked(int i) { return i <= 0 || F.G.completed[i] || F.G.completed[i - 1]; }
+static int mission_unlocked(int i) {
+    if (i >= 22) return F.G.completed[0] || F.G.completed[i] || F.G.completed[i - 1];   /* v6.1.0: nieuwe wijken na de eerste missie */
+    return i <= 0 || F.G.completed[i] || F.G.completed[i - 1];
+}
 
 static void draw_missions(void) {
     Renderer *R = &F.R;
@@ -2498,7 +2501,7 @@ static void mptest_tick(void) {
     }
 }
 
-static const char *CUSTOM_ITEMS[5] = {"PAINT", "ENGINE", "HANDLING", "NEON", "SPOILER"};
+static const char *CUSTOM_ITEMS[6] = {"PAINT", "ENGINE", "HANDLING", "NEON", "SPOILER", "WINGS + JET"};
 static const char *PAINT_NAMES[NPAINTS] = {"RED", "BLUE", "YELLOW", "WHITE", "GREEN", "BLACK", "ORANGE", "PURPLE", "CYAN", "SILVER"};
 static const char *NEON_NAMES[NNEONS] = {"OFF", "RED", "BLUE", "GREEN", "PINK", "WHITE"};
 
@@ -2717,7 +2720,8 @@ static void custom_value(int item, char *b, size_t n) {
     case 1: snprintf(b, n, "LEVEL %d / 3", v->eng); break;
     case 2: snprintf(b, n, "LEVEL %d / 3", v->hand); break;
     case 3: snprintf(b, n, "%s", NEON_NAMES[v->neon % NNEONS]); break;
-    default: snprintf(b, n, "%s", v->spoiler ? "ON" : "OFF"); break;
+    case 4: snprintf(b, n, "%s", v->spoiler ? "ON" : "OFF"); break;
+    default: snprintf(b, n, "%s", v->fly ? "ON - UP/DOWN to fly" : "OFF"); break;
     }
 }
 
@@ -2738,37 +2742,38 @@ static void draw_customs(void) {
     ui_text(R, b, 24, 84, 20, 1, 1, 1, 1, 0);
     fmt_money(b, sizeof(b), F.G.money);
     ui_text(R, b, 500, 112, 32, 0.55f, 1.0f, 0.55f, 1, 2);
-    for (i = 0; i < 5; i++) {
-        float y = 160.0f + i * 92.0f;
+    for (i = 0; i < 6; i++) {
+        float y = 150.0f + i * 80.0f;
         int price = game_custom_price(&F.G, i), pr = F.pressed == 800 + i;
-        ui_rect(R, 20, y, 480, 82, 0.12f, 0.12f, 0.15f, 0.95f);
-        ui_text(R, CUSTOM_ITEMS[i], 36, y + 6, 32, 1, 1, 1, 1, 0);
+        ui_rect(R, 20, y, 480, 74, 0.12f, 0.12f, 0.15f, 0.95f);
+        ui_text(R, CUSTOM_ITEMS[i], 36, y + 4, 30, 1, 1, 1, 1, 0);
         custom_value(i, val, sizeof(val));
-        ui_text(R, val, 36, y + 46, 20, 1.0f, 0.8f, 0.3f, 1, 0);
-        if (i == 0 && v->custom) { Col pc = paint_color(v->paint); ui_rect(R, 250, y + 46, 40, 22, pc.r / 255.0f, pc.g / 255.0f, pc.b / 255.0f, 1); }
-        if (i == 3 && v->neon) { Col nc = neon_color(v->neon); ui_rect(R, 250, y + 46, 40, 22, nc.r / 255.0f, nc.g / 255.0f, nc.b / 255.0f, 1); }
-        ui_rect(R, 330, y + 14, 156, 54, pr ? 0.9f : (price >= 0 && F.G.money >= price ? 0.15f : 0.25f), pr ? 0.2f : (price >= 0 && F.G.money >= price ? 0.45f : 0.25f), pr ? 0.2f : (price >= 0 && F.G.money >= price ? 0.9f : 0.25f), 1);
-        if (price >= 0) snprintf(b, sizeof(b), "%s $%d", i == 0 || i == 3 ? "NEXT" : (i == 4 ? "SWAP" : "UP"), price);
-        else snprintf(b, sizeof(b), "MAX");
-        ui_text(R, b, 408, y + 26, 22, 1, 1, 1, 1, 1);
+        ui_text(R, val, 36, y + 42, 19, 1.0f, 0.8f, 0.3f, 1, 0);
+        if (i == 0 && v->custom) { Col pc = paint_color(v->paint); ui_rect(R, 250, y + 42, 40, 22, pc.r / 255.0f, pc.g / 255.0f, pc.b / 255.0f, 1); }
+        if (i == 3 && v->neon) { Col nc = neon_color(v->neon); ui_rect(R, 250, y + 42, 40, 22, nc.r / 255.0f, nc.g / 255.0f, nc.b / 255.0f, 1); }
+        ui_rect(R, 330, y + 10, 156, 54, pr ? 0.9f : (price >= 0 && F.G.money >= price ? 0.15f : 0.25f), pr ? 0.2f : (price >= 0 && F.G.money >= price ? 0.45f : 0.25f), pr ? 0.2f : (price >= 0 && F.G.money >= price ? 0.9f : 0.25f), 1);
+        if (i == 5 && price == 0) snprintf(b, sizeof(b), "REMOVE");
+        else if (price >= 0) snprintf(b, sizeof(b), "%s $%d", i == 0 || i == 3 ? "NEXT" : (i >= 4 ? (i == 5 ? "ADD" : "SWAP") : "UP"), price);
+        else snprintf(b, sizeof(b), v->type != VEH_CAR ? "-" : "MAX");
+        ui_text(R, b, 408, y + 22, 22, 1, 1, 1, 1, 1);
     }
-    if (F.shopMsg[0]) ui_text(R, F.shopMsg, 260, 630, 18, 1, 0.85f, 0.4f, 1, 1);
-    ui_text(R, v->garageSlot >= 0 ? "Saved on your own car." : "Not your car: changes are not saved.", 260, 660, 15, 0.75f, 0.75f, 0.75f, 1, 1);
+    if (F.shopMsg[0]) ui_text(R, F.shopMsg, 260, 638, 18, 1, 0.85f, 0.4f, 1, 1);
+    ui_text(R, v->garageSlot >= 0 ? "Saved on your own car." : "Not your car: changes are not saved.", 260, 666, 15, 0.75f, 0.75f, 0.75f, 1, 1);
     big_button("DONE", 260, 724, 40, F.pressed == 890, 1);
     ui_flush(R);
 }
 
 static void customs_tap(float x, float y, int phase) {
     int i, hit = 0;
-    for (i = 0; i < 5; i++) {
-        float yy = 160.0f + i * 92.0f;
-        if (x > 330 && x < 486 && y > yy + 14 && y < yy + 68) hit = 800 + i;
+    for (i = 0; i < 6; i++) {
+        float yy = 150.0f + i * 80.0f;
+        if (x > 330 && x < 486 && y > yy + 10 && y < yy + 64) hit = 800 + i;
     }
     if (hit_text(x, y, "DONE", 260, 746, 40)) hit = 890;
     if (phase != TOUCH_END) { F.pressed = hit; return; }
     F.pressed = 0;
     if (hit == 890) { set_state(ST_GAME); save_all(); return; }
-    if (hit >= 800 && hit < 805) {
+    if (hit >= 800 && hit < 806) {
         if (game_custom(&F.G, hit - 800)) { F.shopMsg[0] = 0; F.G.moneyShown = F.G.money; save_all(); if (F.sfxOn) plat_sfx(SFX_BUY, 0.7f); }
         else snprintf(F.shopMsg, sizeof(F.shopMsg), game_custom_price(&F.G, hit - 800) < 0 ? "Already maxed out." : "Not enough money.");
     }
