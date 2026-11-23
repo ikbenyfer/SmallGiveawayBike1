@@ -49,13 +49,15 @@ typedef struct {
 const char *ph_part_name(int t);
 V3 ph_cell_pos(int gx, int gy, int gz);       /* midden van een hokje (bouwscherm en physics) */
 void ph_default(PDesign *d);                   /* een simpele auto */
+#define PH_NPRESETS 6
+const char *ph_preset(PDesign *d, int idx);   /* v6.0.3: kant-en-klare voertuigen; geeft de naam */
 void ph_stats(const PDesign *d, float *mass, int *motors, int *wheels, int *wings, int *jets, int *seats);
 void ph_spawn(Craft *c, const PDesign *d, V3 pos, float heading);
 /* stap: gas/rem -1..1, sturen -1..1, handrem, pitch/rol (lucht) -1..1; ground: hoogte van de grond (x,z),
  * push: duwt een punt uit gebouwen (1 = geraakt); ctx wordt doorgegeven */
 typedef float (*PhGround)(void *ctx, float x, float z);
 typedef int (*PhPush)(void *ctx, float *x, float *z, float y);
-void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float pitch, float roll, float dt,
+void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float pitch, float roll, float lift, float dt,
              PhGround ground, PhPush push, void *ctx);
 void ph_reset_upright(Craft *c, PhGround ground, void *ctx);
 M4 ph_matrix(const Craft *c);                  /* lokaal -> wereld */

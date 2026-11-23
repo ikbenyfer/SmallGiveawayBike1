@@ -818,6 +818,8 @@ int main(int argc, char **argv) {
             keys.fire = (rel && (mb & SDL_BUTTON_LMASK)) || k[fe_key_bind(KA_FIRE)];
             keys.jumpPressed = edgeJump; keys.actionPressed = edgeAction; keys.switchPressed = edgeSwitch;
             keys.jump = k[fe_key_bind(KA_JUMP)];   /* v6.0.1: vasthouden = handrem */
+            keys.up = k[SDL_SCANCODE_R] || k[SDL_SCANCODE_PAGEUP];      /* v6.0.3: opstijgen */
+            keys.down = k[SDL_SCANCODE_F] || k[SDL_SCANCODE_PAGEDOWN];  /* v6.0.3: dalen */
             edgeJump = edgeAction = edgeSwitch = 0;
             if ((SDL_bool)rel != SDL_GetRelativeMouseMode()) SDL_SetRelativeMouseMode(rel ? SDL_TRUE : SDL_FALSE);
             {   /* alleen bij een wijziging (op Android opent/sluit dit het schermtoetsenbord) */

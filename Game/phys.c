@@ -90,6 +90,55 @@ void ph_default(PDesign *d) {
     d->c[0][6][1] = PP_WHEEL; d->c[0][6][5] = PP_WHEEL;
 }
 
+/* v6.0.3: presets (x 0..6 links-rechts, z 0..8 achter-voor, y = laag) */
+const char *ph_preset(PDesign *d, int idx) {
+    int x, z;
+    memset(d, 0, sizeof(*d));
+    switch ((idx % PH_NPRESETS + PH_NPRESETS) % PH_NPRESETS) {
+    case 0:
+        ph_default(d);
+        return "SIMPLE CAR";
+    case 1:   /* vliegende motor: smal lijf, 4 smalle wielen, vleugels opzij, jet achter */
+        for (z = 1; z <= 7; z++) d->c[0][z][3] = PP_BLOCK;
+        d->c[0][3][3] = PP_MOTOR;
+        d->c[1][4][3] = PP_SEAT;
+        d->c[1][6][3] = PP_BLOCK;
+        d->c[0][1][2] = PP_WHEEL; d->c[0][1][4] = PP_WHEEL;
+        d->c[0][7][2] = PP_WHEEL; d->c[0][7][4] = PP_WHEEL;
+        for (x = 0; x <= 1; x++) { d->c[0][4][x] = PP_WING; d->c[0][5][x] = PP_WING; d->c[0][4][6 - x] = PP_WING; d->c[0][5][6 - x] = PP_WING; }
+        d->c[0][0][3] = PP_JET;
+        return "FLYING MOTOR";
+    case 2:   /* vliegtuig: romp, grote vleugels, staart, twee jets, driewielig landingsgestel */
+        for (z = 1; z <= 8; z++) d->c[0][z][3] = PP_BLOCK;
+        d->c[1][6][3] = PP_SEAT;
+        for (x = 0; x <= 2; x++) { d->c[0][4][x] = PP_WING; d->c[0][5][x] = PP_WING; d->c[0][4][6 - x] = PP_WING; d->c[0][5][6 - x] = PP_WING; }
+        d->c[0][1][2] = PP_WING; d->c[0][1][4] = PP_WING;
+        d->c[1][1][3] = PP_WING;
+        d->c[0][0][2] = PP_JET; d->c[0][0][4] = PP_JET;
+        d->c[0][7][2] = PP_WHEEL; d->c[0][2][2] = PP_WHEEL; d->c[0][2][4] = PP_WHEEL;
+        d->c[0][3][3] = PP_MOTOR;
+        return "PLANE";
+    case 3:   /* jet-auto: snel, motor + twee jets */
+        ph_default(d);
+        d->c[0][4][3] = PP_MOTOR;
+        d->c[1][2][2] = PP_JET; d->c[1][2][4] = PP_JET;
+        return "JET CAR";
+    case 4:   /* zes wielen, twee motoren */
+        for (z = 1; z <= 7; z++) for (x = 2; x <= 4; x++) d->c[0][z][x] = PP_BLOCK;
+        d->c[0][3][3] = PP_MOTOR; d->c[0][4][3] = PP_MOTOR;
+        d->c[1][6][3] = PP_SEAT;
+        for (z = 1; z <= 7; z += 3) { d->c[0][z][1] = PP_WHEEL; d->c[0][z][5] = PP_WHEEL; }
+        for (z = 1; z <= 4; z++) for (x = 2; x <= 4; x++) d->c[1][z][x] = PP_BLOCK;
+        return "6-WHEEL TRUCK";
+    default:  /* zweefplatform: geen wielen, opstijgen/dalen met de knoppen */
+        for (z = 2; z <= 6; z++) for (x = 1; x <= 5; x++) d->c[0][z][x] = PP_BLOCK;
+        d->c[1][4][3] = PP_SEAT;
+        d->c[0][2][0] = PP_WING; d->c[0][6][0] = PP_WING; d->c[0][2][6] = PP_WING; d->c[0][6][6] = PP_WING;
+        d->c[0][1][3] = PP_JET;
+        return "HOVER PLATFORM";
+    }
+}
+
 void ph_stats(const PDesign *d, float *mass, int *motors, int *wheels, int *wings, int *jets, int *seats) {
     int x, y, z;
     *mass = 0; *motors = *wheels = *wings = *jets = *seats = 0;
@@ -189,7 +238,7 @@ static void break_part(Craft *c, int i, V3 vel) {
     c->meshDirty = 1;
 }
 
-void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float pitch, float roll, float dt,
+void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float pitch, float roll, float lift, float dt,
              PhGround ground, PhPush push, void *ctx) {
     int sub, ns = 6, i, k;
     float h;
@@ -283,7 +332,7 @@ void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float p
                 if (sp > 1.0f && vf > 0) {
                     aoa = asinf(clampf(-v3dot(vp, up) / sp, -1, 1));
                     Cl = clampf(0.35f + 5.0f * aoa, -1.2f, 1.4f);
-                    L = 0.5f * 1.2f * vf * vf * Cl * 0.36f * 2.2f;
+                    L = 0.5f * 1.2f * vf * vf * Cl * 0.36f * 4.4f;
                     add_force(&F, &T, v3add(v3scale(up, L), v3scale(fwd, -fabsf(L) * 0.06f)), r);
                 }
             }
@@ -298,6 +347,19 @@ void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float p
                 T = v3add(T, v3scale(rt, -pitch * q));
                 T = v3add(T, v3scale(fwd, -roll * q * 0.8f));
                 T = v3add(T, v3scale(up, -steer * q * 0.25f));
+            }
+        }
+        /* --- v6.0.3 vleugels als zweefmotor: opstijgen/dalen, langzaam zakken, rechtop blijven */
+        if (c->nwing > 0) {
+            float g = c->mass * 9.81f, gy = ground(ctx, c->pos.x, c->pos.z), alt = c->pos.y - gy;
+            if (lift > 0.01f) F.y += lift * fmaxf(c->nwing * 2600.0f, g * 1.4f);
+            else if (lift < -0.01f) F.y += lift * g * 0.8f;
+            else if (alt > 1.2f) F.y += g * 0.88f;   /* zweven: langzaam zakken */
+            if (alt > 0.8f || lift > 0.01f) {   /* gyro: houdt het voertuig rechtop */
+                V3 ax = v3cross(up, v3(0, 1, 0));
+                float k = (c->inertia.x + c->inertia.z) * 0.5f * 14.0f;
+                T = v3add(T, v3scale(ax, k));
+                T = v3sub(T, v3scale(v3(c->angv.x, 0, c->angv.z), (c->inertia.x + c->inertia.z) * 0.5f * 3.0f));
             }
         }
         /* --- integreren */

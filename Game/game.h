@@ -40,6 +40,7 @@ typedef struct {
     int jumpPressed, actionPressed;
     int fire, switchPressed;
     int run;               /* RUN-knop / Shift ingedrukt */
+    int up, down;          /* v6.0.3: opstijgen/dalen (voertuigen met vleugels) */
 } Input;
 
 typedef struct {

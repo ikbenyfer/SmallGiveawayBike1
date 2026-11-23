@@ -1306,8 +1306,8 @@ static void phys_update(Game *g, const Input *in, float dt) {
         game_message(g, c->crashed ? "New vehicle" : "Reset", 1.2f);
     }
     if (in->switchPressed) g->physWantBuild = 1;
-    if (!c->crashed) ph_step(c, gas, brk, in->mx, in->jump, pitch, roll, dt, ph_gnd, ph_push, g);
-    else { ph_step(c, 0, 1, 0, 1, 0, 0, dt, ph_gnd, ph_push, g); }
+    if (!c->crashed) ph_step(c, gas, brk, in->mx, in->jump, pitch, roll, (in->up ? 1.0f : 0.0f) - (in->down ? 1.0f : 0.0f), dt, ph_gnd, ph_push, g);
+    else { ph_step(c, 0, 1, 0, 1, 0, 0, 0, dt, ph_gnd, ph_push, g); }
     if (c->broken != g->physBroken) {
         g->physBroken = c->broken;
         game_sfx(g, SFX_CRASH, c->pos.x, c->pos.z);

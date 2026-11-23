@@ -33,7 +33,7 @@ typedef struct { char pc[8]; char name[96]; long kb; double rx, ry; } NLArea;
 #include <stdarg.h>
 
 enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME, ST_BIZ, ST_SLOTS, ST_CONTROLS, ST_BUILD };
-enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH, CTL_RUN };
+enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH, CTL_RUN, CTL_UP, CTL_DOWN };
 
 #define NTOUCH 10
 #define STICK_R 78.0f
@@ -67,6 +67,7 @@ static struct {
     int bSel, bLayer, physPending, physNL;   /* v6.0.1 bouwscherm */
     float bYaw, bPitch, bDist, bDownX, bDownY, bLastX, bLastY, bHoverX, bHoverY;
     int bDown, bDrag, bMirror, bHover;   /* v6.0.2 3D-bouwscherm */
+    int bPreset;
     int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
@@ -145,6 +146,7 @@ static void draw_mp_hud(void);
 static void start_game(void);
 static void nl_play_at(double rx, double ry, const char *label, int from);
 static void nl_exit_to_city(void);
+static void nl_play_pc(const char *pc, int from);
 static void pad_load_binds(void);
 /* Alle besturing loslaten (sticks terug, knoppen los). Nodig als er een menu opengaat terwijl je
  * de joystick vasthoudt: het loslaten komt dan bij het menu binnen en de stick zou blijven hangen. */
@@ -758,6 +760,10 @@ static void btn_pos(int ctl, float *x, float *y, float *r) {
         if (ctl == CTL_BRAKE) { *x = W - 200; *y = H - 318; *r = 48; }
         if (ctl == CTL_ACTION) { *x = W - 120; *y = H - 440; *r = 40; }
         if (ctl == CTL_JUMP) { *x = W - 322; *y = H - 300; *r = 42; }   /* v6.0.1: handrem (DRIFT) */
+        if (F.loadDone && F.G.physOn && F.G.craft.nwing > 0) {   /* v6.0.3: opstijgen/dalen */
+            if (ctl == CTL_UP) { *x = W - 74; *y = H - 450; *r = 44; }
+            if (ctl == CTL_DOWN) { *x = W - 196; *y = H - 470; *r = 38; }
+        }
     }
 }
 
@@ -905,6 +911,8 @@ static void pad_build_input(Input *in) {
     in->switchPressed |= P.edgeSwitch;
     in->run |= pa_held(PA_RUN);
     in->jump |= pa_held(PA_JUMP);
+    in->up |= pb_held(PB_RB);
+    in->down |= pb_held(PB_LB);
     if (F.G.p.veh >= 0 || F.G.physOn) {
         in->gas |= pa_held(PA_GAS) || P.ax[5] > 0.15f * (P.bind[PA_GAS] == PB_RT);
         in->brake |= pa_held(PA_BRAKE) || P.ax[4] > 0.15f * (P.bind[PA_BRAKE] == PB_LT);
@@ -1035,14 +1043,19 @@ static void draw_build(void) {
     else if (motors && !wheels) ui_text(R, "Tip: motors drive WHEELS", W - 175, 172, 18, 1, 0.8f, 0.3f, 1, 1);
     else ui_text(R, "Ready!", W - 175, 172, 20, 0.4f, 1, 0.5f, 1, 1);
     {   /* knoppen */
-        static const char *bt[5] = {"DRIVE: TEST TRACK", "DRIVE: REAL NL", "SIMPLE CAR", "CLEAR", "BACK"};
+        static const char *bt[5] = {"DRIVE: TEST TRACK", "DRIVE: REAL NL", "PRESET", "CLEAR", "BACK"};
         int k;
         for (k = 0; k < 5; k++) {
             float bx = W - 320, by = 400.0f + k * 62.0f;
             int pr = F.pressed == 2000 + k;
             ui_rect(R, bx, by, 300, 52, pr ? 0.9f : (k < 2 ? 0.15f : 0.22f), pr ? 0.6f : (k < 2 ? 0.5f : 0.24f), pr ? 0.1f : (k < 2 ? 0.25f : 0.3f), 0.95f);
-            ui_text(R, bt[k], bx + 150, by + 13, 22, 1, 1, 1, 1, 1);
+            if (k == 2) {
+                PDesign tmp;
+                snprintf(b, sizeof(b), "PRESET: %s", ph_preset(&tmp, F.bPreset));
+                ui_text(R, b, bx + 150, by + 14, 19, 1, 1, 1, 1, 1);
+            } else ui_text(R, bt[k], bx + 150, by + 13, 22, 1, 1, 1, 1, 1);
         }
+        ui_text(R, "(tap PRESET again for the next one)", W - 170, 400.0f + 2 * 62.0f + 54, 13, 0.8f, 0.8f, 0.9f, 0.8f, 1);
     }
 }
 
@@ -1070,8 +1083,10 @@ static void phys_go(int nl) {
     design_save();
     if (nl) {
         double rx, ry;
-        const char *nm = ns_pack_start(0, &rx, &ry);
-        if (!nm) return;
+        const char *nm;
+        ns_pack_load();   /* v6.0.3: anders kent de knop de startplekken niet */
+        nm = ns_pack_start(0, &rx, &ry);
+        if (!nm) { nl_play_pc("1012JS", ST_BUILD); F.physPending = 1; F.physNL = 1; return; }
         F.physPending = 1; F.physNL = 1;
         nl_play_at(rx, ry, nm, ST_BUILD);
         return;
@@ -1104,7 +1119,7 @@ static void build_tap(float x, float y, int phase) {
         F.pressed = 0;
         if (hit == 2000) phys_go(0);
         else if (hit == 2001) phys_go(1);
-        else if (hit == 2002) ph_default(d);
+        else if (hit == 2002) { ph_preset(d, F.bPreset); F.bPreset = (F.bPreset + 1) % PH_NPRESETS; }
         else if (hit == 2003) memset(d, 0, sizeof(*d));
         else if (hit == 2004) { design_save(); set_state(ST_MENU); }
         return;
@@ -1278,10 +1293,10 @@ static void draw_hud(void) {
         ui_text(R, b, W - 24, 138, 20, 0.85f, 0.95f, 1, 0.9f, 2);
         if (g_desktop) {
             ui_rect(R, 0, H - 30, W, 30, 0, 0, 0, 0.45f);
-            ui_text(R, "W/S gas/brake   A/D steer   SPACE handbrake   SHIFT boost   E reset   Q builder   (wings: W/S pitch, A/D roll in the air)", W * 0.5f, H - 26, 15, 1, 1, 1, 0.85f, 1);
+            ui_text(R, "W/S gas/brake   A/D steer   SPACE handbrake   SHIFT boost   R/F up/down (wings)   E reset   Q builder", W * 0.5f, H - 26, 15, 1, 1, 1, 0.85f, 1);
         } else if (P.connected && P.active) {
             char hb[200];
-            snprintf(hb, sizeof(hb), "%s gas   %s brake   %s handbrake   %s boost   %s reset   %s builder   %s pause",
+            snprintf(hb, sizeof(hb), "%s gas   %s brake   %s handbrake   %s boost   %s reset   %s builder   %s pause   RB/LB up/down",
                      PB_NAMES[P.bind[PA_GAS]], PB_NAMES[P.bind[PA_BRAKE]], PB_NAMES[P.bind[PA_JUMP]], PB_NAMES[P.bind[PA_RUN]],
                      PB_NAMES[P.bind[PA_ACTION]], PB_NAMES[P.bind[PA_SWITCH]], PB_NAMES[P.bind[PA_PAUSE]]);
             ui_rect(R, 0, H - 30, W, 30, 0, 0, 0, 0.45f);
@@ -1295,6 +1310,10 @@ static void draw_hud(void) {
             btn_pos(CTL_BRAKE, &x, &y, &r); draw_button(x, y, r, "BRAKE", ctl_down(CTL_BRAKE), 1, 20);
             btn_pos(CTL_ACTION, &x, &y, &r); draw_button(x, y, r, "RESET", ctl_down(CTL_ACTION), 1, 18);
             btn_pos(CTL_JUMP, &x, &y, &r); draw_button(x, y, r, "DRIFT", ctl_down(CTL_JUMP), 1, 18);
+            if (c->nwing > 0) {
+                btn_pos(CTL_UP, &x, &y, &r); draw_button(x, y, r, "UP", ctl_down(CTL_UP), 1, 22);
+                btn_pos(CTL_DOWN, &x, &y, &r); draw_button(x, y, r, "DOWN", ctl_down(CTL_DOWN), 1, 16);
+            }
             ui_text(R, "PAUSE > QUIT = back to the builder menu", W - 30, 180, 16, 1, 1, 1, 0.6f, 2);
         }
         if (g->bannerT > 0) {
@@ -2921,11 +2940,11 @@ static void game_touch(TSlot *s, int phase) {
         return;
     }
     if (phase == TOUCH_BEGIN) {
-        static const int order[8] = {CTL_PAUSE, CTL_GAS, CTL_BRAKE, CTL_JUMP, CTL_ACTION, CTL_FIRE, CTL_WSWITCH, CTL_RUN};
+        static const int order[10] = {CTL_PAUSE, CTL_GAS, CTL_BRAKE, CTL_JUMP, CTL_ACTION, CTL_FIRE, CTL_WSWITCH, CTL_RUN, CTL_UP, CTL_DOWN};
         int k;
         s->ctl = CTL_NONE;
         if (s->x < 224 && s->y < 236) { s->ctl = CTL_UI; bm_open(); return; }
-        for (k = 0; k < 8; k++) {
+        for (k = 0; k < 10; k++) {
             float x, y, r;
             btn_pos(order[k], &x, &y, &r);
             if (r <= 0) continue;
@@ -3207,6 +3226,8 @@ static void build_input(void) {
     if (F.lOn) stick_value(F.lbx, F.lby, F.lkx, F.lky, &in->mx, &in->my);
     if (F.rOn) stick_value(F.rbx, F.rby, F.rkx, F.rky, &in->lx, &in->ly);
     in->jump = ctl_down(CTL_JUMP);
+    in->up = ctl_down(CTL_UP);
+    in->down = ctl_down(CTL_DOWN);
     in->action = ctl_down(CTL_ACTION);
     in->gas = ctl_down(CTL_GAS);
     in->brake = ctl_down(CTL_BRAKE);
@@ -3223,6 +3244,8 @@ static void build_input(void) {
         in->gas |= g_dk.gas && (F.G.p.veh >= 0 || F.G.physOn);
         in->brake |= g_dk.brake && (F.G.p.veh >= 0 || F.G.physOn);
         in->jump |= g_dk.jump;
+        in->up |= g_dk.up;
+        in->down |= g_dk.down;
         in->fire |= g_dk.fire;
         in->run |= g_dk.run;
         in->jumpPressed |= g_dk.jumpPressed;
@@ -4016,6 +4039,7 @@ void fe_frame(double now) {
 
     if (F.physPending && F.state == ST_GAME && F.loadDone && (!F.physNL || F.mode == 1)) {   /* NL geladen: voertuig neerzetten */
         F.physPending = 0;
+        design_load();   /* het laden van de kaart wist de spelstatus */
         game_phys_start(&F.G, 1);
     }
     if (F.G.physOn && F.state != ST_GAME && F.state != ST_PAUSE && F.state != ST_BIGMAP) game_phys_stop(&F.G);
