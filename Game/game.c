@@ -1084,7 +1084,7 @@ void game_init(Game *g, World *w) {
     g->camPitch = 0.32f;
     g->camDist = 5.0f;
     g->camSens = 1.0f;
-    for (i = 0; i < w->npark && g->nveh < MAX_VEH - MAX_TRAFFIC - MAX_POLICE - MAX_OWNED; i++) {
+    for (i = 0; i < w->npark && g->nveh < MAX_VEH - MAX_TRAFFIC - MAX_POLICE - MAX_OWNED - 1; i++) {   /* -1: plek voor physVeh */
         Vehicle *v;
         int k = i;
         /* de Giveaway Bike (fiets, variant 0) altijd als eerste */

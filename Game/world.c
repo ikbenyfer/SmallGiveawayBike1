@@ -1007,8 +1007,16 @@ int world_build_step(World *w, int step) {
     W = w;
     if (step == 0) { gen_roads(); return 0; }
     if (step >= 1 && step <= NB * NB) {
-        int k = step - 1;
-        gen_block(k % NB, k / NB);
+        int k = step - 1, i, j, n = 0;
+        /* v6.1.0: eerst de oude 7x7-stad (zelfde volgorde als vroeger: geparkeerde voertuigen, huizen
+         * voor de bezorgmissies, de rode auto en de Giveaway Bike blijven waar ze waren), dan de nieuwe wijken */
+        if (k < 49) { gen_block(k % 7, k / 7); return 0; }
+        k -= 49;
+        for (j = 0; j < NB; j++)
+            for (i = 0; i < NB; i++) {
+                if (i < 7 && j < 7) continue;
+                if (n++ == k) { gen_block(i, j); return 0; }
+            }
         return 0;
     }
     if (step == NB * NB + 1) { gen_outer(); return 0; }
@@ -1032,7 +1040,7 @@ int world_build_step(World *w, int step) {
         /* geld op de stoep */
         r.s = 777u;
         w->ncash = 0;
-        while (w->ncash < 40) {
+        while (w->ncash < MAX_CASH) {
             int bi = rng_int(&r, NB), bj = rng_int(&r, NB), side = rng_int(&r, 4);
             float t = rng_range(&r, 4.0f, BLOCKW - 4.0f), x, z;
             float bx0 = block_x0(bi), bz0 = block_x0(bj);

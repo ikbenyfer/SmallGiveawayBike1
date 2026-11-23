@@ -114,7 +114,7 @@ typedef struct {
     char msg[96]; float msgT;
 
     long money; float moneyFlash; long moneyShown;
-    float cashTimer[24];
+    float cashTimer[MAX_CASH];
 
     float health, hurtT, hurtFlash, armor;
     int owned[4], ammo[4], weapon, autoAim;

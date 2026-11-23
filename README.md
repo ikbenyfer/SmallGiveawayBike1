@@ -14,8 +14,10 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
-## v6.1.1 (niet voor de iPad): bugfixes
+## v6.1.1 (alle platforms, ook de iPad): bugfixes
 
+- **Bugfix (ook iPad):** in v6.1.0 schreef het geld op de stoep in de grotere stad buiten zijn lijst in het geheugen. Dat kon rare fouten of een crash geven. Dit is opgelost.
+- **Bugfix (ook iPad):** door de grotere stad konden de rode auto (JOYRIDE RETURN) en geparkeerde voertuigen in de oude stad ontbreken. De oude stad wordt nu weer als eerste gebouwd, dus alles staat weer op zijn plek.
 - **Bugfix:** als je van een gespawnde vliegende motor (ARCADE MENU) afstapte, werkte de W-toets niet meer om te lopen. W telde nog als gas. Dat is opgelost. Ook het motorgeluid hoort nu weer bij het voertuig waar je in zit.
 - **Bugfix echte physics (REAL):** je reed tijdens het rijden door bomen, lantaarnpalen, borden en je huis heen. Nu bots je overal tegen, net als bij de oude rijphysics.
 - **Bugfix VEHICLE PHYSICS:** de instelling sprong na het laden van het spel, arcade starten/stoppen of een ander slot kiezen stilletjes terug naar OLD, terwijl SETTINGS nog REAL liet zien. Nu geldt altijd wat in SETTINGS staat.

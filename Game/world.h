@@ -13,6 +13,7 @@
 #define SIDEWALK 2.6f
 #define CURB 0.15f
 #define CHN 16
+#define MAX_CASH 40          /* v6.1.0: geld op de stoep (was 24, schreef buiten de lijst) */
 #define LANE_OFF 2.9f        /* rijstrook-midden vanaf weg-midden */
 
 enum { BOX_BUILDING = 0, BOX_PROP = 1, BOX_WALL = 2, BOX_TREE = 3, BOX_FENCE = 4 };
@@ -58,7 +59,7 @@ typedef struct {
     float spawn_heading;
 
     ParkSpot park[40]; int npark;
-    V3 cash[24]; int ncash;
+    V3 cash[MAX_CASH]; int ncash;
     V3 houses[16]; int nhouses;   /* voordeuren voor bezorgmissies */
     V3 gifts[8]; int ngifts;
     V3 dealerSpot[4]; float dealerSpotH;
