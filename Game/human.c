@@ -185,7 +185,7 @@ static void snets(MeshB *m, V3 lo, V3 hi, float cell, SdfFn f, ColFn cf, const H
                         const SVert *A = &sv[c[0]], *B = &sv[c[1 + q]], *C = &sv[c[2 + q]];
                         V3 fn = v3cross(v3sub(B->p, A->p), v3sub(C->p, A->p));
                         if (v3dot(fn, v3add(A->n, v3add(B->n, C->n))) < 0) { const SVert *t = B; B = C; C = t; }
-                        mb_tri_n(m, A->p, B->p, C->p, A->n, B->n, C->n, A->c, B->c, C->c, A->mat);
+                        mb_tri_nm(m, A->p, B->p, C->p, A->n, B->n, C->n, A->c, B->c, C->c, A->mat);
                     }
                 }
 #undef IDX

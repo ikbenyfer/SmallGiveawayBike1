@@ -48,7 +48,7 @@ void mb_quad4(MeshB *m, V3 a, V3 b, V3 c, V3 d, V3 n, Col ca, Col cb, Col cc, Co
 void mb_quad(MeshB *m, V3 a, V3 b, V3 c, V3 d, V3 n, Col c0);
 void mb_tri(MeshB *m, V3 a, V3 b, V3 c, V3 n, Col c0);
 /* v7.0.0: driehoek met eigen normaal en kleur per hoekpunt en een vast materiaal (gladde, organische modellen) */
-void mb_tri_n(MeshB *m, V3 a, V3 b, V3 c, V3 na, V3 nb, V3 nc, Col ca, Col cb, Col cc, int mat);
+void mb_tri_nm(MeshB *m, V3 a, V3 b, V3 c, V3 na, V3 nb, V3 nc, Col ca, Col cb, Col cc, int mat);
 
 /* v7.0.0 PRO-engine (nieuwe nabewerking en hoge-detail mensen): alleen op de pc (Windows/Linux) */
 #if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__SWITCH__)

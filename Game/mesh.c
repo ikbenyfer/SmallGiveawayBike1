@@ -51,7 +51,7 @@ static void put(MeshB *m, V3 p, V3 n, Col c) {
     v->r = c.r; v->g = c.g; v->b = c.b; v->a = c.a;
 }
 
-void mb_tri_n(MeshB *m, V3 a, V3 b, V3 c, V3 na, V3 nb, V3 nc, Col ca, Col cb, Col cc, int mat) {
+void mb_tri_nm(MeshB *m, V3 a, V3 b, V3 c, V3 na, V3 nb, V3 nc, Col ca, Col cb, Col cc, int mat) {
     int km = g_meshMat, ka = g_autoMat;
     if (m->has_xf) {
         a = m4_point(&m->xf, a); b = m4_point(&m->xf, b); c = m4_point(&m->xf, c);
