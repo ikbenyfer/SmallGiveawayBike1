@@ -365,6 +365,7 @@ static void load_slot(void) {
     int i, done;
     game_init(&F.G, &F.W);
     F.G.noCutscenes = F.at;   /* autotest: cutscenes alleen in de eigen teststap */
+    if (F.at) F.G.vphys = 0;   /* autotest rijdt met de oude rijregels (stabiel); physics heeft een eigen stap */
     if (!F.at) {
         F.G.money = sload("money", 0);
         F.G.moneyShown = F.G.money;
@@ -760,7 +761,7 @@ static void btn_pos(int ctl, float *x, float *y, float *r) {
         if (ctl == CTL_BRAKE) { *x = W - 200; *y = H - 318; *r = 48; }
         if (ctl == CTL_ACTION) { *x = W - 120; *y = H - 440; *r = 40; }
         if (ctl == CTL_JUMP) { *x = W - 322; *y = H - 300; *r = 42; }   /* v6.0.1: handrem (DRIFT) */
-        if (F.loadDone && F.G.physOn && F.G.craft.nwing > 0) {   /* v6.0.3: opstijgen/dalen */
+        if (F.loadDone && F.G.p.veh >= 0 && F.G.veh[F.G.p.veh].fly) {   /* v6.0.3: opstijgen/dalen */
             if (ctl == CTL_UP) { *x = W - 74; *y = H - 450; *r = 44; }
             if (ctl == CTL_DOWN) { *x = W - 196; *y = H - 470; *r = 38; }
         }
@@ -931,163 +932,60 @@ void fe_vr_pointer(int on, float x, float y) {
 }
 
 
-/* ------------------------------------------------------------------ v6.0.1 PHYSICS-modus: bouwscherm */
+/* ------------------------------------------------------------------ v6.0.4 PHYSICS-modus: voertuig kiezen */
 
-#define BG_X 268.0f
-#define BG_Y 150.0f
-#define BG_C 50.0f
+#define PV_N 10
+static const int PV_KIND[PV_N] = {0, 0, 0, 1, 1, 1, 1, 2, 2, 3};
+static const int PV_MODEL[PV_N] = {0, 2, POLICE_VARIANT, 0, 1, 2, 3, 0, 1, 0};
+static const char *PV_NAME[PV_N] = {"CITY CAR", "TAXI", "POLICE CAR", NULL, NULL, NULL, NULL, NULL, NULL, "GIVEAWAY BIKE"};
 
-static const float PCOL[PP_COUNT][3] = {{0.15f, 0.15f, 0.17f}, {0.32f, 0.42f, 0.6f}, {0.85f, 0.2f, 0.2f}, {0.45f, 0.45f, 0.5f},
-                                         {0.12f, 0.12f, 0.13f}, {0.92f, 0.92f, 0.9f}, {1.0f, 0.55f, 0.15f}};
-static const char *PH_SHORT[PP_COUNT] = {"", "BLK", "SEAT", "MOT", "WHL", "WING", "JET"};
-
-static void design_load(void) {
-    char *d = NULL; long len = 0;
-    if (plat_read_file("physics_design4.bin", &d, &len) && len == (long)sizeof(PDesign)) memcpy(&F.G.design, d, sizeof(PDesign));
-    free(d);
+static const char *pv_name(int i) {
+    if (PV_NAME[i]) return PV_NAME[i];
+    return PV_KIND[i] == 1 ? CARS[PV_MODEL[i] % CAR_MODELS].name : CARS[CAR_MODELS + PV_MODEL[i] % MOTO_MODELS].name;
 }
-static void design_save(void) { plat_write_file("physics_design4.bin", (const char *)&F.G.design, (long)sizeof(PDesign)); }
 
 static void open_builder(void) {
-    design_load();
-    if (F.bSel < 1 || F.bSel >= PP_COUNT) F.bSel = PP_BLOCK;
+    if (F.bSel < 0 || F.bSel >= PV_N) F.bSel = 0;
     set_state(ST_BUILD);
-}
-
-/* camera van het 3D-bouwscherm */
-static void build_cam(V3 *cam, V3 *tgt) {
-    float cp = cosf(F.bPitch);
-    *tgt = v3(0, 0.9f, 0);
-    *cam = v3(sinf(F.bYaw) * cp * F.bDist, 0.9f + sinf(F.bPitch) * F.bDist, cosf(F.bYaw) * cp * F.bDist);
-}
-
-/* straal door het scherm (UI-coordinaten) -> eerste bezette hokje en het lege hokje ervoor */
-static int build_pick(float ux, float uy, int *hx, int *hy, int *hz, int *px, int *py, int *pz) {
-    Renderer *R = &F.R;
-    V3 cam, tgt, f, rt, up, dir, p;
-    float th = tanf(50.0f * PI_F / 180.0f * 0.5f), nx = ux / R->W * 2.0f - 1.0f, ny = 1.0f - uy / R->H * 2.0f, s;
-    int lx = -1, ly = -1, lz = -1;
-    const PDesign *d = &F.G.design;
-    build_cam(&cam, &tgt);
-    f = v3norm(v3sub(tgt, cam));
-    rt = v3norm(v3cross(f, v3(0, 1, 0)));
-    up = v3cross(rt, f);
-    dir = v3norm(v3add(f, v3add(v3scale(rt, nx * th * ((float)R->W / R->H)), v3scale(up, ny * th))));
-    *hx = *px = -1;
-    for (s = 0; s < 40.0f; s += 0.03f) {
-        int gx, gy, gz;
-        p = v3add(cam, v3scale(dir, s));
-        gx = (int)floorf(p.x / PH_CELL + PH_GX * 0.5f);
-        gz = (int)floorf(p.z / PH_CELL + PH_GZ * 0.5f);
-        gy = (int)floorf((p.y - 0.15f) / PH_CELL);
-        if (p.y < 0.15f) {   /* vloer: op laag 1 neerzetten */
-            if (gx >= 0 && gx < PH_GX && gz >= 0 && gz < PH_GZ && !d->c[0][gz][gx]) { *px = gx; *py = 0; *pz = gz; }
-            else if (lx >= 0) { *px = lx; *py = ly; *pz = lz; }
-            return *px >= 0;
-        }
-        if (gx < 0 || gx >= PH_GX || gz < 0 || gz >= PH_GZ || gy < 0 || gy >= PH_GY) { lx = -1; continue; }
-        if (d->c[gy][gz][gx]) {
-            *hx = gx; *hy = gy; *hz = gz;
-            if (lx >= 0) { *px = lx; *py = ly; *pz = lz; }
-            return 1;
-        }
-        lx = gx; ly = gy; lz = gz;
-    }
-    return 0;
 }
 
 static void draw_build(void) {
     Renderer *R = &F.R;
-    PDesign *d = &F.G.design;
-    float W = (float)R->W, H = (float)R->H, mass;
-    int t, motors, wheels, wings, jets, seats, gx = -1, gy = 0, gz = 0;
-    char b[160];
-    V3 cam, tgt;
-    if (F.bDist < 2.0f) { F.bDist = 7.5f; F.bYaw = 0.7f; F.bPitch = 0.45f; }
-    if (P.connected && P.active) { F.bHover = 1; F.bHoverX = P.cx; F.bHoverY = P.cy; }
-    if (F.bHover && F.bHoverX > 240 && !(F.bHoverX > W - 330 && F.bHoverY > 380)) {
-        int hx, hy, hz, px, py, pz;
-        if (build_pick(F.bHoverX, F.bHoverY, &hx, &hy, &hz, &px, &py, &pz)) {
-            if (F.bSel == PP_NONE) { if (hx >= 0) { gx = hx; gy = hy; gz = hz; } }
-            else if (px >= 0) { gx = px; gy = py; gz = pz; }
-        }
-    }
-    build_cam(&cam, &tgt);
-    ui_flush(R);
-    r_draw_build(R, d, cam, tgt, 50.0f, gx, gy, gz, F.bSel, F.t);
-    ui_begin(R);
-    ui_rect(R, 0, 0, W, 64, 0, 0, 0, 0.45f);
-    ui_text(R, "PHYSICS MODE - 3D BUILDER", W * 0.5f, 12, 36, 1, 0.85f, 0.25f, 1, 1);
-    ui_text(R, "Click a part face to attach, click the floor to start. Drag = rotate, wheel/+- = zoom.", W * 0.5f, 70, 16, 0.9f, 0.9f, 1, 0.9f, 1);
-    for (t = 0; t < PP_COUNT; t++) {   /* onderdelen */
-        float py = 110.0f + t * 56.0f, sel = F.bSel == t;
-        ui_rect(R, 20, py, 200, 48, sel ? 0.9f : 0.12f, sel ? 0.6f : 0.14f, sel ? 0.1f : 0.2f, 0.9f);
-        ui_rect(R, 30, py + 9, 30, 30, PCOL[t][0], PCOL[t][1], PCOL[t][2], 1);
-        ui_text(R, ph_part_name(t), 72, py + 11, 22, 1, 1, 1, 1, 0);
+    float W = (float)R->W;
+    int i;
+    ui_rect(R, 0, 0, W, (float)R->H, 0, 0, 0, 1);
+    draw_backdrop(0.35f, 0.0f, F.t);
+    ui_text(R, "PHYSICS MODE", W * 0.5f, 26, 50, 1, 0.85f, 0.25f, 1, 1);
+    ui_text(R, "Pick a vehicle. FLYING adds wings and a jet: UP/DOWN to rise and sink.", W * 0.5f, 88, 18, 1, 1, 1, 0.9f, 1);
+    for (i = 0; i < PV_N; i++) {
+        float bx = W * 0.5f - 470 + (i % 2) * 480, by = 130.0f + (i / 2) * 64.0f;
+        int sel = F.bSel == i;
+        ui_rect(R, bx, by, 460, 54, sel ? 0.9f : 0.12f, sel ? 0.6f : 0.14f, sel ? 0.1f : 0.2f, 0.92f);
+        ui_text(R, pv_name(i), bx + 20, by + 14, 24, 1, 1, 1, 1, 0);
+        ui_text(R, PV_KIND[i] == 2 ? "MOTOR" : (PV_KIND[i] == 3 ? "BIKE" : "CAR"), bx + 440, by + 18, 16, 0.85f, 0.9f, 1, 0.8f, 2);
     }
     {
-        float py = 110.0f + PP_COUNT * 56.0f + 8;
-        ui_rect(R, 20, py, 200, 44, F.bMirror ? 0.2f : 0.12f, F.bMirror ? 0.6f : 0.14f, F.bMirror ? 0.3f : 0.2f, 0.9f);
-        ui_text(R, F.bMirror ? "MIRROR: ON" : "MIRROR: OFF", 120, py + 10, 20, 1, 1, 1, 1, 1);
-        ui_rect(R, 20, py + 52, 96, 44, 0.12f, 0.14f, 0.2f, 0.9f); ui_text(R, "ZOOM +", 68, py + 62, 18, 1, 1, 1, 1, 1);
-        ui_rect(R, 124, py + 52, 96, 44, 0.12f, 0.14f, 0.2f, 0.9f); ui_text(R, "ZOOM -", 172, py + 62, 18, 1, 1, 1, 1, 1);
-    }
-    ph_stats(d, &mass, &motors, &wheels, &wings, &jets, &seats);
-    ui_rect(R, W - 330, 100, 310, 120, 0, 0, 0, 0.45f);
-    snprintf(b, sizeof(b), "%.0f kg   %d motor   %d wheels", mass, motors, wheels);
-    ui_text(R, b, W - 175, 112, 18, 1, 1, 1, 1, 1);
-    snprintf(b, sizeof(b), "%d wing   %d jet", wings, jets);
-    ui_text(R, b, W - 175, 138, 18, 1, 1, 1, 1, 1);
-    if (!seats) ui_text(R, "Needs a SEAT (driver)!", W - 175, 172, 18, 1, 0.4f, 0.3f, 1, 1);
-    else if (!motors && !jets) ui_text(R, "Tip: add a MOTOR or JET", W - 175, 172, 18, 1, 0.8f, 0.3f, 1, 1);
-    else if (motors && !wheels) ui_text(R, "Tip: motors drive WHEELS", W - 175, 172, 18, 1, 0.8f, 0.3f, 1, 1);
-    else ui_text(R, "Ready!", W - 175, 172, 20, 0.4f, 1, 0.5f, 1, 1);
-    {   /* knoppen */
-        static const char *bt[5] = {"DRIVE: TEST TRACK", "DRIVE: REAL NL", "PRESET", "CLEAR", "BACK"};
+        static const char *bt[4] = {NULL, "DRIVE: TEST TRACK", "DRIVE: REAL NL", "BACK"};
+        float by = 130.0f + 5 * 64.0f + 20;
         int k;
-        for (k = 0; k < 5; k++) {
-            float bx = W - 320, by = 400.0f + k * 62.0f;
+        for (k = 0; k < 4; k++) {
+            float bx = W * 0.5f - 470 + k * 240;
             int pr = F.pressed == 2000 + k;
-            ui_rect(R, bx, by, 300, 52, pr ? 0.9f : (k < 2 ? 0.15f : 0.22f), pr ? 0.6f : (k < 2 ? 0.5f : 0.24f), pr ? 0.1f : (k < 2 ? 0.25f : 0.3f), 0.95f);
-            if (k == 2) {
-                PDesign tmp;
-                snprintf(b, sizeof(b), "PRESET: %s", ph_preset(&tmp, F.bPreset));
-                ui_text(R, b, bx + 150, by + 14, 19, 1, 1, 1, 1, 1);
-            } else ui_text(R, bt[k], bx + 150, by + 13, 22, 1, 1, 1, 1, 1);
+            ui_rect(R, bx, by, 220, 60, k == 0 ? (F.bMirror ? 0.2f : 0.15f) : (pr ? 0.9f : (k < 3 ? 0.15f : 0.22f)),
+                    k == 0 ? (F.bMirror ? 0.6f : 0.17f) : (pr ? 0.6f : (k < 3 ? 0.5f : 0.24f)), k == 0 ? (F.bMirror ? 0.3f : 0.22f) : (pr ? 0.1f : (k < 3 ? 0.25f : 0.3f)), 0.95f);
+            ui_text(R, k == 0 ? (F.bMirror ? "FLYING: ON" : "FLYING: OFF") : bt[k], bx + 110, by + 18, 21, 1, 1, 1, 1, 1);
         }
-        ui_text(R, "(tap PRESET again for the next one)", W - 170, 400.0f + 2 * 62.0f + 54, 13, 0.8f, 0.8f, 0.9f, 0.8f, 1);
     }
-}
-
-static void build_place(float x, float y) {
-    PDesign *d = &F.G.design;
-    int hx, hy, hz, px, py, pz;
-    if (!build_pick(x, y, &hx, &hy, &hz, &px, &py, &pz)) return;
-    if (F.bSel == PP_NONE) {
-        if (hx < 0) return;
-        d->c[hy][hz][hx] = 0;
-        if (F.bMirror) d->c[hy][hz][PH_GX - 1 - hx] = 0;
-    } else {
-        if (px < 0) return;
-        d->c[py][pz][px] = (unsigned char)F.bSel;
-        if (F.bMirror && !d->c[py][pz][PH_GX - 1 - px]) d->c[py][pz][PH_GX - 1 - px] = (unsigned char)F.bSel;
-    }
-    if (F.sfxOn) plat_sfx(SFX_CLICK, 0.5f);
 }
 
 static void phys_go(int nl) {
-    float mass;
-    int motors, wheels, wings, jets, seats;
-    ph_stats(&F.G.design, &mass, &motors, &wheels, &wings, &jets, &seats);
-    if (!seats) { F.shopMsg[0] = 0; return; }
-    design_save();
     if (nl) {
         double rx, ry;
         const char *nm;
-        ns_pack_load();   /* v6.0.3: anders kent de knop de startplekken niet */
+        ns_pack_load();
         nm = ns_pack_start(0, &rx, &ry);
-        if (!nm) { nl_play_pc("1012JS", ST_BUILD); F.physPending = 1; F.physNL = 1; return; }
         F.physPending = 1; F.physNL = 1;
+        if (!nm) { nl_play_pc("1012JS", ST_BUILD); return; }
         nl_play_at(rx, ry, nm, ST_BUILD);
         return;
     }
@@ -1096,48 +994,24 @@ static void phys_go(int nl) {
     if (F.mode != 0) nl_exit_to_city();
     set_state(ST_GAME);
     F.fade = 1.0f;
-    game_phys_start(&F.G, 0);
+    game_phys_start(&F.G, 0, PV_KIND[F.bSel], PV_MODEL[F.bSel], F.bMirror);
 }
 
 static void build_tap(float x, float y, int phase) {
     Renderer *R = &F.R;
-    PDesign *d = &F.G.design;
-    float W = (float)R->W;
-    int t, k, hit = 0;
-    float py0 = 110.0f + PP_COUNT * 56.0f + 8;
-    F.bHover = 1; F.bHoverX = x; F.bHoverY = y;
-    if (x > 20 && x < 220 && y > 110 && y < 110 + PP_COUNT * 56.0f) {
-        for (t = 0; t < PP_COUNT; t++) if (y > 110 + t * 56 && y < 158 + t * 56) { if (phase == TOUCH_BEGIN) F.bSel = t; }
-        return;
+    float W = (float)R->W, by = 130.0f + 5 * 64.0f + 20;
+    int i, k, hit = 0;
+    for (i = 0; i < PV_N; i++) {
+        float bx = W * 0.5f - 470 + (i % 2) * 480, byy = 130.0f + (i / 2) * 64.0f;
+        if (x > bx && x < bx + 460 && y > byy && y < byy + 54) { if (phase == TOUCH_BEGIN) F.bSel = i; return; }
     }
-    if (x > 20 && x < 220 && y > py0 && y < py0 + 44) { if (phase == TOUCH_BEGIN) F.bMirror = !F.bMirror; return; }
-    if (x > 20 && x < 116 && y > py0 + 52 && y < py0 + 96) { if (phase == TOUCH_BEGIN) F.bDist = clampf(F.bDist * 0.8f, 3.0f, 18.0f); return; }
-    if (x > 124 && x < 220 && y > py0 + 52 && y < py0 + 96) { if (phase == TOUCH_BEGIN) F.bDist = clampf(F.bDist * 1.25f, 3.0f, 18.0f); return; }
-    for (k = 0; k < 5; k++) if (x > W - 320 && x < W - 20 && y > 400 + k * 62 && y < 452 + k * 62) hit = 2000 + k;
-    if (hit || F.pressed) {
-        if (phase != TOUCH_END) { F.pressed = hit; return; }
-        F.pressed = 0;
-        if (hit == 2000) phys_go(0);
-        else if (hit == 2001) phys_go(1);
-        else if (hit == 2002) { ph_preset(d, F.bPreset); F.bPreset = (F.bPreset + 1) % PH_NPRESETS; }
-        else if (hit == 2003) memset(d, 0, sizeof(*d));
-        else if (hit == 2004) { design_save(); set_state(ST_MENU); }
-        return;
-    }
-    /* 3D-gebied: slepen = draaien, tikken = plaatsen */
-    if (phase == TOUCH_BEGIN) { F.bDown = 1; F.bDrag = 0; F.bDownX = F.bLastX = x; F.bDownY = F.bLastY = y; return; }
-    if (!F.bDown) return;
-    if (phase == TOUCH_MOVE) {
-        if (fabsf(x - F.bDownX) + fabsf(y - F.bDownY) > 14.0f) F.bDrag = 1;
-        if (F.bDrag) {
-            F.bYaw -= (x - F.bLastX) * 0.008f;
-            F.bPitch = clampf(F.bPitch + (y - F.bLastY) * 0.006f, 0.05f, 1.45f);
-        }
-        F.bLastX = x; F.bLastY = y;
-        return;
-    }
-    F.bDown = 0;
-    if (!F.bDrag) build_place(x, y);
+    for (k = 0; k < 4; k++) { float bx = W * 0.5f - 470 + k * 240; if (x > bx && x < bx + 220 && y > by && y < by + 60) hit = 2000 + k; }
+    if (phase != TOUCH_END) { F.pressed = hit; return; }
+    F.pressed = 0;
+    if (hit == 2000) F.bMirror = !F.bMirror;
+    else if (hit == 2001) phys_go(0);
+    else if (hit == 2002) phys_go(1);
+    else if (hit == 2003) set_state(ST_MENU);
 }
 
 static void draw_pad_cursor(void) {
@@ -1284,45 +1158,7 @@ static void draw_hud(void) {
     float x, y, r;
 
     if (g->cut) { draw_cutscene(); return; }
-    if (g->physOn) {   /* v6.0.1 PHYSICS-modus: eigen HUD */
-        const Craft *c = &g->craft;
-        draw_minimap();
-        snprintf(b, sizeof(b), "%d KM/H", (int)(c->speed * 3.6f + 0.5f));
-        ui_text(R, b, W - 24, 90, 40, 1, 1, 1, 0.95f, 2);
-        snprintf(b, sizeof(b), "ALT %.0f M   %.0f KG   BROKEN %d", c->alt, c->mass, c->broken);
-        ui_text(R, b, W - 24, 138, 20, 0.85f, 0.95f, 1, 0.9f, 2);
-        if (g_desktop) {
-            ui_rect(R, 0, H - 30, W, 30, 0, 0, 0, 0.45f);
-            ui_text(R, "W/S gas/brake   A/D steer   SPACE handbrake   SHIFT boost   R/F up/down (wings)   E reset   Q builder", W * 0.5f, H - 26, 15, 1, 1, 1, 0.85f, 1);
-        } else if (P.connected && P.active) {
-            char hb[200];
-            snprintf(hb, sizeof(hb), "%s gas   %s brake   %s handbrake   %s boost   %s reset   %s builder   %s pause   RB/LB up/down",
-                     PB_NAMES[P.bind[PA_GAS]], PB_NAMES[P.bind[PA_BRAKE]], PB_NAMES[P.bind[PA_JUMP]], PB_NAMES[P.bind[PA_RUN]],
-                     PB_NAMES[P.bind[PA_ACTION]], PB_NAMES[P.bind[PA_SWITCH]], PB_NAMES[P.bind[PA_PAUSE]]);
-            ui_rect(R, 0, H - 30, W, 30, 0, 0, 0, 0.45f);
-            ui_text(R, hb, W * 0.5f, H - 26, 16, 1, 1, 1, 0.85f, 1);
-        } else {
-            ui_circle(R, F.lbx, F.lby, STICK_R, 0, 0, 0, F.lOn ? 0.35f : 0.22f);
-            ui_ring(R, F.lbx, F.lby, STICK_R, 2.5f, 1, 1, 1, 0.5f);
-            ui_circle(R, F.lOn ? F.lkx : F.lbx, F.lOn ? F.lky : F.lby, 36, 1, 1, 1, F.lOn ? 0.6f : 0.35f);
-            ui_text(R, "STEER / FLY", F.lbx, F.lby + STICK_R + 2, 16, 1, 1, 1, 0.6f, 1);
-            btn_pos(CTL_GAS, &x, &y, &r); draw_button(x, y, r, "GAS", ctl_down(CTL_GAS), 1, 28);
-            btn_pos(CTL_BRAKE, &x, &y, &r); draw_button(x, y, r, "BRAKE", ctl_down(CTL_BRAKE), 1, 20);
-            btn_pos(CTL_ACTION, &x, &y, &r); draw_button(x, y, r, "RESET", ctl_down(CTL_ACTION), 1, 18);
-            btn_pos(CTL_JUMP, &x, &y, &r); draw_button(x, y, r, "DRIFT", ctl_down(CTL_JUMP), 1, 18);
-            if (c->nwing > 0) {
-                btn_pos(CTL_UP, &x, &y, &r); draw_button(x, y, r, "UP", ctl_down(CTL_UP), 1, 22);
-                btn_pos(CTL_DOWN, &x, &y, &r); draw_button(x, y, r, "DOWN", ctl_down(CTL_DOWN), 1, 16);
-            }
-            ui_text(R, "PAUSE > QUIT = back to the builder menu", W - 30, 180, 16, 1, 1, 1, 0.6f, 2);
-        }
-        if (g->bannerT > 0) {
-            ui_text(R, g->banner, W * 0.5f, H * 0.3f, 52, 1, 0.85f, 0.25f, clampf(g->bannerT, 0, 1), 1);
-            ui_text(R, g->sub, W * 0.5f, H * 0.3f + 60, 22, 1, 1, 1, clampf(g->bannerT, 0, 1), 1);
-        }
-        if (g->msgT > 0) ui_text(R, g->msg, W * 0.5f, H - 230, 30, 1, 1, 1, clampf(g->msgT * 2, 0, 1), 1);
-        return;
-    }
+
     if (g->robCool > 0 && !g->nl) {   /* v5.2: wachttijd van de GIVEAWAY MART-kassa */
         char rb[48];
         int t = (int)ceilf(g->robCool);
@@ -1533,6 +1369,10 @@ static void draw_hud(void) {
         btn_pos(CTL_BRAKE, &x, &y, &r); draw_button(x, y, r, "BRAKE", ctl_down(CTL_BRAKE), 1, 20);
         btn_pos(CTL_ACTION, &x, &y, &r); draw_button(x, y, r, "EXIT", ctl_down(CTL_ACTION), 1, 20);
         if (g->veh[g->p.veh].type == VEH_CAR) { btn_pos(CTL_JUMP, &x, &y, &r); draw_button(x, y, r, "DRIFT", ctl_down(CTL_JUMP), 1, 18); }
+        if (g->veh[g->p.veh].fly) {   /* v6.0.4: vliegen */
+            btn_pos(CTL_UP, &x, &y, &r); draw_button(x, y, r, "UP", ctl_down(CTL_UP), 1, 22);
+            btn_pos(CTL_DOWN, &x, &y, &r); draw_button(x, y, r, "DOWN", ctl_down(CTL_DOWN), 1, 16);
+        }
         {
             Vehicle *v = &g->veh[g->p.veh];
             snprintf(b, sizeof(b), "%d KM/H", (int)(fabsf(v->speed) * 3.6f + 0.5f));
@@ -3854,10 +3694,10 @@ static void autotest_tick(float dt) {
         }
 #ifndef __APPLE__
         else if (F.atStep == 160) {   /* v6.0.1 PHYSICS-modus */
-            ph_default(&F.G.design);
-            F.G.design.c[1][1][3] = PP_JET;
+            F.bSel = 3; F.bMirror = 1;   /* vliegende dealer-auto */
+            g->vphys = 1;
             phys_go(0);
-            rep("Physics gestart: aan=%d, %d onderdelen, %.0f kg", g->physOn, g->craft.np, g->craft.mass);
+            rep("Physics gestart: aan=%d, voertuig %d (vliegend %d)", g->physOn, g->p.veh, g->veh[g->p.veh].fly);
             F.atT3 = t;
             F.atStep = 162;
         }
@@ -3866,7 +3706,7 @@ static void autotest_tick(float dt) {
             in->mx = t > F.atT3 + 3.0f ? 0.7f : 0.0f;
             in->jump = t > F.atT3 + 4.0f && t < F.atT3 + 5.0f;
             if (t > F.atT3 + 5.2f) {
-                rep("Physics: snelheid %.1f m/s, hoogte %.1f, massa %.0f kg, %d onderdelen, kapot %d", g->craft.speed, g->craft.alt, g->craft.mass, g->craft.np, g->craft.broken);
+                rep("Physics: snelheid %.1f m/s, hoogte %.1f, massa %.0f kg, %d onderdelen, vleugels %d", g->craft.speed, g->craft.alt, g->craft.mass, g->craft.np, g->craft.nwing);
                 at_shot("51_physics_drive");
                 F.atT3 = t; F.atStep++;
             }
@@ -3878,12 +3718,13 @@ static void autotest_tick(float dt) {
             F.atT3 = t; F.atStep++;
         }
         else if (F.atStep == 164 && t > F.atT3 + 2.5f) {
-            rep("Physics-crash: kapot %d onderdelen, brokstukken, stoel heel=%d", g->craft.broken, !g->craft.crashed);
+            rep("Physics-val: hoogte %.1f, gezondheid %.0f", g->craft.alt, g->health);
             at_shot("52_physics_crash");
             F.atT3 = t; F.atStep++;
         }
         else if (F.atStep == 165 && t > F.atT3 + 0.5f) {
             game_phys_stop(g);
+            g->vphys = 0;
             rep("Physics gestopt: uit=%d", !g->physOn);
             F.atStep = 140;
         }
@@ -4039,8 +3880,7 @@ void fe_frame(double now) {
 
     if (F.physPending && F.state == ST_GAME && F.loadDone && (!F.physNL || F.mode == 1)) {   /* NL geladen: voertuig neerzetten */
         F.physPending = 0;
-        design_load();   /* het laden van de kaart wist de spelstatus */
-        game_phys_start(&F.G, 1);
+        game_phys_start(&F.G, 1, PV_KIND[F.bSel], PV_MODEL[F.bSel], F.bMirror);
     }
     if (F.G.physOn && F.state != ST_GAME && F.state != ST_PAUSE && F.state != ST_BIGMAP) game_phys_stop(&F.G);
     switch (F.state) {
@@ -4293,7 +4133,6 @@ void fe_mouse_look(float dx, float dy) {
 
 void fe_mouse_wheel(float dy) {
     if (F.state == ST_BIGMAP) F.bmScale = clampf(F.bmScale * (dy > 0 ? 1.25f : 0.8f), 0.06f, 4.0f);
-    if (F.state == ST_BUILD) F.bDist = clampf(F.bDist * (dy > 0 ? 0.88f : 1.14f), 3.0f, 18.0f);
 }
 
 int fe_text_wanted(void) { return F.ready && (F.state == ST_NLINPUT || F.state == ST_MP); }

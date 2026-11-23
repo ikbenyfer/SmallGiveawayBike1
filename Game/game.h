@@ -5,7 +5,7 @@
 #include "world.h"
 #include "phys.h"
 
-#define MAX_VEH 60
+#define MAX_VEH 64
 #define MAX_OWNED 4
 #define MAX_POLICE 3
 #define MAX_PED 20
@@ -52,6 +52,8 @@ typedef struct {
     int ti, tj, dir, phase;   /* verkeer: doel-kruispunt en richting */
     float tx, tz, stuck, ghost, hitcool;
     float slip;        /* v6.0.1: zijwaartse snelheid (driften) */
+    int phys, fly;     /* v6.0.4: rijdt met physics (pm = modelmatrix); vliegend (vleugels + jet) */
+    M4 pm;
 } Vehicle;
 
 typedef struct {
@@ -167,6 +169,9 @@ typedef struct {
     /* v6.0.1: driften (zijwaarts glijden) en de PHYSICS-modus */
     float driftT;
     int physOn, physWantBuild, physBroken;
+    int vphys, physVeh, pcarVeh;   /* v6.0.4: physics voor je eigen voertuig, extra plek voor de PHYSICS-modus */
+    float flipT;
+    int nl_noPhys;   /* (reserve) */
     Craft craft;
     PDesign design;
     float physSaveX, physSaveZ, physSaveH;
@@ -186,7 +191,8 @@ void game_mission_begin(Game *g, int m);   /* direct, zonder cutscene */
 void game_message(Game *g, const char *txt, float t);
 void game_sfx(Game *g, int id, float x, float z);
 void game_add_wanted(Game *g, int n);
-void game_phys_start(Game *g, int here);   /* here = 1: op de plek van de speler (NL-kaart), anders het testterrein */
+/* v6.0.4 PHYSICS-modus: bestaand voertuig kiezen (kind: 0 auto, 1 dealer-auto, 2 motor, 3 fiets), eventueel vliegend */
+void game_phys_start(Game *g, int here, int kind, int model, int fly);
 void game_phys_stop(Game *g);
 int game_store_inside(const Game *g);   /* winkel + 1 als de speler binnen in een winkel staat */
 void game_store_enter(Game *g, int store);

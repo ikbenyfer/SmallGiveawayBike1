@@ -1221,7 +1221,17 @@ static void draw_scene_one(Renderer *r, Game *g) {
         M4 m;
         if (!v->active) continue;
         if (!sphere_visible(r, v->x, v->y + 0.8f, v->z, 2.5f, fogEnd)) continue;
-        m = m4_trs_y(v->x, v->y, v->z, v->h);
+        m = v->phys ? v->pm : m4_trs_y(v->x, v->y, v->z, v->h);
+        if (v->fly) {   /* v6.0.4: vliegend: vleugels en een jet */
+            int bk = v->type == VEH_BIKE;
+            float wx = bk ? 0.9f : 1.45f, wy = bk ? 0.7f : 0.8f;
+            M4 wm = m4_mul(m, m4_mul(m4_translate(-wx, wy, -0.1f), m4_scale(bk ? 1.6f : 2.0f, 1.0f, 1.5f)));
+            draw_mesh(r, &r->phPart[PP_WING], &wm);
+            wm = m4_mul(m, m4_mul(m4_translate(wx, wy, -0.1f), m4_scale(bk ? 1.6f : 2.0f, 1.0f, 1.5f)));
+            draw_mesh(r, &r->phPart[PP_WING], &wm);
+            wm = m4_mul(m, m4_translate(0, bk ? 0.65f : 0.85f, bk ? -1.0f : -2.2f));
+            draw_mesh(r, &r->phPart[PP_JET], &wm);
+        }
         if (v->type == VEH_BIKE && r->vr.eye && r->vr.hidePlayer && i == g->p.veh) {
             /* VR first person (Quest): niet schuin hangen; voorwiel, vork en stuur draaien mee met het stuur */
             int moto = v->custom && IS_MOTO(v->model);
@@ -1236,7 +1246,7 @@ static void draw_scene_one(Renderer *r, Game *g) {
                 draw_mesh(r, &r->bikeFront[v->variant % BIKE_VARIANTS], &fm);
             }
         } else if (v->type == VEH_BIKE) {
-            m = m4_mul(m, m4_rot_z(v->lean));
+            if (!v->phys) m = m4_mul(m, m4_rot_z(v->lean));
             int rider = i == g->p.veh && !(g->p.anT > 0 && g->p.anKind == 2) && !r->vr.hidePlayer;
             int hiV = near_cam(r, &m, LOD_VEH);
             if (v->custom && IS_MOTO(v->model)) {
@@ -1384,34 +1394,7 @@ static void draw_scene_one(Renderer *r, Game *g) {
             shadows[nsh] = v3(g->p.x, ground, g->p.z); shs[nsh][0] = s; shs[nsh][1] = s; shs[nsh][2] = 0; nsh++;
         }
     }
-    if (g->physOn && g->craft.active) {   /* v6.0.1: zelfgebouwd voertuig */
-        const Craft *c = &g->craft;
-        M4 cm = ph_matrix(c);
-        int k;
-        if (!g->nl) { M4 id = m4_identity(); draw_mesh(r, &r->rampMesh, &id); }
-        for (k = 0; k < c->np; k++) {
-            const PPart *pp = &c->part[k];
-            M4 m;
-            if (!pp->alive) continue;
-            if (pp->type == PP_WHEEL) {
-                float a = pp->front ? -c->steerAng * 0.55f : 0.0f;
-                m = m4_mul(cm, m4_mul(m4_translate(pp->local.x, pp->local.y - (0.35f - pp->comp), pp->local.z), m4_mul(m4_rot_y(a), m4_rot_x(pp->spin))));
-                draw_mesh(r, &r->phWheel, &m);
-            } else {
-                m = m4_mul(cm, m4_translate(pp->local.x, pp->local.y, pp->local.z));
-                draw_mesh(r, &r->phPart[pp->type], &m);
-                if (pp->type == PP_SEAT && !r->vr.hidePlayer)
-                    draw_char(r, biz_outfit_variant(g->outfit), m4_mul(cm, m4_translate(pp->local.x, pp->local.y - 0.6f, pp->local.z - 0.05f)), 0, 3, 0, 0, 0);
-            }
-        }
-        for (k = 0; k < PH_DEBRIS; k++) {
-            const PDebris *d = &c->deb[k];
-            M4 m;
-            if (!d->active) continue;
-            m = ph_quat_matrix(d->q, d->pos);
-            draw_mesh(r, d->type == PP_WHEEL ? &r->phWheel : &r->phPart[d->type], &m);
-        }
-    }
+    if (!g->nl) { M4 id = m4_identity(); draw_mesh(r, &r->rampMesh, &id); }   /* v6.0.4: schansen bij de stad */
     if (r->pass == 1) {   /* schaduw-pass: alleen gebouwen, voertuigen en mensen */
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glEnable(GL_CULL_FACE);

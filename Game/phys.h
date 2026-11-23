@@ -25,6 +25,8 @@ typedef struct {
     V3 local;            /* t.o.v. het zwaartepunt */
     float comp, spin;    /* wielen: indrukking van de vering, draaihoek */
     int front;           /* wielen voorin sturen */
+    V3 half;             /* v6.0.4: halve maten van de botsdoos (wiel: half.y = straal); 0 = 0.3 m-blokje */
+    float m;             /* v6.0.4: massa (0 = standaard voor het type) */
 } PPart;
 
 typedef struct { int active, type; V3 pos, vel, angv; Quat q; float life; } PDebris;
@@ -44,7 +46,16 @@ typedef struct {
     PDebris deb[PH_DEBRIS];
     int crashed;         /* stoel kapot */
     float crashT;
+    /* v6.0.4: echte voertuigen */
+    float driveF, vmax, susp;   /* aandrijfkracht (N), topsnelheid, veerweg (0 = blokken-standaard) */
+    int balance, noBreak;       /* motor/fiets: gyro houdt rechtop en laat hellen; onderdelen breken niet af */
+    V3 com0;                    /* zwaartepunt t.o.v. de oorsprong van het model */
 } Craft;
+
+enum { PV_CAR = 0, PV_MOTO, PV_BIKE };
+/* bestaand voertuig als physics-lichaam (model-oorsprong = midden op de grond); fly = vleugels + jet */
+void ph_spawn_vehicle(Craft *c, int kind, int fly, V3 pos, float heading, float driveF, float vmax);
+M4 ph_model_matrix(const Craft *c);           /* matrix voor het voertuigmodel */
 
 const char *ph_part_name(int t);
 V3 ph_cell_pos(int gx, int gy, int gz);       /* midden van een hokje (bouwscherm en physics) */

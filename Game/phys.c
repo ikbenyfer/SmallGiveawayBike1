@@ -72,6 +72,7 @@ M4 ph_quat_matrix(Quat q, V3 pos) {
     return m;
 }
 M4 ph_matrix(const Craft *c) { return ph_quat_matrix(c->q, c->pos); }
+M4 ph_model_matrix(const Craft *c) { return m4_mul(ph_quat_matrix(c->q, c->pos), m4_translate(-c->com0.x, -c->com0.y, -c->com0.z)); }
 V3 ph_forward(const Craft *c) { return q_rot(c->q, v3(0, 0, 1)); }
 V3 ph_to_world(const Craft *c, V3 l) { return v3add(c->pos, q_rot(c->q, l)); }
 
@@ -159,7 +160,8 @@ static void mass_props(Craft *c) {
     int i;
     V3 com = v3(0, 0, 0);
     float M = 0;
-    for (i = 0; i < c->np; i++) if (c->part[i].alive) { M += PMASS[c->part[i].type]; com = v3add(com, v3scale(c->part[i].local, PMASS[c->part[i].type])); }
+#define PM(pp) ((pp)->m > 0 ? (pp)->m : PMASS[(pp)->type])
+    for (i = 0; i < c->np; i++) if (c->part[i].alive) { M += PM(&c->part[i]); com = v3add(com, v3scale(c->part[i].local, PM(&c->part[i]))); }
     if (M < 1) M = 1;
     com = v3scale(com, 1.0f / M);
     /* het lichaam verschuift naar het nieuwe zwaartepunt */
@@ -168,7 +170,7 @@ static void mass_props(Craft *c) {
     c->nmotor = c->njet = c->nwing = c->nwheel = 0;
     for (i = 0; i < c->np; i++) {
         PPart *p = &c->part[i];
-        float m = PMASS[p->type], b = m * PH_CELL * PH_CELL / 6.0f;
+        float m = PM(p), b = m * (p->half.x > 0 ? (p->half.x * p->half.x + p->half.z * p->half.z) * 0.6f : PH_CELL * PH_CELL / 6.0f);
         if (!p->alive) continue;
         p->local = v3sub(p->local, com);
         c->inertia.x += m * (p->local.y * p->local.y + p->local.z * p->local.z) + b;
@@ -204,6 +206,53 @@ void ph_spawn(Craft *c, const PDesign *d, V3 pos, float heading) {
     c->pos.y = pos.y + 1.0f + (c->pos.y - pos.y) - miny;
     c->active = 1;
     c->meshDirty = 1;
+}
+
+static void add_part(Craft *c, int type, V3 at, V3 half, float m) {
+    PPart *p;
+    if (c->np >= PH_MAXP) return;
+    p = &c->part[c->np++];
+    memset(p, 0, sizeof(*p));
+    p->type = type; p->alive = 1; p->local = at; p->half = half; p->m = m;
+}
+
+void ph_spawn_vehicle(Craft *c, int kind, int fly, V3 pos, float heading, float driveF, float vmax) {
+    V3 before;
+    int k;
+    memset(c, 0, sizeof(*c));
+    if (kind == PV_CAR) {
+        add_part(c, PP_BLOCK, v3(0, 0.66f, 0.0f), v3(0.9f, 0.3f, 2.0f), 1050);
+        add_part(c, PP_BLOCK, v3(0, 1.22f, -0.2f), v3(0.78f, 0.26f, 0.95f), 150);
+        for (k = 0; k < 4; k++) add_part(c, PP_WHEEL, v3(k & 1 ? 0.84f : -0.84f, 0.64f, k < 2 ? 1.3f : -1.3f), v3(0.14f, 0.34f, 0.34f), 25);
+        c->susp = 0.3f;
+        if (fly) {
+            add_part(c, PP_WING, v3(-1.45f, 0.8f, -0.1f), v3(0.6f, 0.04f, 0.45f), 30);
+            add_part(c, PP_WING, v3(1.45f, 0.8f, -0.1f), v3(0.6f, 0.04f, 0.45f), 30);
+            add_part(c, PP_JET, v3(0, 0.85f, -2.2f), v3(0.25f, 0.25f, 0.3f), 40);
+        }
+    } else {
+        int bike = kind == PV_BIKE;
+        float r = bike ? 0.34f : 0.33f, wz = bike ? 0.55f : 0.71f;
+        add_part(c, PP_BLOCK, v3(0, 0.62f, 0.0f), v3(bike ? 0.1f : 0.18f, 0.28f, bike ? 0.5f : 0.75f), bike ? 15.0f : 190.0f);
+        add_part(c, PP_SEAT, v3(0, 1.25f, -0.15f), v3(0.18f, 0.4f, 0.18f), 75);
+        add_part(c, PP_WHEEL, v3(0, r + 0.25f, wz), v3(0.06f, r, r), bike ? 3.0f : 15.0f);
+        add_part(c, PP_WHEEL, v3(0, r + 0.25f, -wz), v3(0.06f, r, r), bike ? 3.0f : 15.0f);
+        c->susp = 0.25f;
+        c->balance = 1;
+        if (fly) {
+            add_part(c, PP_WING, v3(-0.9f, 0.7f, -0.05f), v3(0.5f, 0.04f, 0.35f), 15);
+            add_part(c, PP_WING, v3(0.9f, 0.7f, -0.05f), v3(0.5f, 0.04f, 0.35f), 15);
+            add_part(c, PP_JET, v3(0, 0.65f, bike ? -0.75f : -1.0f), v3(0.18f, 0.18f, 0.25f), 25);
+        }
+    }
+    c->noBreak = 1;
+    c->driveF = driveF; c->vmax = vmax;
+    c->q = q_yaw(heading);
+    c->pos = pos;
+    before = c->pos;
+    mass_props(c);
+    c->com0 = q_rot_inv(c->q, v3sub(c->pos, before));
+    c->active = 1;
 }
 
 void ph_reset_upright(Craft *c, PhGround ground, void *ctx) {
@@ -253,7 +302,8 @@ void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float p
         V3 up = q_rot(c->q, v3(0, 1, 0)), fwd = q_rot(c->q, v3(0, 0, 1)), rt = q_rot(c->q, v3(1, 0, 0));
         float wheelK = c->nwheel ? c->mass * 9.81f / c->nwheel / 0.12f : 0;
         float wheelC = c->nwheel ? 2.0f * sqrtf(wheelK * c->mass / c->nwheel) * 0.55f : 0;
-        float drive = c->nmotor * 5200.0f, vmax = 26.0f + c->nmotor * 9.0f;
+        float drive = c->driveF > 0 ? c->driveF : c->nmotor * 5200.0f, vmax = c->vmax > 0 ? c->vmax : 26.0f + c->nmotor * 9.0f;
+        int motorOk = c->driveF > 0 || c->nmotor > 0;
         int ndrive = 0, breakIdx = -1;
         float breakV = 0;
         V3 breakVel = v3(0, 0, 0);
@@ -267,7 +317,7 @@ void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float p
             wp = v3add(c->pos, r);
             vp = v3add(c->vel, v3cross(c->angv, r));
             if (p->type == PP_WHEEL) {
-                const float Ls = 0.35f, rw = 0.42f;
+                const float Ls = c->susp > 0 ? c->susp : 0.35f, rw = p->half.y > 0 ? p->half.y : 0.42f;
                 float gy = ground(ctx, wp.x, wp.z), d, comp;
                 p->comp = approachf(p->comp, 0, h * 2.0f);
                 if (up.y < 0.25f) continue;
@@ -287,8 +337,8 @@ void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float p
                     mu = (!p->front && handbrake) ? 0.32f : 1.15f;   /* handrem: achterwielen glijden (driften) */
                     Flat = clampf(-vlat * 14.0f * N / 1000.0f * 100.0f, -mu * N, mu * N);
                     Flong = 0;
-                    if (gas > 0 && c->nmotor > 0) Flong += gas * drive / ndrive * clampf(1.0f - vlong / vmax, 0, 1);
-                    if (gas < 0 && c->nmotor > 0) Flong += gas * drive * 0.5f / ndrive * (vlong > -8.0f ? 1.0f : 0.0f);
+                    if (gas > 0 && motorOk && (!c->balance || !p->front)) Flong += gas * drive / (c->balance ? 1 : ndrive) * clampf(1.0f - vlong / vmax, 0, 1);
+                    if (gas < 0 && motorOk && (!c->balance || !p->front)) Flong += gas * drive * 0.5f / (c->balance ? 1 : ndrive) * (vlong > -6.0f ? 1.0f : 0.0f);
                     if (brk > 0 || (handbrake && !p->front)) Flong -= clampf(vlong * N * 3.0f, -0.9f * N, 0.9f * N) * (handbrake && !p->front ? 1.0f : brk);
                     Flong -= vlong * 0.015f * N;
                     Flong = clampf(Flong, -mu * N, mu * N);
@@ -300,9 +350,10 @@ void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float p
             /* --- contactpunten van het blok (grond + gebouwen) */
             {
                 static const float cx[8] = {-1, 1, -1, 1, -1, 1, -1, 1}, cy[8] = {-1, -1, 1, 1, -1, -1, 1, 1}, cz[8] = {-1, -1, -1, -1, 1, 1, 1, 1};
-                float hs = 0.3f, hy = p->type == PP_WING ? 0.05f : 0.3f;
+                float hs = 0.3f, hy = p->type == PP_WING ? 0.05f : 0.3f, hz = 0.3f;
+                if (p->half.x > 0) { hs = p->half.x; hy = p->half.y; hz = p->half.z; }
                 for (k = 0; k < 8; k++) {
-                    V3 lc = v3add(p->local, v3(cx[k] * hs, cy[k] * hy, cz[k] * hs));
+                    V3 lc = v3add(p->local, v3(cx[k] * hs, cy[k] * hy, cz[k] * hz));
                     V3 rc = q_rot(c->q, lc), pc = v3add(c->pos, rc), vc = v3add(c->vel, v3cross(c->angv, rc)), n = v3(0, 1, 0);
                     float gy = ground(ctx, pc.x, pc.z), pen = gy - pc.y;
                     if (pen <= 0) {
@@ -323,7 +374,7 @@ void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float p
                         if (vtl > 1e-3f) add_force(&F, &T, v3scale(vt, -fminf(vtl * c->mass * 2.5f, 0.75f * Fn) / vtl), rc);
                         if (-vn > c->impact) c->impact = -vn;
                         /* crash: harde klap = onderdeel breekt af (de stoel houdt het langer) */
-                        if (-vn > (p->type == PP_SEAT ? 17.0f : 11.0f) && -vn > breakV) { breakV = -vn; breakIdx = i; breakVel = c->vel; }
+                        if (!c->noBreak && -vn > (p->type == PP_SEAT ? 17.0f : 11.0f) && -vn > breakV) { breakV = -vn; breakIdx = i; breakVel = c->vel; }
                     }
                 }
             }
@@ -361,6 +412,14 @@ void ph_step(Craft *c, float gas, float brk, float steer, int handbrake, float p
                 T = v3add(T, v3scale(ax, k));
                 T = v3sub(T, v3scale(v3(c->angv.x, 0, c->angv.z), (c->inertia.x + c->inertia.z) * 0.5f * 3.0f));
             }
+        }
+        if (c->balance) {   /* motor/fiets: rechtop blijven, in de bocht hellen */
+            float sp = v3len(c->vel), lean = -c->steerAng * 0.5f * clampf(sp / 9.0f, 0, 1);
+            V3 rh = v3norm(v3(rt.x, 0, rt.z)), tu = v3add(v3scale(v3(0, 1, 0), cosf(lean)), v3scale(rh, sinf(lean)));
+            V3 ax = v3cross(up, tu);
+            float kI = (c->inertia.x + c->inertia.z) * 0.5f;
+            T = v3add(T, v3scale(ax, kI * 60.0f));
+            T = v3sub(T, v3scale(v3sub(c->angv, v3scale(up, v3dot(c->angv, up))), kI * 9.0f));
         }
         /* --- integreren */
         c->vel = v3add(c->vel, v3scale(F, c->invMass * h));

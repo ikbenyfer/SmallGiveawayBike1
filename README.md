@@ -14,6 +14,19 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v6.0.4 (niet voor de iPad): physics met de echte voertuigen
+
+- **Physics in het normale spel:** je eigen auto, motor of fiets rijdt nu met echte physics.
+  - Vering, springen over schansen, kantelen en over de kop slaan.
+  - Harde klappen geven schade.
+  - Lig je op je kop, dan zet het spel je na een paar seconden weer rechtop.
+  - Een motor of fiets helt in de bocht en blijft zelf in balans.
+  - Driften met de handrem werkt nog steeds.
+- **PHYSICS MODE** (menu rechtsboven) is nu een **voertuigkeuze**: City car, Taxi, Politieauto, de vier dealer-auto's, de twee motoren en de Giveaway Bike.
+  - Met **FLYING: ON** krijgt het voertuig vleugels en een jet. UP/DOWN laat je stijgen en dalen; loslaat je in de lucht, dan zweef je.
+  - Rijden kan bij de schansen naast de stad of in de echte NL-kaart.
+- De blokjes-editor is weg.
+
 ## v6.0.1 (niet voor de iPad): PHYSICS-modus, driften, ULTRA
 
 Deze versie is voor Windows, Linux, Android, Meta Quest en Nintendo Switch. De iPad blijft op v6.0.0.
