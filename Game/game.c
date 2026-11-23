@@ -1020,9 +1020,7 @@ void game_init(Game *g, World *w) {
     for (i = 0; i < MAX_OWNED; i++) { memset(&g->veh[g->nveh], 0, sizeof(Vehicle)); g->veh[g->nveh].garageSlot = -1; g->nveh++; }
     g->physVeh = g->nveh;   /* v6.0.4: voertuig voor de PHYSICS-modus */
     memset(&g->veh[g->nveh], 0, sizeof(Vehicle)); g->veh[g->nveh].garageSlot = -1; g->nveh++;
-#ifndef __APPLE__
-    g->vphys = 1;   /* v6.0.4: physics voor je eigen voertuig (niet op de iPad) */
-#endif
+    g->vphys = 0;   /* v6.0.5: instelling VEHICLE PHYSICS (frontend), standaard de oude */
     g->pcarVeh = -1;
     g->health = 100.0f;
     setup_missions(g);
@@ -2219,7 +2217,7 @@ void game_update(Game *g, const Input *in, float dt) {
         if (!in->gas && in->my > 0.5f) thr = (in->my - 0.3f) / 0.7f;
         if (!in->brake && in->my < -0.5f) brk = 1.0f;
         g_handbrake = in->jump;
-        if (g->vphys && !g->nl_noPhys && !(g->p.anT > 0)) pcar_drive(g, v, in, dt);
+        if ((g->vphys || v->fly) && !g->nl_noPhys && !(g->p.anT > 0)) pcar_drive(g, v, in, dt);   /* vliegen kan alleen met echte physics */
         else { if (v->phys) { v->phys = 0; g->craft.active = 0; } drive_vehicle(g, v, thr, brk, clampf(in->mx * 1.15f, -1, 1), dt); }
         g_handbrake = 0;
         if (v->type == VEH_CAR && fabsf(v->slip) > 2.5f && fabsf(v->speed) > 7.0f) {   /* drift-teller */

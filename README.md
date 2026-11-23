@@ -14,6 +14,14 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v6.0.5 (niet voor de iPad): oude rijphysics terug, met een instelling
+
+- Standaard rijden auto's, motoren en fietsen weer met de **oude (arcade) rijphysics**, zoals voor v6.0.4.
+- Nieuwe instelling **VEHICLE PHYSICS** in SETTINGS (ook vanuit het pauzemenu, dus in het normale spel, de echte NL-kaart en de PHYSICS MODE):
+  - **OLD (ARCADE):** de vertrouwde besturing.
+  - **REAL:** vering, schansen, kantelen en over de kop slaan.
+- Vliegende voertuigen uit de PHYSICS MODE gebruiken altijd REAL, want vliegen kan alleen met echte physics.
+
 ## v6.0.4 (niet voor de iPad): physics met de echte voertuigen
 
 - **Physics in het normale spel:** je eigen auto, motor of fiets rijdt nu met echte physics.

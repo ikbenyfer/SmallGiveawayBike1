@@ -68,6 +68,7 @@ static struct {
     float bYaw, bPitch, bDist, bDownX, bDownY, bLastX, bLastY, bHoverX, bHoverY;
     int bDown, bDrag, bMirror, bHover;   /* v6.0.2 3D-bouwscherm */
     int bPreset;
+    int vphys;   /* v6.0.5: 0 oude rijphysics, 1 echte physics */
     int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
@@ -211,6 +212,9 @@ static void apply_settings(void) {
         F.G.camSens = sens[F.camSpeed % 3];
         F.G.invertY = F.invertY;
         F.G.autoAim = F.autoAim;
+#ifndef __APPLE__
+        F.G.vphys = F.at ? F.G.vphys : F.vphys;   /* v6.0.5: instelling (autotest kiest zelf) */
+#endif
     }
     tod_apply();
     r_set_quality(&F.R, F.quality);
@@ -267,6 +271,7 @@ static void save_all(void) {
     plat_save_int("inverty", F.invertY);
     plat_save_int("showfps", F.showFps);
     plat_save_int("autoaim", F.autoAim);
+    plat_save_int("vphys", F.vphys);
     plat_save_int("music", F.musicOn);
     plat_save_int("sfx", F.sfxOn);
     if (F.loadDone && !F.at && F.mode == 0) {
@@ -316,6 +321,7 @@ void fe_init(int w, int h) {
     F.invertY = plat_load_int("inverty", 0);
     F.showFps = plat_load_int("showfps", 0);
     F.autoAim = plat_load_int("autoaim", 1);
+    F.vphys = plat_load_int("vphys", 0);   /* v6.0.5: standaard de oude rijphysics */
     F.musicOn = plat_load_int("music", 1);
     pad_load_binds();
     {
@@ -578,8 +584,8 @@ static const char *C_NAMES[3] = {"SLOW", "NORMAL", "FAST"};
 static void draw_settings(void) {
     Renderer *R = &F.R;
     int i;
-    const char *labels[9] = {"GRAPHICS", "TIME OF DAY", "CAMERA SPEED", "INVERT CAMERA Y", "SHOW FPS", "AUTO AIM", "MUSIC", "SOUND EFFECTS", "RESET PROGRESS"};
-    const char *vals[9];
+    const char *labels[10] = {"GRAPHICS", "TIME OF DAY", "CAMERA SPEED", "INVERT CAMERA Y", "SHOW FPS", "AUTO AIM", "MUSIC", "SOUND EFFECTS", "VEHICLE PHYSICS", "RESET PROGRESS"};
+    const char *vals[10];
     vals[0] = Q_NAMES[F.quality % NQUAL];
     vals[1] = T_NAMES[F.tod % 5];
     vals[2] = C_NAMES[F.camSpeed % 3];
@@ -588,22 +594,27 @@ static void draw_settings(void) {
     vals[5] = F.autoAim ? "ON (POLICE FIRST)" : "OFF";
     vals[6] = F.musicOn ? "ON" : "OFF";
     vals[7] = F.sfxOn ? "ON" : "OFF";
-    vals[8] = F.resetArm ? "TAP AGAIN!" : "";
+#ifdef __APPLE__
+    vals[8] = "OLD";
+#else
+    vals[8] = F.vphys ? "REAL (SUSPENSION, FLIPS)" : "OLD (ARCADE)";
+#endif
+    vals[9] = F.resetArm ? "TAP AGAIN!" : "";
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 1);
     draw_backdrop(0.35f, 0.0f, F.t);
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.45f);
     ui_text(R, "SETTINGS", R->W * 0.5f, 40, 60, 1, 1, 1, 1, 1);
     ui_rect(R, R->W - 230.0f, 36, 200, 56, F.pressed == 20 ? 0.6f : 0.15f, F.pressed == 20 ? 0.2f : 0.35f, F.pressed == 20 ? 0.2f : 0.6f, 0.95f);
     ui_text(R, "CONTROLS", R->W - 130.0f, 50, 26, 1, 1, 1, 1, 1);
-    for (i = 0; i < 9; i++) {
-        float y = 118.0f + i * 58.0f;
+    for (i = 0; i < 10; i++) {
+        float y = 112.0f + i * 52.0f;
         int pr = F.pressed == i + 1;
-        ui_rect(R, 180, y - 5, R->W - 360.0f, 50, pr ? 0.5f : 0.08f, 0.04f, 0.04f, 0.55f);
-        ui_text(R, labels[i], 210, y, 28, 1, 1, 1, 1, 0);
-        ui_text(R, vals[i], R->W - 210.0f, y, 28, 1.0f, 0.8f, 0.3f, 1, 2);
+        ui_rect(R, 180, y - 5, R->W - 360.0f, 46, pr ? 0.5f : 0.08f, 0.04f, 0.04f, 0.55f);
+        ui_text(R, labels[i], 210, y, 26, 1, 1, 1, 1, 0);
+        ui_text(R, vals[i], R->W - 210.0f, y, 26, 1.0f, 0.8f, 0.3f, 1, 2);
     }
     ui_text(R, "Graphics changes draw distance and the number of people/cars.", R->W * 0.5f, 648, 16, 0.8f, 0.8f, 0.8f, 1, 1);
-    big_button("BACK", R->W * 0.5f, R->H - 74.0f, 48, F.pressed == 10, 1);
+    big_button("BACK", R->W * 0.5f, R->H - 74.0f, 48, F.pressed == 11, 1);
 }
 
 static void draw_credits(void) {
@@ -957,6 +968,7 @@ static void draw_build(void) {
     draw_backdrop(0.35f, 0.0f, F.t);
     ui_text(R, "PHYSICS MODE", W * 0.5f, 26, 50, 1, 0.85f, 0.25f, 1, 1);
     ui_text(R, "Pick a vehicle. FLYING adds wings and a jet: UP/DOWN to rise and sink.", W * 0.5f, 88, 18, 1, 1, 1, 0.9f, 1);
+    ui_text(R, F.vphys ? "Vehicle physics: REAL (change in SETTINGS)" : "Vehicle physics: OLD - flying vehicles always use REAL (change in SETTINGS)", W * 0.5f, 110, 15, 0.85f, 0.9f, 1, 0.8f, 1);
     for (i = 0; i < PV_N; i++) {
         float bx = W * 0.5f - 470 + (i % 2) * 480, by = 130.0f + (i / 2) * 64.0f;
         int sel = F.bSel == i;
@@ -2971,15 +2983,15 @@ static void menu_tap(float x, float y, int phase) {
         return;
     }
     if (F.state == ST_SETTINGS) {
-        for (i = 0; i < 9; i++) {
-            float ry = 118.0f + i * 58.0f;
-            if (x > 180 && x < R->W - 180 && y > ry - 5 && y < ry + 45) hit = i + 1;
+        for (i = 0; i < 10; i++) {
+            float ry = 112.0f + i * 52.0f;
+            if (x > 180 && x < R->W - 180 && y > ry - 5 && y < ry + 41) hit = i + 1;
         }
-        if (hit_text(x, y, "BACK", R->W * 0.5f, R->H - 74.0f + 24, 48)) hit = 10;
+        if (hit_text(x, y, "BACK", R->W * 0.5f, R->H - 74.0f + 24, 48)) hit = 11;
         if (x > R->W - 230.0f && x < R->W - 30.0f && y > 36 && y < 92) hit = 20;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
-        if (hit != 9) F.resetArm = 0;
+        if (hit != 10) F.resetArm = 0;
         if (hit == 20) { F.controlsFrom = F.prevState; set_state(ST_CONTROLS); return; }
         switch (hit) {
         case 1: F.quality = (F.quality + 1) % NQUAL; break;
@@ -2990,14 +3002,17 @@ static void menu_tap(float x, float y, int phase) {
         case 6: F.autoAim = !F.autoAim; break;
         case 7: F.musicOn = !F.musicOn; break;
         case 8: F.sfxOn = !F.sfxOn; break;
-        case 9:
+#ifndef __APPLE__
+        case 9: F.vphys = !F.vphys; break;   /* v6.0.5: oude of echte rijphysics */
+#endif
+        case 10:
             if (F.resetArm) {
                 for (i = 0; i < NMISSIONS; i++) F.G.completed[i] = 0;
                 F.G.money = 0; F.G.moneyShown = 0;
                 F.resetArm = 0;
             } else F.resetArm = 1;
             break;
-        case 10: {
+        case 11: {
             int back = F.prevState == ST_PAUSE ? ST_PAUSE : ST_MENU;
             set_state(back);
             break;
@@ -3802,6 +3817,7 @@ static void autotest_tick(float dt) {
             plat_write_text("autotest_report.txt", F.rep);
             F.quality = plat_load_int("quality", 1);
             F.tod = plat_load_int("tod", 0);
+            F.vphys = plat_load_int("vphys", 0);
             apply_settings();
             F.atStep++;
             F.at = 0;
