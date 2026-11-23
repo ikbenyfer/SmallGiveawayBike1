@@ -103,6 +103,11 @@ static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 static Job *qin[QN], *qout[QN];
 static int nin, nout, thStarted;
 
+/* v5.5: hoge kwaliteit = echte dakvlakken (LoD 2.2), anders LoD 1.2 met schilddaken */
+static int g_hq;
+void ns_set_detail(int hq) { g_hq = hq ? 1 : 0; }
+static void tile_name(char *name, int n, int tx, int ty) { snprintf(name, n, "nl/t55/%d_%d_%c.t", tx, ty, g_hq ? 'h' : 'm'); }
+
 static void save_tile(int tx, int ty, const TileData *td, long *saved) {
     unsigned char *raw = NULL, *z;
     long rl = td_encode(td, &raw);
@@ -111,7 +116,7 @@ static void save_tile(int tx, int ty, const TileData *td, long *saved) {
     z = (unsigned char *)malloc(zl + 4);
     if (z && compress2(z + 4, &zl, raw, (uLong)rl, 6) == Z_OK) {
         z[0] = (unsigned char)(rl & 255); z[1] = (unsigned char)((rl >> 8) & 255); z[2] = (unsigned char)((rl >> 16) & 255); z[3] = (unsigned char)((rl >> 24) & 255);
-        snprintf(name, sizeof(name), "nl/tiles/%d_%d.t", tx, ty);
+        tile_name(name, sizeof(name), tx, ty);
         plat_write_file(name, (const char *)z, (long)zl + 4);
         if (saved) *saved = (long)zl + 4;
     }
@@ -202,7 +207,8 @@ static void net_start(Net *n, int tx, int ty) {
     memset(n, 0, sizeof(*n));
     (void)cx; (void)cy;
     for (i = 0; i < 4; i++) {
-        if (i == 0) nl_url_bag3d_bbox(url, sizeof(url), x0, y0, x0 + TILE_M, y0 + TILE_M);
+        if (i == 0 && g_hq) nl_url_bag3d_lod22_bbox(url, sizeof(url), x0, y0, x0 + TILE_M, y0 + TILE_M);
+        else if (i == 0) nl_url_bag3d_bbox(url, sizeof(url), x0, y0, x0 + TILE_M, y0 + TILE_M);
         else nl_url_top10_bbox(url, sizeof(url), i == 1 ? "wegdeel_hartlijn" : (i == 2 ? "waterdeel_vlak" : "terrein_vlak"), x0, y0, x0 + TILE_M, y0 + TILE_M);
         n->req[i] = plat_http_start(url);
         if (n->req[i] <= 0) n->done[i] = -1;
@@ -248,6 +254,7 @@ static void net_free(Net *n) { int i; for (i = 0; i < 5; i++) { free(n->buf[i]);
 
 typedef struct {
     int used, tx, ty, state, src;   /* src: 1 pakket, 2 cache, 3 net */
+    int netFailed;                  /* v5.5: geen internet -> dan het meegeleverde pakket gebruiken */
     int slot[4];
     TileBuilt *tb;
     Net net;
@@ -411,30 +418,30 @@ static void start_source(STile *t) {
     Job *j;
     char name[64];
     char *cdata = NULL; long clen2 = 0;
-    if (pk == 1) {
+    /* v5.5: eerst de cache (nieuwe gebouwdata), dan internet; het meegeleverde pakket (oude data) alleen offline */
+    tile_name(name, sizeof(name), t->tx, t->ty);
+    if (plat_read_file(name, &cdata, &clen2) && clen2 > 4) {
+        j = (Job *)calloc(1, sizeof(Job));
+        j->kind = J_BUILD_BLOB;
+        j->rawLen = (long)rd32((unsigned char *)cdata);
+        j->blob = (unsigned char *)malloc((size_t)clen2 - 4);
+        memcpy(j->blob, cdata + 4, (size_t)clen2 - 4);
+        j->blobLen = clen2 - 4;
+        free(cdata);
+        t->src = 2;
+    } else if (pk == 1 && t->netFailed) {
+        free(cdata);
         j = (Job *)calloc(1, sizeof(Job));
         j->kind = J_BUILD_BLOB; j->blob = (unsigned char *)malloc((size_t)clen); memcpy(j->blob, blob, (size_t)clen);
         j->blobLen = clen; j->rawLen = rawlen;
         t->src = 1;
     } else {
-        snprintf(name, sizeof(name), "nl/tiles/%d_%d.t", t->tx, t->ty);
-        if (plat_read_file(name, &cdata, &clen2) && clen2 > 4) {
-            j = (Job *)calloc(1, sizeof(Job));
-            j->kind = J_BUILD_BLOB;
-            j->rawLen = (long)rd32((unsigned char *)cdata);
-            j->blob = (unsigned char *)malloc((size_t)clen2 - 4);
-            memcpy(j->blob, cdata + 4, (size_t)clen2 - 4);
-            j->blobLen = clen2 - 4;
-            free(cdata);
-            t->src = 2;
-        } else {
-            free(cdata);
-            if (plat_time() < t->retryAt) return;
-            net_start(&t->net, t->tx, t->ty);
-            t->state = T_NET;
-            t->src = 3;
-            return;
-        }
+        free(cdata);
+        if (plat_time() < t->retryAt) return;
+        net_start(&t->net, t->tx, t->ty);
+        t->state = T_NET;
+        t->src = 3;
+        return;
     }
     j->tx = t->tx; j->ty = t->ty; j->gen = S.gen;
     j->wx0 = (float)(t->tx * (double)TILE_M - S.ox);
@@ -496,7 +503,10 @@ void ns_update(float px, float pz) {
         if (!t->used || t->state != T_NET) continue;
         if (!net_poll(&t->net, t->tx, t->ty)) continue;
         if (!net_any(&t->net)) {
+            const unsigned char *pb; long pc, pr;
             net_free(&t->net);
+            t->netFailed = 1;
+            if (pack_tile(t->tx, t->ty, &pb, &pc, &pr) == 1) { t->state = T_EMPTY; S.dirty = 1; continue; }   /* offline: pakket */
             t->state = T_EMPTY;
             t->retryAt = plat_time() + 15.0;
             t->state = T_NONE;
@@ -647,7 +657,7 @@ void ns_dl_tick(void) {
         long l = 0;
         const unsigned char *b; long c, r;
         if (pack_tile(D.tx[D.cur], D.ty[D.cur], &b, &c, &r) == 1) { D.done++; D.cur++; continue; }   /* al ingebouwd */
-        snprintf(name, sizeof(name), "nl/tiles/%d_%d.t", D.tx[D.cur], D.ty[D.cur]);
+        tile_name(name, sizeof(name), D.tx[D.cur], D.ty[D.cur]);
         if (plat_read_file(name, &d, &l)) { D.bytes += l; free(d); D.done++; D.cur++; continue; }
         net_start(&D.net, D.tx[D.cur], D.ty[D.cur]);
         D.active = 1;

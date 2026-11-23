@@ -187,6 +187,7 @@ static void set_state(int s) {
 
 static void apply_settings(void) {
     static const float sens[3] = {0.6f, 1.0f, 1.5f};
+    ns_set_detail(F.quality >= 2);
     if (F.loadDone) {
         game_set_quality(&F.G, F.quality);
         F.G.camSens = sens[F.camSpeed % 3];
@@ -3172,7 +3173,8 @@ static void autotest_tick(float dt) {
         }
         else if (F.atStep == 50 && F.state == ST_GAME) {
             nl_exit_to_city();
-            rep("NL online: postcode 1012JS (Amsterdam, buiten de regio -> internet)");
+            rep("NL online: postcode 1012JS (Amsterdam, buiten de regio -> internet), echte dakvlakken (3D BAG LoD 2.2)");
+            ns_set_detail(1);
             F.atStep++;
             nl_play_pc("1012JS", ST_MENU);
             return;
@@ -3191,7 +3193,17 @@ static void autotest_tick(float dt) {
             ns_stats(&tl, &nb, &nv, &fp, &fc, &fn);
             rep("NL online streaming na %.1f s: klaar=%d, internet-tegels totaal %d, straat='%s'", t - F.atNlT2, ns_ready_at(g->p.x, g->p.z), fn, sn ? sn : "-");
             at_shot("20_nl_online");
-            F.atStep++;
+            rep("NL gebouwen: %d, vertices in geheugen %d", nb, nv);
+            g->camPitch = 1.0f;
+            F.atT3 = t;
+            F.atStep = 152;
+        }
+        else if (F.atStep == 152 && t > F.atT3 + 0.8f) {   /* v5.5: daken van bovenaf */
+            g->camPitch = 1.0f;
+            at_shot("20b_nl_roofs");
+            g->camPitch = 0.25f;
+            ns_set_detail(F.quality >= 2);
+            F.atStep = 53;
         }
         else if (F.atStep == 53) {
             int k;

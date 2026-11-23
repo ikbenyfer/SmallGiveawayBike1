@@ -22,6 +22,7 @@ void nl_url_bagpdok(char *buf, int n, double cx, double cy);
 void nl_url_top10(char *buf, int n, const char *collection, double cx, double cy);
 int nl_parse_geocode(char *json, long len, NLGeo *out);
 void nl_url_bag3d_bbox(char *buf, int n, double x0, double y0, double x1, double y1);
+void nl_url_bag3d_lod22_bbox(char *buf, int n, double x0, double y0, double x1, double y1);   /* v5.5: echte daken */
 void nl_url_bagpdok_bbox(char *buf, int n, double x0, double y0, double x1, double y1);
 void nl_url_top10_bbox(char *buf, int n, const char *collection, double x0, double y0, double x1, double y1);
 

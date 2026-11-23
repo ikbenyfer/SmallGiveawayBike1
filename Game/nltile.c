@@ -2,6 +2,7 @@
 #include "json.h"
 #include "models.h"
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -58,11 +59,25 @@ int td_decode(const unsigned char *raw, long len, TileData *td) {
     memset(td, 0, sizeof(*td));
     r.p = raw; r.end = raw + len; r.bad = 0;
     n = (int)rd_u16(&r);
-    for (i = 0; i < n && !r.bad; i++) {
+    if (n == 0xFFF5) {   /* v5.5-formaat: daken, bouwjaar */
+        rd_u8(&r);       /* versie */
+        td->roofs = 1;
+        n = (int)rd_u16(&r);
+        for (i = 0; i < n && !r.bad; i++) {
+            int kind = (int)rd_u8(&r);
+            float h = rd_u16(&r) * 0.1f, h0 = rd_u16(&r) * 0.1f, az = rd_u16(&r) * 0.1f, sl = (float)rd_u8(&r);
+            int year = (int)rd_u16(&r), grp = (int)rd_u16(&r);
+            TFeat *f = feat_add(&td->b, &td->nb, &cb, (int)rd_u16(&r));
+            if (!f) break;
+            f->code = kind; f->h = h; f->h0 = h0; f->az = az; f->sl = sl; f->year = year; f->grp = grp;
+            rd_pts(&r, f);
+        }
+    } else for (i = 0; i < n && !r.bad; i++) {   /* oud formaat (meegeleverd kaartpakket): alleen hoogte */
         float h = rd_u16(&r) * 0.1f;
         TFeat *f = feat_add(&td->b, &td->nb, &cb, (int)rd_u16(&r));
         if (!f) break;
         f->h = h;
+        f->grp = i;
         rd_pts(&r, f);
     }
     n = (int)rd_u16(&r);
@@ -126,8 +141,20 @@ static void wb_pts(Wb *w, const TFeat *f) {
 long td_encode(const TileData *td, unsigned char **out) {
     Wb w = {0};
     int i;
+    wb_u16(&w, 0xFFF5);
+    wb_u8(&w, 1);
     wb_u16(&w, (unsigned)td->nb);
-    for (i = 0; i < td->nb; i++) { wb_u16(&w, (unsigned)(td->b[i].h * 10.0f + 0.5f)); wb_pts(&w, &td->b[i]); }
+    for (i = 0; i < td->nb; i++) {
+        const TFeat *f = &td->b[i];
+        wb_u8(&w, (unsigned)f->code);
+        wb_u16(&w, (unsigned)clampf(f->h * 10.0f + 0.5f, 0, 65535));
+        wb_u16(&w, (unsigned)clampf(f->h0 * 10.0f + 0.5f, 0, 65535));
+        wb_u16(&w, (unsigned)clampf(f->az * 10.0f + 0.5f, 0, 3600));
+        wb_u8(&w, (unsigned)clampf(f->sl + 0.5f, 0, 90));
+        wb_u16(&w, (unsigned)clampf((float)f->year, 0, 65535));
+        wb_u16(&w, (unsigned)(f->grp & 0xFFFF));
+        wb_pts(&w, f);
+    }
     wb_u16(&w, (unsigned)td->nr);
     for (i = 0; i < td->nr; i++) {
         wb_u8(&w, (unsigned)clampf(td->r[i].w * 5.0f + 0.5f, 0, 255));
@@ -253,20 +280,57 @@ static void each_poly(const JV *geom, double ox, double oy, void (*fn)(TileData 
 
 typedef struct { int cb, cr, cw, ct, cn; int bagPdok, idx; } JCtx;
 
+static unsigned str_hash(const char *s) {
+    unsigned h = 2166136261u;
+    while (s && *s) { h ^= (unsigned char)*s++; h *= 16777619u; }
+    return h;
+}
+
 static void j_building(TileData *td, float *x, float *y, int n, const JV *p, void *vc) {
     JCtx *c = (JCtx *)vc;
-    float cx = 0, cy = 0, h;
-    int i;
+    float cx = 0, cy = 0, h, mv;
+    int i, kind = BK_FLAT, year;
+    float h0 = 0, az = 0, sl = 0;
+    const char *id;
     TFeat *f;
     for (i = 0; i < n; i++) { cx += x[i]; cy += y[i]; }
     cx /= n; cy /= n;
     if (cx < 0 || cy < 0 || cx >= TILE_M || cy >= TILE_M) return;   /* hoort bij de buurtegel */
+    year = (int)json_num(json_get(p, "oorspronkelijkbouwjaar"), 0.0);
+    if (!year) year = (int)json_num(json_get(p, "oorspronkelijkBouwjaar"), 0.0);
+    if (year < 1000 || year > 2100) year = 0;
+    id = json_str(json_get(p, "identificatie"));
+    mv = (float)json_num(json_get(p, "b3_h_maaiveld"), 0.0);
     if (c->bagPdok) h = 7.0f + (float)((c->idx * 37) % 7);
-    else h = (float)(json_num(json_get(p, "b3_h_70p"), 9.0) - json_num(json_get(p, "b3_h_maaiveld"), 0.0));
-    h = clampf(h, 2.5f, 160.0f);
+    else if (json_get(p, "b3_azimut")) {
+        /* 3D BAG LoD 2.2: een dakvlak van een pand */
+        double a = json_num(json_get(p, "b3_azimut"), -1.0);
+        kind = BK_FACE;
+        h = (float)(json_num(json_get(p, "b3_h_max"), 9.0) - mv);
+        h0 = (float)(json_num(json_get(p, "b3_h_min"), 9.0) - mv);
+        sl = (float)json_num(json_get(p, "b3_hellingshoek"), 0.0);
+        az = a < 0 ? 0.0f : (float)a;
+        if (sl < 4.0f || a < 0) { sl = 0; h = (float)(json_num(json_get(p, "b3_h_70p"), h + mv) - mv); h0 = h; }
+        h = clampf(h, 1.0f, 200.0f); h0 = clampf(h0, 0.5f, h);
+    } else {
+        /* 3D BAG LoD 1.2: een hoogte per pand, plus daktype en nokhoogte */
+        const char *dt = json_str(json_get(p, "b3_dak_type"));
+        float h70 = (float)(json_num(json_get(p, "b3_h_70p"), 9.0) - mv);
+        float nok = (float)(json_num(json_get(p, "b3_h_nok"), -999.0) - mv);
+        float hmin = (float)(json_num(json_get(p, "b3_h_min"), -999.0) - mv);
+        h = h70;
+        if (dt && strcmp(dt, "slanted") == 0 && nok > h70 && nok < h70 * 2.0f + 6.0f && h70 < 30.0f) {
+            float eave = (h70 - 0.7f * nok) / 0.3f;   /* bij een schuin dak ligt 70% van de dakpunten onder h70 */
+            if (hmin > 1.5f && hmin > eave) eave = hmin;
+            eave = clampf(eave, 2.6f, nok - 1.2f);
+            if (eave < nok - 1.0f) { kind = BK_HIP; h = nok; h0 = eave; }
+        }
+    }
+    h = clampf(h, kind == BK_FACE ? 1.0f : 2.5f, 160.0f);
     f = feat_add(&td->b, &td->nb, &c->cb, n);
     if (!f) return;
-    f->h = h;
+    f->h = h; f->code = kind; f->h0 = h0; f->az = az; f->sl = sl; f->year = year;
+    f->grp = id ? (int)(str_hash(id) & 0xFFFF) : (c->idx & 0xFFFF);
     feat_copy(f, x, y);
 }
 
@@ -341,6 +405,7 @@ int td_from_json(double tminx, double tminy, char *bag, long bagLen, int bagPdok
     memset(&a, 0, sizeof(a));
     c.bagPdok = bagPdok;
     td->heightsEstimated = bagPdok;
+    td->roofs = 1;
     if ((fs = features_of(terrain, terrainLen, &a)) != NULL)
         for (f = fs->child; f; f = f->next) each_poly(json_get(f, "geometry"), tminx, tminy, j_terrain, td, json_get(f, "properties"), &c);
     json_free(&a);
@@ -521,50 +586,225 @@ static void add_seg(BCtx *b, float x0, float z0, float x1, float z1, float h) {
     t->nsegs++;
 }
 
-static void building(BCtx *b, const TFeat *f) {
-    static const int walls[][3] = {{150, 72, 58}, {124, 62, 50}, {172, 98, 72}, {112, 84, 74}, {214, 208, 194},
-                                   {188, 184, 174}, {140, 140, 146}, {160, 120, 92}};
-    float h = f->h;
-    int n = to_world(b, f, 1), i, k = b->idx % 8, floors;
-    Col wall, roof;
-    if (n < 3) return;
-    if (h > 25) k = 6 + (b->idx & 1);
-    wall = col(walls[k][0], walls[k][1], walls[k][2]);
-    roof = h < 12 ? col(96, 70, 62) : col(84, 84, 88);
-    floors = (int)(h / 3.0f);
-    if (floors > 6) floors = 6;
-    for (i = 0; i < n; i++) {
-        int j = (i + 1) % n, fl, wn, q;
-        float ex = wx_[j] - wx_[i], ez = wz_[j] - wz_[i], L = sqrtf(ex * ex + ez * ez);
-        V3 nrm, dir;
-        MeshB *m;
-        if (L < 0.05f) continue;
-        nrm = v3(ez / L, 0, -ex / L);
-        dir = v3(ex / L, 0, ez / L);
-        m = sub_at(b, (wx_[i] + wx_[j]) * 0.5f, (wz_[i] + wz_[j]) * 0.5f);
-        mb_quad4(m, v3(wx_[i], 0, wz_[i]), v3(wx_[j], 0, wz_[j]), v3(wx_[j], h, wz_[j]), v3(wx_[i], h, wz_[i]), nrm,
-                 col_mul(wall, 0.7f), col_mul(wall, 0.7f), wall, wall);
-        add_seg(b, wx_[i], wz_[i], wx_[j], wz_[j], h);
-        if (L < 4.5f) continue;
-        wn = (int)(L / 3.6f);
-        if (wn > 4) wn = 4;
-        for (fl = 0; fl < floors; fl++) {
-            float y = fl * 3.0f + 1.0f;
-            if (y + 1.5f > h - 0.3f) break;
-            for (q = 0; q < wn; q++) {
-                float tc = L * (q + 0.5f) / wn;
-                int lit = ((b->idx * 7 + fl * 3 + q * 5) % 11) < 3;
-                Col c = lit ? col_e(255, 214, 140, 255) : col(46, 58, 76);
-                V3 a = v3(wx_[i] + dir.x * (tc - 0.6f) + nrm.x * 0.04f, y, wz_[i] + dir.z * (tc - 0.6f) + nrm.z * 0.04f);
-                V3 c2 = v3(wx_[i] + dir.x * (tc + 0.6f) + nrm.x * 0.04f, y, wz_[i] + dir.z * (tc + 0.6f) + nrm.z * 0.04f);
-                mb_quad(m, a, c2, v3(c2.x, y + 1.5f, c2.z), v3(a.x, y + 1.5f, a.z), nrm, c);
+/* gevelkleur naar bouwjaar (zoals Nederlandse straten er echt uitzien) */
+static Col facade_col(int year, unsigned hsh) {
+    static const int y1[][3] = {{118, 56, 44}, {134, 64, 50}, {102, 50, 42}, {146, 80, 58}, {126, 70, 56}};      /* voor 1930: donkere baksteen */
+    static const int y2[][3] = {{150, 90, 62}, {164, 102, 70}, {134, 76, 56}, {176, 118, 82}, {142, 98, 74}};     /* 1930-1960: oranje baksteen */
+    static const int y3[][3] = {{196, 168, 118}, {182, 158, 120}, {168, 150, 122}, {204, 192, 160}, {150, 132, 110}}; /* 1960-1985: gele steen, beton */
+    static const int y4[][3] = {{146, 84, 68}, {208, 204, 194}, {118, 108, 102}, {230, 226, 218}, {88, 86, 92}};    /* na 1985: gemengd/modern */
+    const int (*t)[3] = year <= 0 ? (hsh & 1 ? y2 : y3) : (year < 1930 ? y1 : (year < 1960 ? y2 : (year < 1985 ? y3 : y4)));
+    int k = (int)(hsh % 5u);
+    return col(t[k][0], t[k][1], t[k][2]);
+}
+
+static Col roof_col(int sloped, unsigned hsh) {
+    static const int sl[][3] = {{150, 68, 50}, {124, 56, 44}, {64, 64, 70}, {90, 62, 54}, {110, 46, 40}};
+    static const int fl[][3] = {{84, 84, 88}, {70, 72, 76}, {98, 96, 92}, {60, 62, 64}};
+    if (sloped) { int k = (int)((hsh >> 3) % 5u); return col(sl[k][0], sl[k][1], sl[k][2]); }
+    { int k = (int)((hsh >> 3) % 4u); return col(fl[k][0], fl[k][1], fl[k][2]); }
+}
+
+static unsigned grp_hash(const TFeat *f) { unsigned h = (unsigned)f->grp * 2654435761u; return h ^ (h >> 15); }
+
+/* gevel van (x0,z0) naar (x1,z1): van onderkant ya/yb tot bovenkant ta/tb, met ramen als dat kan */
+static void wall_strip(BCtx *b, float x0, float z0, float x1, float z1, float ya, float yb, float ta, float tb,
+                       Col wall, int windows, unsigned hsh) {
+    float ex = x1 - x0, ez = z1 - z0, L = sqrtf(ex * ex + ez * ez), top;
+    V3 nrm, dir;
+    MeshB *m;
+    int floors, fl, wn, q;
+    if (L < 0.05f || (ta - ya < 0.05f && tb - yb < 0.05f)) return;
+    nrm = v3(ez / L, 0, -ex / L);
+    dir = v3(ex / L, 0, ez / L);
+    m = sub_at(b, (x0 + x1) * 0.5f, (z0 + z1) * 0.5f);
+    mb_quad4(m, v3(x0, ya, z0), v3(x1, yb, z1), v3(x1, tb, z1), v3(x0, ta, z0), nrm,
+             col_mul(wall, ya < 0.1f ? 0.72f : 0.95f), col_mul(wall, yb < 0.1f ? 0.72f : 0.95f), wall, wall);
+    if (!windows || L < 2.6f) return;
+    top = fminf(ta, tb);
+    floors = (int)((top - 0.4f) / 2.9f);
+    if (floors > 8) floors = 8;
+    wn = (int)(L / 2.8f);
+    if (wn > 6) wn = 6;
+    if (wn < 1) wn = 1;
+    for (fl = 0; fl < floors; fl++) {
+        float y = fl * 2.9f + (fl == 0 ? 0.8f : 0.9f), wh = fl == 0 ? 1.6f : 1.4f;
+        if (y + wh > top - 0.35f) break;
+        for (q = 0; q < wn; q++) {
+            float tc = L * (q + 0.5f) / wn, hw = fminf(0.62f, L / wn * 0.32f);
+            int lit = ((hsh >> (q + fl * 3)) & 7) == 0;
+            Col c = lit ? col_e(255, 214, 140, 255) : col(44, 56, 72);
+            Col fr = col(232, 230, 222);
+            V3 a = v3(x0 + dir.x * (tc - hw) + nrm.x * 0.03f, y, z0 + dir.z * (tc - hw) + nrm.z * 0.03f);
+            V3 c2 = v3(x0 + dir.x * (tc + hw) + nrm.x * 0.03f, y, z0 + dir.z * (tc + hw) + nrm.z * 0.03f);
+            V3 fa = v3(a.x - dir.x * 0.07f, y - 0.07f, a.z - dir.z * 0.07f), fc = v3(c2.x + dir.x * 0.07f, y - 0.07f, c2.z + dir.z * 0.07f);
+            if (fl == 0 && q == wn / 2 && ((hsh >> 5) & 1) && L > 4.0f) {   /* voordeur */
+                mb_quad(m, v3(a.x, 0.0f, a.z), v3(c2.x, 0.0f, c2.z), v3(c2.x, 2.2f, c2.z), v3(a.x, 2.2f, a.z), nrm, col_mul(wall, 0.45f));
+                continue;
             }
+            mb_quad(m, fa, fc, v3(fc.x, y + wh + 0.07f, fc.z), v3(fa.x, y + wh + 0.07f, fa.z), nrm, fr);   /* kozijn */
+            a.x += nrm.x * 0.01f; a.z += nrm.z * 0.01f; c2.x += nrm.x * 0.01f; c2.z += nrm.z * 0.01f;
+            mb_quad(m, a, c2, v3(c2.x, y + wh, c2.z), v3(a.x, y + wh, a.z), nrm, c);
         }
     }
+}
+
+static void roof_poly(BCtx *b, const float *x, const float *z, const float *y, int n, V3 nrm, Col c) {
+    int t, cnt = triangulate(x, z, n);
+    MeshB *m;
+    float cx = 0, cz = 0;
+    for (t = 0; t < n; t++) { cx += x[t]; cz += z[t]; }
+    m = sub_at(b, cx / n, cz / n);
+    for (t = 0; t < cnt; t++) {
+        int a = tri_idx[t * 3], bb = tri_idx[t * 3 + 1], cc = tri_idx[t * 3 + 2];
+        mb_tri(m, v3(x[a], y[a], z[a]), v3(x[bb], y[bb], z[bb]), v3(x[cc], y[cc], z[cc]), nrm, c);
+    }
+}
+
+static float ry_[MAXP];
+
+/* plat dak (doos) of schilddak tot de echte nokhoogte */
+static void building(BCtx *b, const TFeat *f) {
+    unsigned hsh = grp_hash(f);
+    int n = to_world(b, f, 1), i, hip = f->code == BK_HIP;
+    float eave = hip ? f->h0 : f->h;
+    Col wall = facade_col(f->year, hsh), roof = roof_col(hip, hsh);
+    if (n < 3) return;
+    if (f->year == 0 && f->h > 25) wall = col(150 + (int)(hsh % 40), 150 + (int)(hsh % 40), 156 + (int)(hsh % 40));
+    for (i = 0; i < n; i++) {
+        int j = (i + 1) % n;
+        wall_strip(b, wx_[i], wz_[i], wx_[j], wz_[j], 0, 0, eave, eave, wall, 1, hsh + (unsigned)i * 7u);
+        add_seg(b, wx_[i], wz_[i], wx_[j], wz_[j], eave);
+    }
     raster_poly(b, wx_, wz_, n, 70, 66, 74);
-    flat_poly(b, wx_, wz_, n, h, roof);
-    if (h > b->tb->maxH) b->tb->maxH = h;
+    if (!hip) {
+        for (i = 0; i < n; i++) ry_[i] = eave;
+        roof_poly(b, wx_, wz_, ry_, n, v3(0, 1, 0), roof);
+        /* dakrand */
+        for (i = 0; i < n; i++) {
+            int j = (i + 1) % n;
+            float ex = wx_[j] - wx_[i], ez = wz_[j] - wz_[i], L = sqrtf(ex * ex + ez * ez);
+            V3 nr;
+            if (L < 0.5f) continue;
+            nr = v3(ez / L, 0, -ex / L);
+            mb_quad(sub_at(b, wx_[i], wz_[i]), v3(wx_[i] + nr.x * 0.08f, eave - 0.25f, wz_[i] + nr.z * 0.08f), v3(wx_[j] + nr.x * 0.08f, eave - 0.25f, wz_[j] + nr.z * 0.08f),
+                    v3(wx_[j] + nr.x * 0.08f, eave + 0.15f, wz_[j] + nr.z * 0.08f), v3(wx_[i] + nr.x * 0.08f, eave + 0.15f, wz_[i] + nr.z * 0.08f), nr, col_mul(wall, 0.7f));
+        }
+    } else {
+        /* schilddak: rand op goothoogte, kleinere kopie van de plattegrond op de nok */
+        static float ix[MAXP], iz[MAXP];
+        float cx = 0, cz = 0, k = 0.28f, rise = f->h - eave;
+        for (i = 0; i < n; i++) { cx += wx_[i]; cz += wz_[i]; }
+        cx /= n; cz /= n;
+        for (i = 0; i < n; i++) { ix[i] = cx + (wx_[i] - cx) * k; iz[i] = cz + (wz_[i] - cz) * k; }
+        for (i = 0; i < n; i++) {
+            int j = (i + 1) % n;
+            float ex = wx_[j] - wx_[i], ez = wz_[j] - wz_[i], L = sqrtf(ex * ex + ez * ez), run;
+            V3 nr, rn;
+            if (L < 0.02f) continue;
+            nr = v3(ez / L, 0, -ex / L);
+            run = fabsf((wx_[i] - ix[i]) * nr.x + (wz_[i] - iz[i]) * nr.z) + 0.01f;
+            rn = v3norm(v3(nr.x * rise / run, 1.0f, nr.z * rise / run));
+            mb_quad4(sub_at(b, (wx_[i] + wx_[j]) * 0.5f, (wz_[i] + wz_[j]) * 0.5f),
+                     v3(wx_[i] + nr.x * 0.25f, eave - 0.1f, wz_[i] + nr.z * 0.25f), v3(wx_[j] + nr.x * 0.25f, eave - 0.1f, wz_[j] + nr.z * 0.25f),
+                     v3(ix[j], f->h, iz[j]), v3(ix[i], f->h, iz[i]), rn, col_mul(roof, 0.9f), col_mul(roof, 0.9f), roof, roof);
+        }
+        for (i = 0; i < n; i++) ry_[i] = f->h;
+        roof_poly(b, ix, iz, ry_, n, v3(0, 1, 0), roof);
+    }
+    if (f->h > b->tb->maxH) b->tb->maxH = f->h;
     b->tb->nb++;
+}
+
+/* ---- echte dakvlakken (3D BAG LoD 2.2): vlak voor vlak, met muren alleen waar je ze kunt zien ---- */
+typedef struct { int k[4]; float ya, yb; int face, next, sw; } FEdge;
+
+static int qc(float v) { return (int)floorf(v * 10.0f + 0.5f); }
+
+static void build_faces(BCtx *b, const TileData *td) {
+    int nf = 0, i, j, np = 0, ne = 0, hsz = 1, *head, *off, *cnt;
+    float *px, *pz, *py;
+    FEdge *e;
+    for (i = 0; i < td->nb; i++) if (td->b[i].code == BK_FACE) { nf++; np += td->b[i].n > MAXP ? MAXP : td->b[i].n; }
+    if (!nf) return;
+    px = (float *)malloc(sizeof(float) * (size_t)np); pz = (float *)malloc(sizeof(float) * (size_t)np); py = (float *)malloc(sizeof(float) * (size_t)np);
+    off = (int *)malloc(sizeof(int) * (size_t)td->nb); cnt = (int *)calloc((size_t)td->nb, sizeof(int));
+    e = (FEdge *)malloc(sizeof(FEdge) * (size_t)np);
+    while (hsz < np * 2) hsz <<= 1;
+    head = (int *)malloc(sizeof(int) * (size_t)hsz);
+    for (i = 0; i < hsz; i++) head[i] = -1;
+    np = 0;
+    /* 1: hoeken in wereldcoordinaten + hoogte op elk punt van het (vlakke, schuine) dakvlak */
+    for (i = 0; i < td->nb; i++) {
+        const TFeat *f = &td->b[i];
+        int n;
+        float dx, dz, smin = 1e9f, smax = -1e9f;
+        if (f->code != BK_FACE) continue;
+        n = to_world(b, f, 1);
+        off[i] = np; cnt[i] = n;
+        dx = sinf(f->az * PI_F / 180.0f); dz = -cosf(f->az * PI_F / 180.0f);   /* richting waarin het vlak afloopt */
+        for (j = 0; j < n; j++) { float s2 = wx_[j] * dx + wz_[j] * dz; if (s2 < smin) smin = s2; if (s2 > smax) smax = s2; }
+        for (j = 0; j < n; j++) {
+            px[np + j] = wx_[j]; pz[np + j] = wz_[j];
+            if (f->sl <= 0 || smax - smin < 0.05f) py[np + j] = f->h;
+            else py[np + j] = f->h - (wx_[j] * dx + wz_[j] * dz - smin) / (smax - smin) * (f->h - f->h0);
+        }
+        np += n;
+    }
+    /* 2: randen in een hashtabel, zodat gedeelde randen (tussen vlakken en tussen rijtjeshuizen) gevonden worden */
+    for (i = 0; i < td->nb; i++) {
+        int n = cnt[i], o = off[i];
+        if (td->b[i].code != BK_FACE) continue;
+        for (j = 0; j < n; j++) {
+            int a = o + j, c = o + (j + 1) % n, k0[2], k1[2], sw;
+            unsigned hh;
+            FEdge *ed = &e[ne];
+            k0[0] = qc(px[a]); k0[1] = qc(pz[a]); k1[0] = qc(px[c]); k1[1] = qc(pz[c]);
+            sw = k0[0] > k1[0] || (k0[0] == k1[0] && k0[1] > k1[1]);
+            ed->k[0] = sw ? k1[0] : k0[0]; ed->k[1] = sw ? k1[1] : k0[1]; ed->k[2] = sw ? k0[0] : k1[0]; ed->k[3] = sw ? k0[1] : k1[1];
+            ed->ya = sw ? py[c] : py[a]; ed->yb = sw ? py[a] : py[c];
+            ed->face = i; ed->sw = sw;
+            hh = ((unsigned)ed->k[0] * 73856093u) ^ ((unsigned)ed->k[1] * 19349663u) ^ ((unsigned)ed->k[2] * 83492791u) ^ ((unsigned)ed->k[3] * 2654435761u);
+            hh &= (unsigned)(hsz - 1);
+            ed->next = head[hh]; head[hh] = ne;
+            ne++;
+        }
+    }
+    /* 3: dak en muren per vlak */
+    ne = 0;
+    for (i = 0; i < td->nb; i++) {
+        const TFeat *f = &td->b[i];
+        int n = cnt[i], o = off[i];
+        unsigned hsh = grp_hash(f);
+        Col wall, roof;
+        V3 nrm;
+        if (f->code != BK_FACE) continue;
+        wall = facade_col(f->year, hsh); roof = roof_col(f->sl > 0, hsh);
+        if (f->sl > 0) {
+            float s = sinf(f->sl * PI_F / 180.0f), c = cosf(f->sl * PI_F / 180.0f);
+            nrm = v3(s * sinf(f->az * PI_F / 180.0f), c, -s * cosf(f->az * PI_F / 180.0f));
+        } else nrm = v3(0, 1, 0);
+        roof_poly(b, px + o, pz + o, py + o, n, nrm, f->sl > 0 ? roof : col_mul(roof, 0.95f));
+        raster_poly(b, px + o, pz + o, n, 70, 66, 74);
+        for (j = 0; j < n; j++, ne++) {
+            FEdge *ed = &e[ne], *m = NULL;
+            int a = o + j, c = o + (j + 1) % n, k;
+            unsigned hh = ((unsigned)ed->k[0] * 73856093u) ^ ((unsigned)ed->k[1] * 19349663u) ^ ((unsigned)ed->k[2] * 83492791u) ^ ((unsigned)ed->k[3] * 2654435761u);
+            for (k = head[hh & (unsigned)(hsz - 1)]; k >= 0; k = e[k].next)
+                if (k != ne && e[k].face != i && !memcmp(e[k].k, ed->k, sizeof(ed->k))) { m = &e[k]; break; }
+            if (!m) {   /* buitenmuur: van de grond tot de dakrand, met ramen */
+                wall_strip(b, px[a], pz[a], px[c], pz[c], 0, 0, py[a], py[c], wall, 1, hsh + (unsigned)j * 7u);
+                add_seg(b, px[a], pz[a], px[c], pz[c], fminf(py[a], py[c]));
+            } else {
+                /* gedeelde rand: alleen het stuk dat boven het buurvlak uitsteekt */
+                float oa = ed->sw ? m->yb : m->ya, ob = ed->sw ? m->ya : m->yb;
+                if (py[a] > oa + 0.3f || py[c] > ob + 0.3f)
+                    wall_strip(b, px[a], pz[a], px[c], pz[c], fminf(oa, py[a]), fminf(ob, py[c]), py[a], py[c], wall, 0, hsh);
+            }
+        }
+        if (f->h > b->tb->maxH) b->tb->maxH = f->h;
+        b->tb->nb++;
+    }
+    free(px); free(pz); free(py); free(off); free(cnt); free(e); free(head);
 }
 
 static int add_name(BCtx *b, const char *s) {
@@ -660,7 +900,8 @@ void tb_build(const TileData *td, float wx0, float wzS, TileBuilt *out) {
     for (i = 0; i < td->nnames; i++) nameAt[i] = add_name(&b, td->names[i]);
     for (i = 0; i < td->nr; i++) road(&b, &td->r[i], td->r[i].name >= 0 && td->r[i].name < td->nnames ? nameAt[td->r[i].name] : -1);
     free(nameAt);
-    for (i = 0; i < td->nb; i++) { b.idx = i; building(&b, &td->b[i]); }
+    for (i = 0; i < td->nb; i++) { b.idx = i; if (td->b[i].code != BK_FACE) building(&b, &td->b[i]); }
+    build_faces(&b, td);
     for (i = 0; i < 4; i++) out->verts += out->sub[i].n;
 }
 

@@ -12,13 +12,20 @@
 
 enum { ROAD_CAR = 0, ROAD_BIKE = 1, ROAD_FOOT = 2, ROAD_MAIN = 3 };
 
+/* v5.5 gebouwen: plat dak (doos), schuin dak als schilddak (3D BAG LoD 1.2 + nokhoogte), of een echt
+ * dakvlak uit 3D BAG LoD 2.2 (helling + richting + laagste/hoogste punt) */
+enum { BK_FLAT = 0, BK_HIP = 1, BK_FACE = 2 };
+
 typedef struct {
     int n;
     float *x, *y;      /* lokaal, meters */
-    float h;           /* gebouwen: hoogte */
+    float h;           /* gebouwen: hoogte (BK_HIP: nok, BK_FACE: hoogste punt van het vlak) */
     float w;           /* wegen: breedte */
-    int code;          /* terrein: landgebruik; wegen: soort */
+    int code;          /* terrein: landgebruik; wegen: soort; gebouwen: BK_* */
     int name;          /* wegen: index in names, -1 = geen */
+    float h0;          /* gebouwen: goothoogte (BK_HIP) of laagste punt van het vlak (BK_FACE) */
+    float az, sl;      /* BK_FACE: richting (graden vanaf noord, met de klok mee) en helling (graden) */
+    int year, grp;     /* bouwjaar (0 = onbekend) en pand-nummer (voor de kleur) */
 } TFeat;
 
 typedef struct {
@@ -26,6 +33,7 @@ typedef struct {
     TFeat *b, *r, *w, *t;
     char **names; int nnames;
     int heightsEstimated;
+    int roofs;          /* 1 = nieuwe gebouwdata (v5.5: daken en bouwjaar) */
 } TileData;
 
 typedef struct {

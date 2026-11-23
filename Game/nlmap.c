@@ -52,7 +52,15 @@ void nl_url_top10(char *buf, int n, const char *collection, double cx, double cy
 void nl_url_bag3d_bbox(char *buf, int n, double x0, double y0, double x1, double y1) {
     snprintf(buf, n, "https://data.3dbag.nl/api/BAG3D/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=BAG3D:lod12"
              "&outputFormat=application/json&srsName=EPSG:28992&bbox=%.0f,%.0f,%.0f,%.0f,EPSG:28992"
-             "&propertyName=geom,b3_h_70p,b3_h_maaiveld&count=3000", x0, y0, x1, y1);
+             "&propertyName=geom,b3_h_70p,b3_h_maaiveld,b3_h_min,b3_h_nok,b3_dak_type,oorspronkelijkbouwjaar&count=3000", x0, y0, x1, y1);
+}
+
+/* v5.5: echte dakvlakken (3D BAG LoD 2.2): per vlak de vorm, helling, richting en laagste/hoogste punt */
+void nl_url_bag3d_lod22_bbox(char *buf, int n, double x0, double y0, double x1, double y1) {
+    snprintf(buf, n, "https://data.3dbag.nl/api/BAG3D/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=BAG3D:lod22"
+             "&outputFormat=application/json&srsName=EPSG:28992&bbox=%.0f,%.0f,%.0f,%.0f,EPSG:28992"
+             "&propertyName=geom,b3_h_min,b3_h_max,b3_h_70p,b3_h_maaiveld,b3_azimut,b3_hellingshoek,identificatie,oorspronkelijkbouwjaar&count=20000",
+             x0, y0, x1, y1);
 }
 
 void nl_url_bagpdok_bbox(char *buf, int n, double x0, double y0, double x1, double y1) {

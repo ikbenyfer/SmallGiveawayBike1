@@ -18,6 +18,7 @@ int ns_pack_contains(double rx, double ry);
 void ns_begin(Renderer *r, World *w, double ox, double oy);
 void ns_end(void);
 void ns_update(float px, float pz);
+void ns_set_detail(int hq);   /* v5.5: 1 = echte dakvlakken (3D BAG LoD 2.2), 0 = schilddaken (lichter) */
 int ns_active(void);
 int ns_ready_at(float x, float z);      /* tegel onder dit punt klaar (of zeker leeg) */
 int ns_busy(void);                      /* aantal tegels dat nog laadt */
