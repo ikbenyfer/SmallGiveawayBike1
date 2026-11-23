@@ -141,6 +141,8 @@ static void rep(const char *fmt, ...) {
 static void ui_star(float cx, float cy, float rad, float cr, float cg, float cb, float ca);
 static void draw_mp_hud(void);
 static void start_game(void);
+static void nl_play_at(double rx, double ry, const char *label, int from);
+static void nl_exit_to_city(void);
 static void pad_load_binds(void);
 /* Alle besturing loslaten (sticks terug, knoppen los). Nodig als er een menu opengaat terwijl je
  * de joystick vasthoudt: het loslaten komt dan bij het menu binnen en de stick zou blijven hangen. */
