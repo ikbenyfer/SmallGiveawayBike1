@@ -579,6 +579,50 @@ void r_build_models(Renderer *r) {
     for (i = 0; i < 2; i++) BUILD(r->handMesh[i], model_vr_hand(&m, i ? 1.0f : -1.0f));
     for (i = 0; i < 2; i++) BUILD(r->handMesh[2 + i], model_vr_fist(&m, i ? 1.0f : -1.0f));
     BUILD(r->wheelMesh, model_vr_wheel(&m));
+    {   /* v6.0.1: onderdelen voor de PHYSICS-modus (gecentreerd, 0.6 m) */
+        int t, k;
+        for (t = 1; t < PP_COUNT; t++) {
+            mb_reset(&m);
+            switch (t) {
+            case PP_BLOCK: g_meshMat = MAT_PAINT; mb_box(&m, v3(-0.29f, -0.29f, -0.29f), v3(0.29f, 0.29f, 0.29f), col(80, 108, 150), 0);
+                mb_box(&m, v3(-0.3f, 0.2f, -0.3f), v3(0.3f, 0.3f, 0.3f), col(60, 84, 120), 0); break;
+            case PP_SEAT: g_meshMat = MAT_PAINT; mb_box(&m, v3(-0.29f, -0.29f, -0.29f), v3(0.29f, -0.05f, 0.29f), col(40, 40, 44), 0);
+                mb_box(&m, v3(-0.25f, -0.05f, -0.29f), v3(0.25f, 0.45f, -0.17f), col(200, 40, 40), 0);
+                mb_box(&m, v3(-0.25f, -0.05f, -0.2f), v3(0.25f, 0.05f, 0.2f), col(200, 40, 40), 0); break;
+            case PP_MOTOR: g_meshMat = MAT_SHINY; mb_box(&m, v3(-0.29f, -0.29f, -0.29f), v3(0.29f, 0.12f, 0.29f), col(60, 60, 66), 0);
+                for (k = 0; k < 3; k++) mb_cyl(&m, v3(-0.18f + k * 0.18f, 0.2f, 0.0f), 0.07f, 0.18f, 8, 1, col(150, 150, 156), col(190, 190, 196), 1);
+                mb_cyl(&m, v3(0.22f, 0.0f, -0.32f), 0.05f, 0.12f, 8, 2, col(120, 120, 126), col(20, 20, 20), 1); break;
+            case PP_WING: g_meshMat = MAT_PAINT; mb_box(&m, v3(-0.3f, -0.04f, -0.3f), v3(0.3f, 0.04f, 0.3f), col(236, 236, 232), 0);
+                mb_box(&m, v3(-0.3f, 0.04f, -0.3f), v3(0.3f, 0.05f, -0.2f), col(200, 40, 40), 0); break;
+            default: g_meshMat = MAT_SHINY; mb_cyl(&m, v3(0, 0, 0), 0.24f, 0.58f, 12, 2, col(70, 72, 80), col(40, 40, 44), 1);
+                mb_cyl(&m, v3(0, 0, -0.3f), 0.17f, 0.03f, 12, 2, col_e(255, 140, 40, 255), col_e(255, 180, 60, 255), 1); break;
+            }
+            g_meshMat = 0;
+            upload(&r->phPart[t], &m);
+        }
+        mb_reset(&m);
+        mb_cyl(&m, v3(0, 0, 0), 0.42f, 0.28f, 18, 0, col(24, 24, 26), col(30, 30, 32), 1);
+        g_meshMat = MAT_SHINY;
+        mb_cyl(&m, v3(0, 0, 0), 0.24f, 0.3f, 12, 0, col(170, 172, 178), col(200, 202, 208), 1);
+        g_meshMat = 0;
+        upload(&r->phWheel, &m);
+        mb_reset(&m);
+        g_meshMat = MAT_CONCRETE;
+        for (k = 0; k < PH_RAMPS; k++) {   /* schansen: schuin vlak + zijkanten */
+            const PRamp *rp = &PH_RAMP[k];
+            V3 n = v3norm(v3(0, rp->z1 - rp->z0, -(rp->h1 - rp->h0)));
+            Col c = col(178, 176, 170), sd = col(140, 138, 132);
+            mb_quad(&m, v3(rp->x0, rp->h0 + 0.02f, rp->z0), v3(rp->x1, rp->h0 + 0.02f, rp->z0), v3(rp->x1, rp->h1 + 0.02f, rp->z1), v3(rp->x0, rp->h1 + 0.02f, rp->z1), n, c);
+            mb_quad(&m, v3(rp->x0, 0, rp->z0), v3(rp->x0, 0, rp->z1), v3(rp->x0, rp->h1, rp->z1), v3(rp->x0, rp->h0, rp->z0), v3(-1, 0, 0), sd);
+            mb_quad(&m, v3(rp->x1, 0, rp->z0), v3(rp->x1, 0, rp->z1), v3(rp->x1, rp->h1, rp->z1), v3(rp->x1, rp->h0, rp->z0), v3(1, 0, 0), sd);
+            if (rp->h1 > 0.1f) mb_quad(&m, v3(rp->x0, 0, rp->z1), v3(rp->x1, 0, rp->z1), v3(rp->x1, rp->h1, rp->z1), v3(rp->x0, rp->h1, rp->z1), v3(0, 0, 1), sd);
+            if (rp->h0 > 0.1f) mb_quad(&m, v3(rp->x0, 0, rp->z0), v3(rp->x1, 0, rp->z0), v3(rp->x1, rp->h0, rp->z0), v3(rp->x0, rp->h0, rp->z0), v3(0, 0, -1), sd);
+            mb_quad(&m, v3(rp->x0 + 1.0f, rp->h0 + 0.03f, rp->z0), v3(rp->x0 + 1.4f, rp->h0 + 0.03f, rp->z0), v3(rp->x0 + 1.4f, rp->h1 + 0.03f, rp->z1), v3(rp->x0 + 1.0f, rp->h1 + 0.03f, rp->z1), n, col_e(250, 200, 40, 60));
+            mb_quad(&m, v3(rp->x1 - 1.4f, rp->h0 + 0.03f, rp->z0), v3(rp->x1 - 1.0f, rp->h0 + 0.03f, rp->z0), v3(rp->x1 - 1.0f, rp->h1 + 0.03f, rp->z1), v3(rp->x1 - 1.4f, rp->h1 + 0.03f, rp->z1), n, col_e(250, 200, 40, 60));
+        }
+        g_meshMat = 0;
+        upload(&r->rampMesh, &m);
+    }
     {   /* v6.0: luchtkoepel (eenheidsbol) en regendruppels */
         int a, b2;
         mb_reset(&m);
@@ -631,7 +675,7 @@ void r_set_quality(Renderer *r, int q) {
         GLint mx = 0, prev = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &mx);
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev);
-        r->shSize = mx >= 2048 ? 2048 : 1024;
+        r->shSize = q >= 3 && mx >= 4096 ? 4096 : (mx >= 2048 ? 2048 : 1024);
         glGenTextures(1, &r->shTex);
         glBindTexture(GL_TEXTURE_2D, r->shTex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, r->shSize, r->shSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -651,6 +695,7 @@ void r_set_quality(Renderer *r, int q) {
         plat_log("SGB-HQ: schaduwkaart %dx%d %s", r->shSize, r->shSize, r->shOk ? "ok" : "MISLUKT");
     }
     if (!r->shOk) r->shadowsOn = 0;
+    r->shArea = q >= 3 ? 220.0f : 150.0f;
 }
 
 static void lerp3(float *o, const float *a, const float *b, float t) { int i; for (i = 0; i < 3; i++) o[i] = a[i] + (b[i] - a[i]) * t; }
@@ -967,7 +1012,7 @@ static void draw_scene_one(Renderer *r, Game *g);
 static void shadow_pass(Renderer *r, Game *g) {
     GLint prevFb = 0, vp[4];
     V3 c = g->camTarget, sd = v3(r->sun[0], r->sun[1], r->sun[2]);
-    float S = 150.0f, texel;
+    float S = r->shArea > 1.0f ? r->shArea : 150.0f, texel;
     M4 view, proj;
     if (sd.y < 0.1f || r->sunCol[0] + r->sunCol[1] < 0.35f) { r->shVP = m4_identity(); return; }
     texel = S / (float)r->shSize;
@@ -1326,6 +1371,34 @@ static void draw_scene_one(Renderer *r, Game *g) {
         if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
             float s = clampf(0.5f - (g->p.y - ground) * 0.15f, 0.2f, 0.5f);
             shadows[nsh] = v3(g->p.x, ground, g->p.z); shs[nsh][0] = s; shs[nsh][1] = s; shs[nsh][2] = 0; nsh++;
+        }
+    }
+    if (g->physOn && g->craft.active) {   /* v6.0.1: zelfgebouwd voertuig */
+        const Craft *c = &g->craft;
+        M4 cm = ph_matrix(c);
+        int k;
+        if (!g->nl) { M4 id = m4_identity(); draw_mesh(r, &r->rampMesh, &id); }
+        for (k = 0; k < c->np; k++) {
+            const PPart *pp = &c->part[k];
+            M4 m;
+            if (!pp->alive) continue;
+            if (pp->type == PP_WHEEL) {
+                float a = pp->front ? -c->steerAng * 0.55f : 0.0f;
+                m = m4_mul(cm, m4_mul(m4_translate(pp->local.x, pp->local.y - (0.35f - pp->comp), pp->local.z), m4_mul(m4_rot_y(a), m4_rot_x(pp->spin))));
+                draw_mesh(r, &r->phWheel, &m);
+            } else {
+                m = m4_mul(cm, m4_translate(pp->local.x, pp->local.y, pp->local.z));
+                draw_mesh(r, &r->phPart[pp->type], &m);
+                if (pp->type == PP_SEAT && !r->vr.hidePlayer)
+                    draw_char(r, biz_outfit_variant(g->outfit), m4_mul(cm, m4_translate(pp->local.x, pp->local.y - 0.6f, pp->local.z - 0.05f)), 0, 3, 0, 0, 0);
+            }
+        }
+        for (k = 0; k < PH_DEBRIS; k++) {
+            const PDebris *d = &c->deb[k];
+            M4 m;
+            if (!d->active) continue;
+            m = ph_quat_matrix(d->q, d->pos);
+            draw_mesh(r, d->type == PP_WHEEL ? &r->phWheel : &r->phPart[d->type], &m);
         }
     }
     if (r->pass == 1) {   /* schaduw-pass: alleen gebouwen, voertuigen en mensen */

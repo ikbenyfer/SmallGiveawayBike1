@@ -3,6 +3,7 @@
 #define SGB_GAME_H
 
 #include "world.h"
+#include "phys.h"
 
 #define MAX_VEH 60
 #define MAX_OWNED 4
@@ -49,6 +50,7 @@ typedef struct {
     int custom, model, paint, eng, hand, neon, spoiler, garageSlot;   /* spelerauto / BLOCK CUSTOMS */
     int ti, tj, dir, phase;   /* verkeer: doel-kruispunt en richting */
     float tx, tz, stuck, ghost, hitcool;
+    float slip;        /* v6.0.1: zijwaartse snelheid (driften) */
 } Vehicle;
 
 typedef struct {
@@ -161,6 +163,12 @@ typedef struct {
     /* v5.0 VR: richten met de rechtercontroller (first person) */
     int vrAim; float vrAimYaw; V3 vrMuzzle;
     float camFov;      /* v6.0: beeldhoek (graden), wijder bij hoge snelheid */
+    /* v6.0.1: driften (zijwaarts glijden) en de PHYSICS-modus */
+    float driftT;
+    int physOn, physWantBuild, physBroken;
+    Craft craft;
+    PDesign design;
+    float physSaveX, physSaveZ, physSaveH;
 } Game;
 
 void game_init(Game *g, World *w);
@@ -177,6 +185,8 @@ void game_mission_begin(Game *g, int m);   /* direct, zonder cutscene */
 void game_message(Game *g, const char *txt, float t);
 void game_sfx(Game *g, int id, float x, float z);
 void game_add_wanted(Game *g, int n);
+void game_phys_start(Game *g, int here);   /* here = 1: op de plek van de speler (NL-kaart), anders het testterrein */
+void game_phys_stop(Game *g);
 int game_store_inside(const Game *g);   /* winkel + 1 als de speler binnen in een winkel staat */
 void game_store_enter(Game *g, int store);
 enum { WP_NONE = 0, WP_PISTOL, WP_SMG, WP_SHOTGUN, WP_COUNT };

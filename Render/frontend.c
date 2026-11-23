@@ -32,7 +32,7 @@ typedef struct { char pc[8]; char name[96]; long kb; double rx, ry; } NLArea;
 #include <string.h>
 #include <stdarg.h>
 
-enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME, ST_BIZ, ST_SLOTS, ST_CONTROLS };
+enum { ST_LOGO = 0, ST_LOAD, ST_MENU, ST_SETTINGS, ST_CREDITS, ST_GAME, ST_PAUSE, ST_MISSIONS, ST_NLINPUT, ST_NLLOAD, ST_BIGMAP, ST_SHOP, ST_DEALER, ST_CUSTOMS, ST_MP, ST_HOME, ST_BIZ, ST_SLOTS, ST_CONTROLS, ST_BUILD };
 enum { CTL_NONE = 0, CTL_LSTICK, CTL_RSTICK, CTL_JUMP, CTL_ACTION, CTL_GAS, CTL_BRAKE, CTL_PAUSE, CTL_UI, CTL_FIRE, CTL_WSWITCH, CTL_RUN };
 
 #define NTOUCH 10
@@ -64,6 +64,7 @@ static struct {
     int atShot2, bizShop, atBiz, controlsFrom;
     long atMart0;
     int atCam; V3 atCamPos, atCamTgt;
+    int bSel, bLayer, physPending, physNL;   /* v6.0.1 bouwscherm */
     int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
@@ -297,7 +298,7 @@ void fe_init(int w, int h) {
     memset(&F, 0, sizeof(F));
     {   /* v5.5: modellen en stad met meer detail op hoge kwaliteit (geldt vanaf het opstarten) */
         int q0 = plat_load_int("quality", 1);
-        g_sqDetail = q0 >= 2 ? 1.4f : 1.0f;
+        g_sqDetail = q0 >= 3 ? 1.8f : (q0 >= 2 ? 1.4f : 1.0f);
         world_set_detail(q0);
     }
     r_init(&F.R, w, h);
@@ -549,13 +550,21 @@ static void draw_menu(void) {
         float pulse = (i == 0) ? 0.04f * sinf(F.t * 3.0f) : 0;
         big_button(MENU_ITEMS[i], cx, R->H - 74.0f, 32.0f * (1.0f + pulse), F.pressed == i + 1, a);
     }
+#ifndef __APPLE__
+    big_button("PHYSICS MODE", R->W - 170.0f, 40.0f, 26.0f, F.pressed == 50, a);   /* v6.0.1 */
+#endif
     for (i = 0; i < NMISSIONS; i++) done += F.G.completed[i];
     snprintf(line, sizeof(line), "$%ld   -   %d/%d MISSIONS", F.G.money, done, NMISSIONS);
     ui_text(R, line, 22, 18, 22, 1, 1, 1, a * 0.85f, 0);
     ui_text(R, "iOS LEGACY EDITION  v1.0", R->W - 20.0f, 18, 18, 0.85f, 0.85f, 0.85f, a * 0.7f, 2);
 }
 
-static const char *Q_NAMES[3] = {"LOW", "MEDIUM", "HIGH"};
+static const char *Q_NAMES[4] = {"LOW", "MEDIUM", "HIGH", "ULTRA"};
+#ifdef __APPLE__
+#define NQUAL 3   /* iPad: geen ULTRA en geen PHYSICS-modus */
+#else
+#define NQUAL 4
+#endif
 static const char *T_NAMES[5] = {"DUSK", "NIGHT", "DAY", "RAIN", "LIVE (DAY/NIGHT + WEATHER)"};
 static const char *C_NAMES[3] = {"SLOW", "NORMAL", "FAST"};
 
@@ -564,7 +573,7 @@ static void draw_settings(void) {
     int i;
     const char *labels[9] = {"GRAPHICS", "TIME OF DAY", "CAMERA SPEED", "INVERT CAMERA Y", "SHOW FPS", "AUTO AIM", "MUSIC", "SOUND EFFECTS", "RESET PROGRESS"};
     const char *vals[9];
-    vals[0] = Q_NAMES[F.quality % 3];
+    vals[0] = Q_NAMES[F.quality % NQUAL];
     vals[1] = T_NAMES[F.tod % 5];
     vals[2] = C_NAMES[F.camSpeed % 3];
     vals[3] = F.invertY ? "ON" : "OFF";
@@ -744,6 +753,7 @@ static void btn_pos(int ctl, float *x, float *y, float *r) {
         if (ctl == CTL_GAS) { *x = W - 74; *y = H - 300; *r = 60; }
         if (ctl == CTL_BRAKE) { *x = W - 200; *y = H - 318; *r = 48; }
         if (ctl == CTL_ACTION) { *x = W - 120; *y = H - 440; *r = 40; }
+        if (ctl == CTL_JUMP) { *x = W - 322; *y = H - 300; *r = 42; }   /* v6.0.1: handrem (DRIFT) */
     }
 }
 
@@ -890,7 +900,8 @@ static void pad_build_input(Input *in) {
     in->actionPressed |= P.edgeAction;
     in->switchPressed |= P.edgeSwitch;
     in->run |= pa_held(PA_RUN);
-    if (F.G.p.veh >= 0) {
+    in->jump |= pa_held(PA_JUMP);
+    if (F.G.p.veh >= 0 || F.G.physOn) {
         in->gas |= pa_held(PA_GAS) || P.ax[5] > 0.15f * (P.bind[PA_GAS] == PB_RT);
         in->brake |= pa_held(PA_BRAKE) || P.ax[4] > 0.15f * (P.bind[PA_BRAKE] == PB_LT);
     } else in->fire |= pa_held(PA_FIRE);
@@ -905,6 +916,136 @@ int fe_in_game(void) { return F.loadDone && F.state == ST_GAME; }
 void fe_vr_pointer(int on, float x, float y) {
     P.active = 1;   /* VR: nooit touch-knoppen tonen */
     if (on) { P.cx = clampf(x, 0, (float)F.R.W); P.cy = clampf(y, 0, (float)F.R.H); }
+}
+
+
+/* ------------------------------------------------------------------ v6.0.1 PHYSICS-modus: bouwscherm */
+
+#define BG_X 268.0f
+#define BG_Y 150.0f
+#define BG_C 50.0f
+
+static const float PCOL[PP_COUNT][3] = {{0.15f, 0.15f, 0.17f}, {0.32f, 0.42f, 0.6f}, {0.85f, 0.2f, 0.2f}, {0.45f, 0.45f, 0.5f},
+                                         {0.12f, 0.12f, 0.13f}, {0.92f, 0.92f, 0.9f}, {1.0f, 0.55f, 0.15f}};
+static const char *PSHORT[PP_COUNT] = {"", "BLK", "SEAT", "MOT", "WHL", "WING", "JET"};
+
+static void design_load(void) {
+    char *d = NULL; long len = 0;
+    if (plat_read_file("physics_design.bin", &d, &len) && len == (long)sizeof(PDesign)) memcpy(&F.G.design, d, sizeof(PDesign));
+    free(d);
+}
+static void design_save(void) { plat_write_file("physics_design.bin", (const char *)&F.G.design, (long)sizeof(PDesign)); }
+
+static void open_builder(void) {
+    design_load();
+    if (F.bSel < 1 || F.bSel >= PP_COUNT) F.bSel = PP_BLOCK;
+    set_state(ST_BUILD);
+}
+
+static void draw_build(void) {
+    Renderer *R = &F.R;
+    PDesign *d = &F.G.design;
+    float W = (float)R->W, mass;
+    int x, z, y, t, motors, wheels, wings, jets, seats;
+    char b[160];
+    ui_rect(R, 0, 0, W, (float)R->H, 0.06f, 0.07f, 0.1f, 1);
+    ui_text(R, "PHYSICS MODE - BUILD YOUR VEHICLE", W * 0.5f, 26, 40, 1, 0.85f, 0.25f, 1, 1);
+    ui_text(R, "Top view (front = up). Pick a part, tap squares to place it. 3 layers high.", W * 0.5f, 78, 18, 0.85f, 0.85f, 0.9f, 1, 1);
+    for (t = 0; t < PP_COUNT; t++) {   /* onderdelen */
+        float py = 140.0f + t * 60.0f, sel = F.bSel == t;
+        ui_rect(R, 30, py, 200, 50, sel ? 0.9f : 0.2f, sel ? 0.6f : 0.22f, sel ? 0.1f : 0.28f, 0.95f);
+        ui_rect(R, 40, py + 10, 30, 30, PCOL[t][0], PCOL[t][1], PCOL[t][2], 1);
+        ui_text(R, ph_part_name(t), 84, py + 12, 22, 1, 1, 1, 1, 0);
+    }
+    for (y = 0; y < PH_GY; y++) {   /* lagen */
+        float lx = BG_X + y * 122.0f;
+        int sel = F.bLayer == y;
+        ui_rect(R, lx, 104, 112, 36, sel ? 0.9f : 0.2f, sel ? 0.6f : 0.22f, sel ? 0.1f : 0.28f, 0.95f);
+        snprintf(b, sizeof(b), "LAYER %d", y + 1);
+        ui_text(R, b, lx + 56, 110, 18, 1, 1, 1, 1, 1);
+    }
+    ui_rect(R, BG_X - 4, BG_Y - 4, PH_GX * BG_C + 8, PH_GZ * BG_C + 8, 0.25f, 0.27f, 0.32f, 1);
+    for (z = 0; z < PH_GZ; z++)
+        for (x = 0; x < PH_GX; x++) {
+            float cx = BG_X + x * BG_C, cy = BG_Y + (PH_GZ - 1 - z) * BG_C;
+            int cur = d->c[F.bLayer][z][x], below = F.bLayer > 0 ? d->c[F.bLayer - 1][z][x] : 0;
+            ui_rect(R, cx + 2, cy + 2, BG_C - 4, BG_C - 4, 0.12f, 0.13f, 0.16f, 1);
+            if (below && !cur) ui_rect(R, cx + 6, cy + 6, BG_C - 12, BG_C - 12, PCOL[below][0], PCOL[below][1], PCOL[below][2], 0.3f);
+            if (cur) {
+                ui_rect(R, cx + 3, cy + 3, BG_C - 6, BG_C - 6, PCOL[cur][0], PCOL[cur][1], PCOL[cur][2], 1);
+                ui_text(R, PSHORT[cur], cx + BG_C * 0.5f, cy + 16, 15, cur == PP_WING ? 0.1f : 1, cur == PP_WING ? 0.1f : 1, cur == PP_WING ? 0.1f : 1, 1, 1);
+            }
+        }
+    ui_text(R, "FRONT", BG_X + PH_GX * BG_C * 0.5f, BG_Y - 30, 18, 0.8f, 0.9f, 1, 1, 1);
+    /* zijaanzicht */
+    ui_text(R, "SIDE VIEW", 820, 140, 20, 0.8f, 0.9f, 1, 1, 1);
+    ui_rect(R, 700, 170, 240, 110, 0.12f, 0.13f, 0.16f, 1);
+    for (y = 0; y < PH_GY; y++) for (z = 0; z < PH_GZ; z++) for (x = 0; x < PH_GX; x++) {
+        int c2 = d->c[y][z][x];
+        if (!c2) continue;
+        ui_rect(R, 712 + z * 24.0f, 250 - y * 26.0f, 22, 24, PCOL[c2][0], PCOL[c2][1], PCOL[c2][2], 0.85f);
+    }
+    ph_stats(d, &mass, &motors, &wheels, &wings, &jets, &seats);
+    snprintf(b, sizeof(b), "%.0f kg   %d motor   %d wheels", mass, motors, wheels);
+    ui_text(R, b, 820, 300, 18, 1, 1, 1, 1, 1);
+    snprintf(b, sizeof(b), "%d wing   %d jet", wings, jets);
+    ui_text(R, b, 820, 324, 18, 1, 1, 1, 1, 1);
+    if (!seats) ui_text(R, "Needs a SEAT (driver)!", 820, 356, 18, 1, 0.4f, 0.3f, 1, 1);
+    else if (!motors && !jets) ui_text(R, "Tip: add a MOTOR or JET", 820, 356, 18, 1, 0.8f, 0.3f, 1, 1);
+    else if (motors && !wheels) ui_text(R, "Tip: motors drive WHEELS", 820, 356, 18, 1, 0.8f, 0.3f, 1, 1);
+    else ui_text(R, "Ready!", 820, 356, 20, 0.4f, 1, 0.5f, 1, 1);
+    {   /* knoppen */
+        static const char *bt[5] = {"DRIVE: TEST TRACK", "DRIVE: REAL NL", "SIMPLE CAR", "CLEAR", "BACK"};
+        int k;
+        for (k = 0; k < 5; k++) {
+            float bx = 700, by = 400.0f + k * 62.0f;
+            int pr = F.pressed == 2000 + k;
+            ui_rect(R, bx, by, 300, 52, pr ? 0.9f : (k < 2 ? 0.15f : 0.22f), pr ? 0.6f : (k < 2 ? 0.5f : 0.24f), pr ? 0.1f : (k < 2 ? 0.25f : 0.3f), 0.95f);
+            ui_text(R, bt[k], bx + 150, by + 13, 22, 1, 1, 1, 1, 1);
+        }
+    }
+}
+
+static void phys_go(int nl) {
+    float mass;
+    int motors, wheels, wings, jets, seats;
+    ph_stats(&F.G.design, &mass, &motors, &wheels, &wings, &jets, &seats);
+    if (!seats) { F.shopMsg[0] = 0; return; }
+    design_save();
+    if (nl) {
+        double rx, ry;
+        const char *nm = ns_pack_start(0, &rx, &ry);
+        if (!nm) return;
+        F.physPending = 1; F.physNL = 1;
+        nl_play_at(rx, ry, nm, ST_BUILD);
+        return;
+    }
+    F.physNL = 0;
+    if (!F.G.w) load_slot();
+    if (F.mode != 0) nl_exit_to_city();
+    set_state(ST_GAME);
+    F.fade = 1.0f;
+    game_phys_start(&F.G, 0);
+}
+
+static void build_tap(float x, float y, int phase) {
+    PDesign *d = &F.G.design;
+    int t, k, hit = 0;
+    for (t = 0; t < PP_COUNT; t++) if (x > 30 && x < 230 && y > 140 + t * 60 && y < 190 + t * 60) { if (phase == TOUCH_BEGIN) F.bSel = t; return; }
+    for (k = 0; k < PH_GY; k++) if (x > BG_X + k * 122 && x < BG_X + k * 122 + 112 && y > 104 && y < 140) { if (phase == TOUCH_BEGIN) F.bLayer = k; return; }
+    if (x >= BG_X && x < BG_X + PH_GX * BG_C && y >= BG_Y && y < BG_Y + PH_GZ * BG_C) {
+        int gx = (int)((x - BG_X) / BG_C), gz = PH_GZ - 1 - (int)((y - BG_Y) / BG_C);
+        if (phase != TOUCH_END && gx >= 0 && gx < PH_GX && gz >= 0 && gz < PH_GZ) d->c[F.bLayer][gz][gx] = (unsigned char)F.bSel;
+        return;
+    }
+    for (k = 0; k < 5; k++) if (x > 700 && x < 1000 && y > 400 + k * 62 && y < 452 + k * 62) hit = 2000 + k;
+    if (phase != TOUCH_END) { F.pressed = hit; return; }
+    F.pressed = 0;
+    if (hit == 2000) phys_go(0);
+    else if (hit == 2001) phys_go(1);
+    else if (hit == 2002) ph_default(d);
+    else if (hit == 2003) memset(d, 0, sizeof(*d));
+    else if (hit == 2004) { design_save(); set_state(ST_MENU); }
 }
 
 static void draw_pad_cursor(void) {
@@ -1051,6 +1192,41 @@ static void draw_hud(void) {
     float x, y, r;
 
     if (g->cut) { draw_cutscene(); return; }
+    if (g->physOn) {   /* v6.0.1 PHYSICS-modus: eigen HUD */
+        const Craft *c = &g->craft;
+        draw_minimap();
+        snprintf(b, sizeof(b), "%d KM/H", (int)(c->speed * 3.6f + 0.5f));
+        ui_text(R, b, W - 24, 90, 40, 1, 1, 1, 0.95f, 2);
+        snprintf(b, sizeof(b), "ALT %.0f M   %.0f KG   BROKEN %d", c->alt, c->mass, c->broken);
+        ui_text(R, b, W - 24, 138, 20, 0.85f, 0.95f, 1, 0.9f, 2);
+        if (g_desktop) {
+            ui_rect(R, 0, H - 30, W, 30, 0, 0, 0, 0.45f);
+            ui_text(R, "W/S gas/brake   A/D steer   SPACE handbrake   SHIFT boost   E reset   Q builder   (wings: W/S pitch, A/D roll in the air)", W * 0.5f, H - 26, 15, 1, 1, 1, 0.85f, 1);
+        } else if (P.connected && P.active) {
+            char hb[200];
+            snprintf(hb, sizeof(hb), "%s gas   %s brake   %s handbrake   %s boost   %s reset   %s builder   %s pause",
+                     PB_NAMES[P.bind[PA_GAS]], PB_NAMES[P.bind[PA_BRAKE]], PB_NAMES[P.bind[PA_JUMP]], PB_NAMES[P.bind[PA_RUN]],
+                     PB_NAMES[P.bind[PA_ACTION]], PB_NAMES[P.bind[PA_SWITCH]], PB_NAMES[P.bind[PA_PAUSE]]);
+            ui_rect(R, 0, H - 30, W, 30, 0, 0, 0, 0.45f);
+            ui_text(R, hb, W * 0.5f, H - 26, 16, 1, 1, 1, 0.85f, 1);
+        } else {
+            ui_circle(R, F.lbx, F.lby, STICK_R, 0, 0, 0, F.lOn ? 0.35f : 0.22f);
+            ui_ring(R, F.lbx, F.lby, STICK_R, 2.5f, 1, 1, 1, 0.5f);
+            ui_circle(R, F.lOn ? F.lkx : F.lbx, F.lOn ? F.lky : F.lby, 36, 1, 1, 1, F.lOn ? 0.6f : 0.35f);
+            ui_text(R, "STEER / FLY", F.lbx, F.lby + STICK_R + 2, 16, 1, 1, 1, 0.6f, 1);
+            btn_pos(CTL_GAS, &x, &y, &r); draw_button(x, y, r, "GAS", ctl_down(CTL_GAS), 1, 28);
+            btn_pos(CTL_BRAKE, &x, &y, &r); draw_button(x, y, r, "BRAKE", ctl_down(CTL_BRAKE), 1, 20);
+            btn_pos(CTL_ACTION, &x, &y, &r); draw_button(x, y, r, "RESET", ctl_down(CTL_ACTION), 1, 18);
+            btn_pos(CTL_JUMP, &x, &y, &r); draw_button(x, y, r, "DRIFT", ctl_down(CTL_JUMP), 1, 18);
+            ui_text(R, "PAUSE > QUIT = back to the builder menu", W - 30, 180, 16, 1, 1, 1, 0.6f, 2);
+        }
+        if (g->bannerT > 0) {
+            ui_text(R, g->banner, W * 0.5f, H * 0.3f, 52, 1, 0.85f, 0.25f, clampf(g->bannerT, 0, 1), 1);
+            ui_text(R, g->sub, W * 0.5f, H * 0.3f + 60, 22, 1, 1, 1, clampf(g->bannerT, 0, 1), 1);
+        }
+        if (g->msgT > 0) ui_text(R, g->msg, W * 0.5f, H - 230, 30, 1, 1, 1, clampf(g->msgT * 2, 0, 1), 1);
+        return;
+    }
     if (g->robCool > 0 && !g->nl) {   /* v5.2: wachttijd van de GIVEAWAY MART-kassa */
         char rb[48];
         int t = (int)ceilf(g->robCool);
@@ -1260,6 +1436,7 @@ static void draw_hud(void) {
         btn_pos(CTL_GAS, &x, &y, &r); draw_button(x, y, r, "GAS", ctl_down(CTL_GAS), 1, 28);
         btn_pos(CTL_BRAKE, &x, &y, &r); draw_button(x, y, r, "BRAKE", ctl_down(CTL_BRAKE), 1, 20);
         btn_pos(CTL_ACTION, &x, &y, &r); draw_button(x, y, r, "EXIT", ctl_down(CTL_ACTION), 1, 20);
+        if (g->veh[g->p.veh].type == VEH_CAR) { btn_pos(CTL_JUMP, &x, &y, &r); draw_button(x, y, r, "DRIFT", ctl_down(CTL_JUMP), 1, 18); }
         {
             Vehicle *v = &g->veh[g->p.veh];
             snprintf(b, sizeof(b), "%d KM/H", (int)(fabsf(v->speed) * 3.6f + 0.5f));
@@ -2794,6 +2971,9 @@ static void menu_tap(float x, float y, int phase) {
     if (F.state == ST_MENU) {
         for (i = 0; i < 6; i++)
             if (hit_text(x, y, MENU_ITEMS[i], MENU_X(i), R->H - 74.0f + 18, 32)) hit = i + 1;
+#ifndef __APPLE__
+        if (hit_text(x, y, "PHYSICS MODE", R->W - 170.0f, 40.0f + 15, 26)) hit = 50;
+#endif
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
         if (hit == 1) { F.slotDelArm = 0; set_state(ST_SLOTS); }
@@ -2802,8 +2982,10 @@ static void menu_tap(float x, float y, int phase) {
         else if (hit == 4) open_mp_screen();
         else if (hit == 5) set_state(ST_SETTINGS);
         else if (hit == 6) set_state(ST_CREDITS);
+        else if (hit == 50) open_builder();
         return;
     }
+    if (F.state == ST_BUILD) { build_tap(x, y, phase); return; }
     if (F.state == ST_SLOTS) { slots_tap(x, y, phase); return; }
     if (F.state == ST_CONTROLS) { controls_tap(x, y, phase); return; }
     if (F.state == ST_NLINPUT) { nl_input_tap(x, y, phase); return; }
@@ -2864,7 +3046,7 @@ static void menu_tap(float x, float y, int phase) {
         if (hit != 9) F.resetArm = 0;
         if (hit == 20) { F.controlsFrom = F.prevState; set_state(ST_CONTROLS); return; }
         switch (hit) {
-        case 1: F.quality = (F.quality + 1) % 3; break;
+        case 1: F.quality = (F.quality + 1) % NQUAL; break;
         case 2: F.tod = (F.tod + 1) % 5; break;
         case 3: F.camSpeed = (F.camSpeed + 1) % 3; break;
         case 4: F.invertY = !F.invertY; break;
@@ -2961,14 +3143,15 @@ static void build_input(void) {
     if (g_desktop) {
         in->mx = clampf(in->mx + g_dk.mx, -1, 1);
         in->my = clampf(in->my + g_dk.my, -1, 1);
-        in->gas |= g_dk.gas && F.G.p.veh >= 0;
-        in->brake |= g_dk.brake && F.G.p.veh >= 0;
+        in->gas |= g_dk.gas && (F.G.p.veh >= 0 || F.G.physOn);
+        in->brake |= g_dk.brake && (F.G.p.veh >= 0 || F.G.physOn);
+        in->jump |= g_dk.jump;
         in->fire |= g_dk.fire;
         in->run |= g_dk.run;
         in->jumpPressed |= g_dk.jumpPressed;
         in->actionPressed |= g_dk.actionPressed;
         in->switchPressed |= g_dk.switchPressed;
-        if (F.G.p.veh >= 0) { if (g_dk.gas) in->my = 0; }   /* W = gas, niet dubbel */
+        if (F.G.p.veh >= 0 || F.G.physOn) { if (g_dk.gas) in->my = 0; }   /* W = gas, niet dubbel */
         g_dk.jumpPressed = g_dk.actionPressed = g_dk.switchPressed = 0;
     }
 }
@@ -3112,9 +3295,10 @@ static void autotest_tick(float dt) {
         else if (F.atStep == 32 && t > 47.5f) { F.quality = 2; apply_settings(); F.atStep++; }
         else if (F.atStep == 33 && t > 51.0f) { at_shot("12_quality_high"); F.atStep++; }
         else if (F.atStep == 34 && t > 53.5f) { F.tod = 1; apply_settings(); F.atStep++; }
-        else if (F.atStep == 35 && t > 56.0f) { at_shot("13_night"); F.tod = 3; apply_settings(); F.atStep++; }
+        else if (F.atStep == 35 && t > 56.0f) { at_shot("13_night"); F.atStep = 235; }
+        else if (F.atStep == 235 && t > 56.8f) { F.tod = 3; apply_settings(); F.atStep = 236; }
+        else if (F.atStep == 236 && t > 58.0f) { at_shot("13b_rain"); F.atStep = 36; }
         else if (F.atStep == 36 && t > 58.5f) {
-            at_shot("13b_rain");   /* v6.0: regen, natte weg */
             rep("HQ: shader=%d, schaduwen=%d (kaart %d), regen=%.1f", F.R.hq, F.R.shadowsOn, F.R.shSize, F.R.rain);
             F.tod = 0; apply_settings();
             F.quality = 1; apply_settings();
@@ -3566,8 +3750,47 @@ static void autotest_tick(float dt) {
             for (q = 0; q < ns; q++) if (sk[q] == SM_EXIT) game_teleport(g, sp[q].x, sp[q].z, PI_F);
             g->wanted = 0;
             F.atT3 = t;
+            F.atStep = 160;
+        }
+#ifndef __APPLE__
+        else if (F.atStep == 160) {   /* v6.0.1 PHYSICS-modus */
+            ph_default(&F.G.design);
+            F.G.design.c[1][1][3] = PP_JET;
+            open_builder();
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 161 && t > F.atT3 + 1.0f) { at_shot("50_builder"); phys_go(0); F.atT3 = t; F.atStep++; }
+        else if (F.atStep == 162) {   /* rijden */
+            in->gas = 1;
+            in->mx = t > F.atT3 + 3.0f ? 0.7f : 0.0f;
+            in->jump = t > F.atT3 + 4.0f && t < F.atT3 + 5.0f;
+            if (t > F.atT3 + 5.2f) {
+                rep("Physics: snelheid %.1f m/s, hoogte %.1f, massa %.0f kg, %d onderdelen, kapot %d", g->craft.speed, g->craft.alt, g->craft.mass, g->craft.np, g->craft.broken);
+                at_shot("51_physics_drive");
+                F.atT3 = t; F.atStep++;
+            }
+        }
+        else if (F.atStep == 163) {   /* crash: van 14 m hoogte met de neus omlaag */
+            g->craft.pos.y += 14.0f;
+            g->craft.vel = v3(0, -6.0f, 8.0f);
+            g->craft.angv = v3(1.5f, 0, 0.6f);
+            F.atT3 = t; F.atStep++;
+        }
+        else if (F.atStep == 164 && t > F.atT3 + 2.5f) {
+            rep("Physics-crash: kapot %d onderdelen, brokstukken, stoel heel=%d", g->craft.broken, !g->craft.crashed);
+            at_shot("52_physics_crash");
+            g->physWantBuild = 1;
+            F.atT3 = t; F.atStep++;
+        }
+        else if (F.atStep == 165 && t > F.atT3 + 0.5f) {
+            rep("Physics: terug in het bouwscherm=%d, physics uit=%d", F.state == ST_BUILD, !g->physOn);
+            set_state(ST_GAME);
             F.atStep = 140;
         }
+#else
+        else if (F.atStep == 160) F.atStep = 140;
+#endif
         else if (F.atStep == 140) {   /* v4.5: cutscene voor missie 1 bekijken */
             g->noCutscenes = 0;
             game_start_mission_at(g, 0);
@@ -3715,6 +3938,11 @@ void fe_frame(double now) {
     glClearColor(0, 0, 0, R->vr.active ? 0.0f : 1.0f);   /* VR: UI-laag is doorzichtig waar niets getekend wordt */
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    if (F.physPending && F.state == ST_GAME && F.loadDone && (!F.physNL || F.mode == 1)) {   /* NL geladen: voertuig neerzetten */
+        F.physPending = 0;
+        game_phys_start(&F.G, 1);
+    }
+    if (F.G.physOn && F.state != ST_GAME && F.state != ST_PAUSE && F.state != ST_BIGMAP) game_phys_stop(&F.G);
     switch (F.state) {
     case ST_LOGO:
         if (F.st > 2.5f) { set_state(ST_LOAD); F.loadStart = plat_time(); }
@@ -3734,6 +3962,9 @@ void fe_frame(double now) {
         if (F.loadDone && F.loadShown >= 0.999f && F.st > 2.0f) set_state(ST_MENU);
         break;
     }
+    case ST_BUILD:
+        draw_build();
+        break;
     case ST_MENU:
         if (F.at && F.st > 1.5f && F.atStep == 0) {
             ui_begin(R); draw_menu(); ui_flush(R);
@@ -3878,6 +4109,11 @@ void fe_frame(double now) {
         }
         ui_flush(R);
         F.perfT += dt;
+        if (F.G.physOn && F.G.physWantBuild) {   /* v6.0.1: terug naar het bouwscherm */
+            game_phys_stop(&F.G);
+            if (F.mode != 0) nl_exit_to_city();
+            set_state(ST_BUILD);
+        }
         if (F.tod == 4) tod_apply();   /* v6.0 LIVE: dag/nacht en weer lopen mee */
         {   /* v6.0: automatisch schaduwen uit als het te traag wordt */
             static float lowT;
@@ -3911,7 +4147,8 @@ void fe_frame(double now) {
                 if (g->sfxq[i] == SFX_PISTOL || g->sfxq[i] == SFX_SMG || g->sfxq[i] == SFX_SHOTGUN) vol *= 0.8f;
                 plat_sfx(g->sfxq[i], vol);
             }
-            if (g->p.veh >= 0) {
+            if (g->physOn) { float sp = clampf(g->craft.speed / 40.0f, 0, 1); eng = g->craft.nmotor || g->craft.njet ? 0.22f + 0.45f * sp : 0; engRate = 0.75f + 1.3f * sp; }
+            else if (g->p.veh >= 0) {
                 const Vehicle *v = &g->veh[g->p.veh];
                 float top = v->custom ? car_top_speed(v) : (v->type == VEH_BIKE ? 11.5f : 19.0f);
                 float sp = clampf(fabsf(v->speed) / top, 0, 1);

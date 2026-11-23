@@ -14,6 +14,19 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v6.0.1 (niet voor de iPad): PHYSICS-modus, driften, ULTRA
+
+Deze versie is voor Windows, Linux, Android, Meta Quest en Nintendo Switch. De iPad blijft op v6.0.0.
+
+- **Driften:** houd in een auto **springen** ingedrukt (SPACE / A / DRIFT-knop) als handrem. De achterkant breekt uit en je glijdt door de bocht. Een drift van meer dan 2 seconden levert geld op. Hard door de bocht glijdt de auto ook een beetje.
+- **PHYSICS MODE** (knop rechtsboven in het menu):
+  - **Bouwscherm:** zet je eigen voertuig in elkaar op een raster van 7 × 9 vakjes en 3 lagen hoog. Onderdelen: **chassisblok**, **stoel** (verplicht, daar zit jij), **motor** (drijft de wielen aan), **wiel**, **vleugel** (lift) en **jet** (stuwkracht).
+  - **Echte rigid-body-physics:** zwaartekracht, massa en traagheid per onderdeel, wielen met vering en bandengrip (driften met de handrem), lift en weerstand van vleugels (vliegen met de stick), jets en luchtweerstand.
+  - **Crashphysics:** bij een harde klap breken onderdelen af en vliegen als brokstukken weg. Breekt je stoel, dan is het voertuig kapot.
+  - **Rijden:** op een **testterrein met schansen** naast de stad (de hele stad is ook vrij te verkennen), of in de **echte NL-kaart**.
+  - **Knoppen:** gas/rem, springen = handrem, RUN = boost, ENTER = opnieuw rechtop zetten of een nieuw voertuig, SWITCH (Q / X) = terug naar het bouwscherm.
+- **ULTRA-kwaliteit:** schaduwkaart 4096 × 4096 over een groter gebied, nog gladdere modellen, verder zicht, meer verkeer en voetgangers, en MSAA 8x op de pc.
+
 ## v5.5.0: grote kwaliteitsupgrade + echte huizen in de NL-kaart
 
 **Echte NL-kaart:** de huizen komen nu echt overeen met de werkelijkheid. Alle data komt van 3D BAG (TU Delft).

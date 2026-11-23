@@ -674,7 +674,7 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     if (plat_load_int("quality", 1) >= 2) {   /* v6.0: anti-aliasing (MSAA 4x) op Hoog */
         SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, plat_load_int("quality", 1) >= 3 ? 8 : 4);
     }
     win = SDL_CreateWindow("Small Giveaway Bike 1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     if (!win) {   /* geen MSAA mogelijk: zonder proberen */
@@ -817,6 +817,7 @@ int main(int argc, char **argv) {
             keys.run = k[fe_key_bind(KA_RUN)];   /* rennen */
             keys.fire = (rel && (mb & SDL_BUTTON_LMASK)) || k[fe_key_bind(KA_FIRE)];
             keys.jumpPressed = edgeJump; keys.actionPressed = edgeAction; keys.switchPressed = edgeSwitch;
+            keys.jump = k[fe_key_bind(KA_JUMP)];   /* v6.0.1: vasthouden = handrem */
             edgeJump = edgeAction = edgeSwitch = 0;
             if ((SDL_bool)rel != SDL_GetRelativeMouseMode()) SDL_SetRelativeMouseMode(rel ? SDL_TRUE : SDL_FALSE);
             {   /* alleen bij een wijziging (op Android opent/sluit dit het schermtoetsenbord) */

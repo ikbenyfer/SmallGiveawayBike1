@@ -498,6 +498,7 @@ int game_targets(const Game *g, V3 *out, int max) {
 /* ------------------------------------------------------------------ voertuigen */
 
 int game_mode(const Game *g) {
+    if (g->physOn) return MODE_CAR;
     if (g->p.veh < 0) return MODE_FOOT;
     return g->veh[g->p.veh].type == VEH_BIKE ? MODE_BIKE : MODE_CAR;
 }
@@ -645,6 +646,8 @@ static void vehicle_world_collide(Game *g, Vehicle *v) {
     }
 }
 
+static int g_handbrake;   /* v6.0.1: handrem van de speler (driften) */
+
 static void drive_vehicle(Game *g, Vehicle *v, float thr, float brk, float steerIn, float dt) {
     int bike = v->type == VEH_BIKE;
     float maxF = bike ? 11.5f : 19.0f, acc = bike ? 4.8f : 6.5f, brake = bike ? 10.0f : 13.0f, maxR = bike ? -2.0f : -6.0f;
@@ -673,12 +676,22 @@ static void drive_vehicle(Game *g, Vehicle *v, float thr, float brk, float steer
         float k = steerK;
         yaw = v->steer * k * clampf(sp / 5.0f, 0, 1) * (1.0f - 0.35f * clampf(sp / maxF, 0, 1));
         if (v->speed < 0) yaw = -yaw;
+        if (!bike && g_handbrake && &g->veh[g->p.veh] == v && sp > 5.0f) {   /* handrem: achterkant breekt uit */
+            yaw *= 1.9f;
+            v->speed = approachf(v->speed, 0, 3.5f * dt);
+            v->slip += yaw * 2.0f * v->speed * 0.55f * dt;
+        } else if (!bike && sp > 14.0f) v->slip += yaw * 2.0f * v->speed * 0.12f * dt;   /* hard door de bocht: een beetje glijden */
         v->h = wrap_angle(v->h - yaw * dt * 2.0f);
     }
+    if (!bike) {   /* grip trekt de zijwaartse snelheid terug naar nul */
+        float grip = g_handbrake && &g->veh[g->p.veh] == v ? 3.0f : 11.0f;
+        v->slip = approachf(v->slip, 0, grip * dt);
+        v->slip = clampf(v->slip, -fabsf(v->speed) * 0.8f - 1.0f, fabsf(v->speed) * 0.8f + 1.0f);
+    } else v->slip = 0;
     {
-        V3 f = fwd_of(v->h);
-        v->x += f.x * v->speed * dt;
-        v->z += f.z * v->speed * dt;
+        V3 f = fwd_of(v->h), rt = right_of(v->h);
+        v->x += f.x * v->speed * dt + rt.x * v->slip * dt;
+        v->z += f.z * v->speed * dt + rt.z * v->slip * dt;
     }
     if (bike) v->lean = approachf(v->lean, -v->steer * clampf(fabsf(v->speed) / 8.0f, 0, 1) * 0.45f, 2.0f * dt);
     v->wheel += v->speed * dt / 0.34f;
@@ -938,10 +951,10 @@ static void update_ped(Game *g, Ped *p, float dt) {
 /* ------------------------------------------------------------------ init */
 
 void game_set_quality(Game *g, int q) {
-    static const int peds[3] = {6, 10, 14}, traf[3] = {4, 7, 10};
-    static const float dd[3] = {95.0f, 135.0f, 180.0f};
+    static const int peds[4] = {6, 10, 14, 18}, traf[4] = {4, 7, 10, 13};
+    static const float dd[4] = {95.0f, 135.0f, 180.0f, 260.0f};
     int i;
-    if (q < 0) q = 0; if (q > 2) q = 2;
+    if (q < 0) q = 0; if (q > 3) q = 3;
     g->quality = q;
     g->wantPeds = peds[q];
     g->wantTraffic = traf[q];
@@ -962,6 +975,7 @@ void game_init(Game *g, World *w) {
     g->mission = -1;
     g->voReq = -1; g->voLine = -1;
     g->camFov = 58.0f;
+    ph_default(&g->design);
     g->nl = w->real;
     g->autoAim = 1;
     g->p.x = w->poi[POI_SPAWN].x;
@@ -1234,6 +1248,93 @@ static void store_tick(Game *g, float dt) {
             else g->bizOpen = s - STORE_BURGER + BIZ_BURGER + 1;
         }
     }
+}
+
+/* ------------------------------------------------------------------ v6.0.1 PHYSICS-modus */
+
+static float ph_gnd(void *ctx, float x, float z) {
+    Game *g = (Game *)ctx;
+    float y = world_ground_y(g->w, x, z);
+    if (!g->nl) { float r = ph_ramp_height(x, z); if (r > y) y = r; }
+    return y;
+}
+
+static int ph_push(void *ctx, float *x, float *z, float y) {
+    Game *g = (Game *)ctx;
+    float nx, nz;
+    return world_push_circle(g->w, x, z, 0.05f, y, &nx, &nz);
+}
+
+void game_phys_start(Game *g, int here) {
+    V3 sp;
+    float h;
+    if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; g->p.veh = -1; }
+    g->mission = -1; g->wanted = 0; g->cut = 0;
+    g->physSaveX = g->p.x; g->physSaveZ = g->p.z; g->physSaveH = g->p.h;
+    if (here) { sp = v3(g->p.x, world_ground_y(g->w, g->p.x, g->p.z), g->p.z); h = g->p.h; }
+    else { sp = v3(432.0f, 0, 70.0f); h = 0.0f; }
+    ph_spawn(&g->craft, &g->design, sp, h);
+    g->physOn = 1; g->physWantBuild = 0; g->physBroken = 0;
+    g->camYaw = h; g->camPitch = 0.3f;
+    g->camPos = v3(sp.x - sinf(h) * 9.0f, sp.y + 4.0f, sp.z - cosf(h) * 9.0f);
+    banner(g, "PHYSICS MODE", "Gas/brake to drive, JUMP = handbrake, ENTER = reset, SWITCH = builder", 1, 4.0f);
+}
+
+void game_phys_stop(Game *g) {
+    if (!g->physOn) return;
+    g->physOn = 0;
+    g->craft.active = 0;
+    if (!g->nl) game_teleport(g, g->physSaveX, g->physSaveZ, g->physSaveH);
+}
+
+static void phys_update(Game *g, const Input *in, float dt) {
+    Craft *c = &g->craft;
+    V3 f = ph_forward(c), tgt, want;
+    float gas = in->gas ? 1.0f : (in->my > 0.3f ? (in->my - 0.3f) / 0.7f : 0.0f);
+    float brk = in->brake ? 1.0f : (in->my < -0.3f ? 1.0f : 0.0f), pitch = 0, roll = 0, yaw, dist;
+    int air = c->nwing > 0 && c->alt > 2.5f;
+    float vf = v3dot(c->vel, f);
+    if (brk > 0 && vf < 1.0f) { gas = -brk; brk = 0; }   /* stilstaan + rem = achteruit */
+    if (air) {   /* vliegen: stick = hoogteroer en rolroer, gas via de knoppen of RUN */
+        pitch = -in->my; roll = in->mx;
+        gas = (in->gas || in->run) ? 1.0f : 0.0f;
+    }
+    if (in->run && !air) gas = gas > 0 ? 1.0f : gas;
+    if (in->actionPressed) {
+        if (c->crashed) ph_spawn(c, &g->design, v3(c->pos.x, ph_gnd(g, c->pos.x, c->pos.z), c->pos.z), atan2f(f.x, f.z));
+        else ph_reset_upright(c, ph_gnd, g);
+        game_message(g, c->crashed ? "New vehicle" : "Reset", 1.2f);
+    }
+    if (in->switchPressed) g->physWantBuild = 1;
+    if (!c->crashed) ph_step(c, gas, brk, in->mx, in->jump, pitch, roll, dt, ph_gnd, ph_push, g);
+    else { ph_step(c, 0, 1, 0, 1, 0, 0, dt, ph_gnd, ph_push, g); }
+    if (c->broken != g->physBroken) {
+        g->physBroken = c->broken;
+        game_sfx(g, SFX_CRASH, c->pos.x, c->pos.z);
+        if (c->crashed) banner(g, "WRECKED!", "Your seat broke off. Press ENTER for a new vehicle.", 0, 4.0f);
+        else game_message(g, "CRASH! A part broke off", 1.6f);
+    } else if (c->impact > 6.0f) game_sfx(g, SFX_CRASH, c->pos.x, c->pos.z);
+    /* speler volgt het voertuig (streaming, kaart) */
+    g->p.x = c->pos.x; g->p.z = c->pos.z; g->p.y = c->pos.y;
+    g->p.h = atan2f(f.x, f.z);
+    /* camera: zacht achter het voertuig */
+    yaw = atan2f(f.x, f.z);
+    g->camYaw = wrap_angle(g->camYaw - in->lx * 2.6f * g->camSens * dt);
+    g->camPitch = clampf(g->camPitch + in->ly * 1.5f * g->camSens * dt * (g->invertY ? 1.0f : -1.0f), -0.1f, 1.2f);
+    if (fabsf(in->lx) < 0.08f && c->speed > 2.0f) g->camYaw = approach_angle(g->camYaw, yaw, 2.0f * dt);
+    dist = 7.0f + sqrtf((float)c->np) * 0.7f;
+    tgt = v3(c->pos.x, c->pos.y + 1.0f, c->pos.z);
+    want = v3(tgt.x - sinf(g->camYaw) * dist * cosf(g->camPitch), tgt.y + dist * sinf(g->camPitch) + 1.0f, tgt.z - cosf(g->camYaw) * dist * cosf(g->camPitch));
+    {
+        float t2 = world_raycast(g->w, tgt, want), gy;
+        if (t2 < 1.0f) want = v3lerp(tgt, want, fmaxf(0.1f, t2 - 0.05f));
+        gy = ph_gnd(g, want.x, want.z) + 0.4f;
+        if (want.y < gy) want.y = gy;
+    }
+    if (v3len(v3sub(want, g->camPos)) < 25.0f) want = v3lerp(g->camPos, want, 1.0f - expf(-dt * 8.0f));
+    g->camPos = want;
+    g->camTarget = tgt;
+    g->camFov = approachf(g->camFov, 58.0f + clampf(c->speed / 30.0f, 0, 1) * 14.0f, 12.0f * dt);
 }
 
 /* ------------------------------------------------------------------ update */
@@ -2062,6 +2163,7 @@ void game_update(Game *g, const Input *in, float dt) {
     g->time += dt;
     vo_tick(g, dt);
     if (g->robCool > 0) g->robCool -= dt;   /* loopt altijd door, ook buiten de winkel */
+    if (g->physOn) { phys_update(g, in, dt); return; }   /* v6.0.1 PHYSICS-modus */
     if (g->cut) {   /* v4.5 cutscene: de wereld loopt door, de speler staat stil */
         cut_update(g, in, dt);
         memset(&still, 0, sizeof(still));
@@ -2089,7 +2191,26 @@ void game_update(Game *g, const Input *in, float dt) {
         /* stick naar voren werkt ook als gas */
         if (!in->gas && in->my > 0.5f) thr = (in->my - 0.3f) / 0.7f;
         if (!in->brake && in->my < -0.5f) brk = 1.0f;
+        g_handbrake = in->jump;
         drive_vehicle(g, v, thr, brk, clampf(in->mx * 1.15f, -1, 1), dt);
+        g_handbrake = 0;
+        if (v->type == VEH_CAR && fabsf(v->slip) > 2.5f && fabsf(v->speed) > 7.0f) {   /* drift-teller */
+            g->driftT += dt;
+            if (g->driftT > 0.6f && g->msgT <= 0.2f) {
+                char b[48];
+                snprintf(b, sizeof(b), "DRIFT  %.1f s", g->driftT);
+                game_message(g, b, 0.4f);
+            }
+        } else if (g->driftT > 0) {
+            if (g->driftT > 2.0f) {
+                int bonus = (int)(g->driftT * 25.0f);
+                char b[48];
+                g->money += bonus;
+                snprintf(b, sizeof(b), "DRIFT %.1f s  +$%d", g->driftT, bonus);
+                game_message(g, b, 2.0f);
+            }
+            g->driftT = 0;
+        }
         g->p.x = v->x; g->p.z = v->z; g->p.y = v->y; g->p.h = v->h;
         g->p.anim += fabsf(v->speed) * dt * 1.2f;
     } else if (g->p.anT > 0 && g->p.anKind >= 3) {

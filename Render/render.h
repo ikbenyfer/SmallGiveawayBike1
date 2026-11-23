@@ -31,6 +31,8 @@ typedef struct {
     GLint hqShadowVP, hqShadowTex, hqShadowOn, hqTexel, hqRain, hqTime, hqSkyTop, hqSkyHor;
     GLuint progSky; GLint skVP, skModel, skTop, skHor, skSun, skSunCol, skAmb, skFog, skRain, skTime;
     GMesh skyDome, rainMesh;
+    GMesh phPart[PP_COUNT], phWheel, rampMesh;   /* v6.0.1 PHYSICS-modus */
+    float shArea;      /* breedte van de schaduwkaart (m) */
     GLuint shFbo, shTex, shDepth; int shSize, shOk;
     M4 shVP;
     int pass;          /* 1 = schaduw-pass */
