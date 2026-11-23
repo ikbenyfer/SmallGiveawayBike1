@@ -81,8 +81,8 @@ static HP hp_of(int v) {
     h.cop = v == COP_VARIANT;
     h.player = v == 0;
     h.sleeves = v == COP_VARIANT || v == 7 || v == 5;
-    h.lip = col((int)(skin.r * 0.78f + 30), (int)(skin.g * 0.5f + 8), (int)(skin.b * 0.5f + 10));
-    if (h.fem) h.lip = col((int)(skin.r * 0.6f + 70), (int)(skin.g * 0.35f + 10), (int)(skin.b * 0.4f + 20));
+    h.lip = col((int)(skin.r * 0.86f + 10), (int)(skin.g * 0.66f), (int)(skin.b * 0.66f));
+    if (h.fem) h.lip = col((int)(skin.r * 0.78f + 30), (int)(skin.g * 0.52f), (int)(skin.b * 0.56f));
     h.iris = col(irisC[(v * 7 + 1) % 4][0], irisC[(v * 7 + 1) % 4][1], irisC[(v * 7 + 1) % 4][2]);
     h.capc = h.cop ? col(24, 34, 74) : col(30, 30, 34);
     if (h.player) h.capc = col(200, 30, 40);
@@ -205,16 +205,17 @@ static float torso_sdf(V3 p, const HP *h) {
     d = smin(d, sd_ell(p, v3(0, 1.355f, 0.0f), v3(0.19f - 0.03f * fe + 0.012f * b, 0.14f, 0.112f + 0.012f * b)), 0.07f);   /* borstkas */
     d = smin(d, sd_ell(q, v3(0.075f, 1.39f, 0.055f), v3(0.08f, 0.055f, 0.05f)), 0.04f);   /* borstspieren */
     if (h->fem) d = smin(d, sd_sph(q, v3(0.07f, 1.33f, 0.072f), 0.058f), 0.03f);
-    d = smin(d, sd_cap(p, v3(-0.30f + 0.03f * fe, 1.462f, -0.005f), v3(0.30f - 0.03f * fe, 1.462f, -0.005f), 0.064f, 0.064f), 0.06f);   /* schouders */
-    d = smin(d, sd_cap(p, v3(-0.16f, 1.495f, -0.02f), v3(0.16f, 1.495f, -0.02f), 0.052f, 0.052f), 0.05f);    /* monnikskapspier */
+    d = smin(d, sd_cap(p, v3(-0.315f + 0.03f * fe, 1.462f, -0.005f), v3(0.315f - 0.03f * fe, 1.462f, -0.005f), 0.07f, 0.07f), 0.07f);   /* schouders */
+    d = smin(d, sd_cap(q, v3(0.05f, 1.545f, -0.02f), v3(0.2f, 1.5f, -0.015f), 0.05f, 0.05f), 0.06f);    /* monnikskapspier (schuin naar de nek) */
     d = smin(d, sd_ell(q, v3(0.095f, 1.33f, -0.07f), v3(0.08f, 0.13f, 0.05f)), 0.05f);   /* rugspieren */
-    d = smin(d, sd_cap(p, v3(0, 1.46f, -0.008f), v3(0, 1.70f, 0.01f), 0.056f - 0.007f * fe, 0.05f - 0.004f * fe), 0.035f);   /* nek */
+    d = smin(d, sd_cap(p, v3(0, 1.46f, -0.012f), v3(0, 1.70f, 0.004f), 0.064f - 0.009f * fe, 0.056f - 0.006f * fe), 0.045f);   /* nek */
+    d = smin(d, sd_cap(q, v3(0.03f, 1.56f, 0.035f), v3(0.012f, 1.7f, 0.02f), 0.018f, 0.014f), 0.02f);   /* halsspieren */
     d = smin(d, sd_sph(q, v3(HIP_X, 0.905f, 0), 0.094f + 0.006f * fe), 0.05f);   /* aanzet van de benen */
     if (p.y > 1.12f && p.y < 1.5f)   /* plooien in het shirt */
         d += 0.0022f * sinf(p.y * 75.0f + 3.0f * sinf(p.x * 22.0f)) * clampf((1.48f - p.y) * 8.0f, 0, 1);
     if (p.y < 1.08f && p.y > 0.86f)
         d += 0.0016f * sinf(p.x * 60.0f + p.y * 40.0f);
-    d = smin(d, sd_torus_y(p, v3(0, 1.505f, 0.004f), 0.064f - 0.005f * fe, 0.011f), 0.01f);   /* kraag */
+    d = smin(d, sd_torus_y(p, v3(0, 1.545f, -0.004f), 0.07f - 0.008f * fe, 0.01f), 0.012f);   /* kraag */
     return d;
 }
 
@@ -231,12 +232,12 @@ static float face_sdf(V3 p, const HP *h) {
     d = smin(d, sd_sph(p, v3(0, 1.783f, 0.119f), 0.0155f), 0.008f);                                  /* neuspunt */
     d = smin(d, sd_sph(q, v3(0.0145f, 1.777f, 0.106f), 0.011f), 0.008f);                             /* neusvleugels */
     d = smax(d, -sd_sph(q, v3(0.009f, 1.771f, 0.115f), 0.0045f), 0.002f);                            /* neusgaten */
-    d = smin(d, sd_ell(p, v3(0, 1.7475f, 0.1035f), v3(0.025f, 0.0085f, 0.013f)), 0.006f);           /* bovenlip */
-    d = smin(d, sd_ell(p, v3(0, 1.7345f, 0.1005f), v3(0.022f, 0.0095f, 0.013f)), 0.006f);           /* onderlip */
+    d = smin(d, sd_ell(p, v3(0, 1.7472f, 0.1025f), v3(0.0235f, 0.0062f, 0.011f)), 0.006f);           /* bovenlip */
+    d = smin(d, sd_ell(p, v3(0, 1.7355f, 0.0995f), v3(0.0205f, 0.0072f, 0.011f)), 0.006f);           /* onderlip */
     d = smax(d, -sd_rbox(p, v3(0, 1.7412f, 0.116f), v3(0.024f, 0.0011f, 0.012f), 0.0008f), 0.0015f);   /* mondspleet */
-    d = smax(d, -sd_sph(q, v3(0.033f, 1.81f, 0.104f), 0.0195f), 0.011f);                              /* oogkassen */
-    d = smin(d, sd_ell(q, v3(0.033f, 1.8195f, 0.0925f), v3(0.0185f, 0.0085f, 0.0135f)), 0.004f);       /* bovenoogleden */
-    d = smin(d, sd_ell(q, v3(0.033f, 1.8005f, 0.094f), v3(0.016f, 0.0045f, 0.011f)), 0.004f);          /* onderoogleden */
+    d = smax(d, -sd_sph(q, v3(0.033f, 1.81f, 0.106f), 0.0165f), 0.012f);                              /* oogkassen */
+    d = smin(d, sd_ell(q, v3(0.033f, 1.8185f, 0.093f), v3(0.0165f, 0.0065f, 0.0125f)), 0.004f);       /* bovenoogleden */
+    d = smin(d, sd_ell(q, v3(0.033f, 1.8015f, 0.093f), v3(0.014f, 0.0035f, 0.01f)), 0.004f);          /* onderoogleden */
     d = smin(d, sd_ell(q, v3(0.088f, 1.795f, -0.008f), v3(0.012f, 0.031f, 0.02f)), 0.01f);           /* oren */
     d = smax(d, -sd_sph(q, v3(0.098f, 1.797f, -0.004f), 0.0105f), 0.004f);                            /* oorschelp */
     return d;
@@ -339,15 +340,16 @@ static void body_col(V3 p, V3 n, const HP *h, int part, Col *c, int *mat) {
         *mat = MAT_SHINY; return;
     }
     {
-        float neck = 1.507f;
-        if (!h->cop && !h->sleeves && p.z > 0) neck -= 0.035f * clampf(1.0f - q.x / 0.05f, 0, 1);   /* V-hals */
-        if (p.y >= neck || (p.y > 1.49f && p.z < -0.0f && p.y > 1.515f)) {   /* huid */
+        float rr = sqrtf(p.x * p.x + (p.z + 0.006f) * (p.z + 0.006f)), neckY = 1.548f - 0.02f * clampf(p.z / 0.06f, 0, 1);
+        int isSkin = p.y > 1.62f || (rr < 0.085f && p.y > neckY);
+        if (!h->cop && !h->sleeves && p.z > 0.02f && q.x < 0.06f && p.y > 1.47f + 0.9f * q.x && p.y > 1.43f) isSkin = 1;   /* V-hals */
+        if (isSkin) {   /* huid */
             Col sk = h->skin;
             /* lippen, wangen, wenkbrauwen */
-            if (sd_ell(p, v3(0, 1.7475f, 0.1035f), v3(0.025f, 0.0085f, 0.013f)) < 0.002f || sd_ell(p, v3(0, 1.7345f, 0.1005f), v3(0.022f, 0.0095f, 0.013f)) < 0.002f) {
+            if (sd_ell(p, v3(0, 1.7472f, 0.1025f), v3(0.0235f, 0.0062f, 0.011f)) < 0.0015f || sd_ell(p, v3(0, 1.7355f, 0.0995f), v3(0.0205f, 0.0072f, 0.011f)) < 0.0015f) {
                 *c = h->lip; *mat = MAT_SKIN; return;
             }
-            if (q.x > 0.012f && q.x < 0.058f && p.z > 0.072f && p.y > 1.836f && p.y < 1.851f - 0.12f * (q.x - 0.035f) * (q.x - 0.035f) * 30.0f) {
+            if (q.x > 0.013f && q.x < 0.056f && p.z > 0.075f && p.y > 1.8415f + 0.08f * (q.x - 0.03f) * (q.x - 0.03f) * 30.0f && p.y < 1.8505f + 0.08f * (q.x - 0.03f) * (q.x - 0.03f) * 30.0f) {
                 *c = col_mul(h->hairc, 0.75f); *mat = MAT_HAIR; return;
             }
             if (p.y > 1.8f && p.y < 1.83f && q.x > 0.016f && q.x < 0.05f && p.z > 0.098f && fabsf(p.y - 1.8195f) < 0.006f) {   /* wimpers */
@@ -438,7 +440,7 @@ void human_shin(MeshB *m, int v) {
 static float uarm_sdf(V3 p, const HP *h, int *part) {
     float fe = (float)h->fem, d;
     *part = PT_BODY;
-    d = sd_sph(p, v3(0, -0.005f, 0), 0.068f - 0.006f * fe);   /* deltaspier */
+    d = sd_ell(p, v3(0, -0.03f, 0.0f), v3(0.058f - 0.006f * fe, 0.075f, 0.06f - 0.005f * fe));   /* deltaspier */
     d = smin(d, sd_cap(p, v3(0, 0, 0), v3(0, -ELBOW_Y, 0), 0.06f - 0.006f * fe, 0.046f), 0.03f);
     d = smin(d, sd_ell(p, v3(0, -0.13f, 0.018f), v3(0.051f - 0.006f * fe, 0.1f, 0.049f)), 0.03f);   /* biceps */
     d = smin(d, sd_ell(p, v3(0, -0.12f, -0.02f), v3(0.049f - 0.005f * fe, 0.1f, 0.045f)), 0.03f);   /* triceps */

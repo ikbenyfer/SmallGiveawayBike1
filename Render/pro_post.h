@@ -39,7 +39,7 @@ static const char *FS_AO =
     "  vec3 dy = abs(Pu.z - P.z) < abs(P.z - Pd.z) ? Pu - P : P - Pd;\n"
     "  vec3 n = normalize(cross(dx, dy));\n"
     "  if (dot(n, -P) < 0.0) n = -n;\n"
-    "  float R = 0.75, ao = 0.0, a0 = hash(vUv * 731.0) * 6.2832;\n"
+    "  float R = 0.6, ao = 0.0, a0 = hash(floor(vUv / uPx)) * 6.2832;\n"
     "  vec2 rs = vec2(R / (2.0 * uTan.x * -P.z), R / (2.0 * uTan.y * -P.z));\n"
     "  rs = min(rs, vec2(0.12));\n"
     "  for (int i = 0; i < 12; i++) {\n"
@@ -50,10 +50,11 @@ static const char *FS_AO =
     "    vec3 Q = posAt(suv);\n"
     "    vec3 v = Q - P;\n"
     "    float dist = length(v);\n"
-    "    float w = 1.0 - smoothstep(R * 0.6, R * 2.2, dist);\n"
-    "    ao += max(0.0, dot(n, v / max(dist, 0.0001)) - 0.08) * w;\n"
+    "    float w = clamp(R / max(abs(Q.z - P.z), 0.001), 0.0, 1.0) * (1.0 - smoothstep(R, R * 1.6, dist));\n"
+    "    ao += max(0.0, dot(n, v / max(dist, 0.0001)) - 0.15) * w;\n"
     "  }\n"
-    "  ao = clamp(1.0 - ao * 1.5 / 12.0, 0.0, 1.0);\n"
+    "  ao = clamp(1.0 - ao * 2.6 / 12.0, 0.0, 1.0);\n"
+    "  ao = mix(ao, 1.0, smoothstep(45.0, 90.0, -P.z));\n"
     "  gl_FragColor = vec4(ao, ao, ao, 1.0);\n"
     "}\n";
 
@@ -334,7 +335,7 @@ static void pro_post(Renderer *r, Game *g, const GLint *vp, GLuint outFb) {
     glUniform1i(glGetUniformLocation(P, "uBloom"), 2);
     glUniform1i(glGetUniformLocation(P, "uRays"), 3);
     glUniform2f(glGetUniformLocation(P, "uPx"), 1.0f / w, 1.0f / h);
-    glUniform2f(glGetUniformLocation(P, "uAoPx"), 1.0f / hw, 1.0f / hh);
+    glUniform2f(glGetUniformLocation(P, "uAoPx"), 1.6f / hw, 1.6f / hh);
     glUniform3f(glGetUniformLocation(P, "uRayCol"), r->sunCol[0] * 0.55f * rayK, r->sunCol[1] * 0.5f * rayK, r->sunCol[2] * 0.4f * rayK);
     glUniform1f(glGetUniformLocation(P, "uTime"), g->time);
     glUniform1f(glGetUniformLocation(P, "uAoOn"), 1.0f);

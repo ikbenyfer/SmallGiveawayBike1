@@ -258,7 +258,7 @@ static const char *FS_HQ_BODY =
     "  } else if (m < 10.5) {\n"   /* v6.2.0 huid: kleurvariatie, porien, zachte glans */
     "    c *= 0.95 + 0.1 * noise(vW.xy * 30.0 + vW.z * 17.0);\n"
     "    c = mix(c, c * vec3(1.06, 0.93, 0.9), 0.5 * noise(vW.xz * 9.0 + vW.y * 7.0));\n"
-    "    if (uUltra > 0.5) n = normalize(n + (vec3(noise(vW.xy * 260.0), noise(vW.yz * 260.0), noise(vW.zx * 260.0)) - 0.5) * 0.09);\n"
+    "    if (uUltra > 0.5) n = normalize(n + (vec3(noise(vW.xy * 260.0), noise(vW.yz * 260.0), noise(vW.zx * 260.0)) - 0.5) * 0.03);\n"
     "    spec = 0.22; rough = 0.42; skin = 1.0;\n"
     "  } else if (m < 11.5) {\n"   /* stof: weefsel en draad */
     "    float wv = noise(vec2(dot(vW.xz, vec2(0.7, 0.7)), vW.y) * 140.0);\n"
