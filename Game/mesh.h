@@ -74,6 +74,7 @@ typedef struct {
 } SQ;
 SQ sq(V3 c, V3 h, float roundV, float roundH, Col col);   /* standaard 16x10 segmenten, geen taper */
 void mb_sq(MeshB *m, const SQ *s);
+extern float g_sqDetail;   /* v5.5: 1.0 normaal; >1 meer segmenten (hoge kwaliteit, bij het bouwen van de modellen) */
 
 /* Ronde buis van a naar b (straal ra -> rb): capsule met bolle uiteinden, of open buis. */
 void mb_capsule(MeshB *m, V3 a, V3 b, float ra, float rb, int seg, Col c);

@@ -1,4 +1,6 @@
 #include "mesh.h"
+
+float g_sqDetail = 1.0f;
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -198,6 +200,13 @@ static V3 sq_pt(const SQ *s, float u, float v) {
 }
 
 void mb_sq(MeshB *m, const SQ *s) {
+    /* v5.5: op hoge kwaliteit meer segmenten (gladder) */
+    if (g_sqDetail > 1.01f && s->su * s->sv < 2000) {
+        SQ t = *s;
+        t.su = (int)(s->su * g_sqDetail + 0.5f); t.sv = (int)(s->sv * g_sqDetail + 0.5f);
+        { float keep = g_sqDetail; g_sqDetail = 1.0f; mb_sq(m, &t); g_sqDetail = keep; }
+        return;
+    }
     int i, j, su = s->su < 4 ? 4 : s->su, sv = s->sv < 2 ? 2 : s->sv;
     float v0 = -PI_F * 0.5f, v1 = PI_F * 0.5f, lo = m->ao;
     V3 *P, *N;

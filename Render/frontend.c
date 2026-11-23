@@ -283,7 +283,13 @@ static void save_all(void) {
 void fe_init(int w, int h) {
     int i;
     memset(&F, 0, sizeof(F));
+    {   /* v5.5: modellen en stad met meer detail op hoge kwaliteit (geldt vanaf het opstarten) */
+        int q0 = plat_load_int("quality", 1);
+        g_sqDetail = q0 >= 2 ? 1.4f : 1.0f;
+        world_set_detail(q0);
+    }
     r_init(&F.R, w, h);
+    g_sqDetail = 1.0f;
     F.SW = w;
     F.quality = plat_load_int("quality", 1);
     F.tod = plat_load_int("tod", 0);

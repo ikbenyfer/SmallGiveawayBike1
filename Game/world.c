@@ -77,6 +77,24 @@ static void protrude_box(V3 A, V3 dir, V3 n, float t0, float t1, float y0, float
     mb_box(cur, mn, mx, c, 0);
 }
 
+/* v5.5 detailniveau van de stad (grafische kwaliteit bij het laden): 0 laag, 1 midden, 2 hoog */
+static int g_worldDetail = 1;
+void world_set_detail(int d) { g_worldDetail = d < 0 ? 0 : (d > 2 ? 2 : d); }
+
+/* raam met kozijn (midden+), vensterbank en middenstijl (hoog) */
+static void window_at(V3 A, V3 dir, V3 n, float tc, float hw, float y0, float y1, Col glass, Col wall) {
+    if (g_worldDetail >= 1) {
+        int light = wall.r + wall.g + wall.b < 420;
+        Col fr = light ? col(226, 224, 216) : col(70, 66, 62);
+        face_quad(A, dir, n, tc - hw - 0.09f, tc + hw + 0.09f, y0 - 0.09f, y1 + 0.09f, 0.03f, fr);
+    }
+    face_quad(A, dir, n, tc - hw, tc + hw, y0, y1, 0.045f, glass);
+    if (g_worldDetail >= 2) {
+        protrude_box(A, dir, n, tc - hw - 0.14f, tc + hw + 0.14f, y0 - 0.16f, y0 - 0.06f, 0.0f, 0.14f, col_mul(wall, 0.82f));
+        if (hw >= 0.55f) face_quad(A, dir, n, tc - 0.035f, tc + 0.035f, y0, y1, 0.05f, col(226, 224, 216));
+    }
+}
+
 static void tree(float x, float z, Rng *r) {
     float s = rng_range(r, 0.8f, 1.25f);
     Col trunk = col(105, 75, 50);
@@ -152,6 +170,23 @@ static void building(float x0, float z0, float x1, float z1, int floors, Col wal
         V3 A, dir, n; float L;
         int cnt, f, wdw;
         face_info(x0, z0, x1, z1, k, &A, &dir, &n, &L);
+        if (g_worldDetail >= 1) face_quad(A, dir, n, 0, L, CURB, CURB + 0.6f, 0.02f, col_mul(wall, 0.62f));   /* plint */
+        if (g_worldDetail >= 2) {
+            for (f = 1; f < floors && f < 10; f++)   /* lijst tussen de verdiepingen */
+                protrude_box(A, dir, n, 0, L, CURB + f * fh - 0.08f, CURB + f * fh + 0.08f, 0.0f, 0.1f, col_mul(wall, 0.85f));
+            if (floors >= 4 && k == (door + 2) % 4 && rng_f(r) < 0.45f && L > 7.0f) {   /* balkons aan de achterkant */
+                int bc = (int)((L - 2.0f) / 4.0f), q;
+                Col rail = col(60, 62, 66);
+                for (f = 1; f < floors && f < 12; f++)
+                    for (q = 0; q < bc; q++) {
+                        float tc = 1.0f + (q + 0.5f) * (L - 2.0f) / bc, yb = CURB + f * fh;
+                        protrude_box(A, dir, n, tc - 0.95f, tc + 0.95f, yb - 0.1f, yb + 0.05f, 0.0f, 1.1f, col(170, 170, 168));
+                        protrude_box(A, dir, n, tc - 0.95f, tc + 0.95f, yb + 0.05f, yb + 1.0f, 1.04f, 1.1f, col(96, 116, 134));
+                        protrude_box(A, dir, n, tc - 0.95f, tc - 0.9f, yb + 0.05f, yb + 1.0f, 0.0f, 1.1f, rail);
+                        protrude_box(A, dir, n, tc + 0.9f, tc + 0.95f, yb + 0.05f, yb + 1.0f, 0.0f, 1.1f, rail);
+                    }
+            }
+        }
         cnt = (int)((L - 1.0f) / 3.0f);
         if (cnt < 1) continue;
         {
@@ -166,12 +201,16 @@ static void building(float x0, float z0, float x1, float z1, int floors, Col wal
                     protrude_box(A, dir, n, 0.6f, L - 0.6f, CURB + 2.85f, CURB + 3.05f, 0.0f, 1.4f, aw);
                     protrude_box(A, dir, n, 1.5f, L - 1.5f, CURB + 3.2f, CURB + 4.0f, 0.0f, 0.25f, col_e(aw.r, aw.g, aw.b, 170));
                 } else {
+                    if (g_worldDetail >= 1) {
+                        face_quad(A, dir, n, L * 0.5f - 0.95f, L * 0.5f + 0.95f, CURB, CURB + 2.55f, 0.035f, col(226, 224, 216));
+                        protrude_box(A, dir, n, L * 0.5f - 1.1f, L * 0.5f + 1.1f, CURB, CURB + 0.16f, 0.0f, 0.5f, col(150, 148, 142));
+                    }
                     face_quad(A, dir, n, L * 0.5f - 0.8f, L * 0.5f + 0.8f, CURB, CURB + 2.4f, 0.05f, col(70, 50, 40));
                     protrude_box(A, dir, n, L * 0.5f - 1.2f, L * 0.5f + 1.2f, CURB + 2.6f, CURB + 2.75f, 0.0f, 0.9f, col_mul(wall, 0.6f));
                     for (wdw = 0; wdw < cnt; wdw++) {
                         float tc = (wdw + 0.5f) * sp;
                         if (fabsf(tc - L * 0.5f) < 1.8f) continue;
-                        face_quad(A, dir, n, tc - 0.65f, tc + 0.65f, CURB + 0.9f, CURB + 2.4f, 0.04f, col(45, 58, 78));
+                        window_at(A, dir, n, tc, 0.65f, CURB + 0.9f, CURB + 2.4f, col(45, 58, 78), wall);
                     }
                 }
             }
@@ -181,7 +220,7 @@ static void building(float x0, float z0, float x1, float z1, int floors, Col wal
                     float tc = (wdw + 0.5f) * sp;
                     int lit = rng_f(r) < 0.32f;
                     Col c = lit ? col_e(255, 214, 140, 255) : col(45 + rng_int(r, 10), 58, 78);
-                    face_quad(A, dir, n, tc - 0.65f, tc + 0.65f, y, y + 1.6f, 0.04f, c);
+                    window_at(A, dir, n, tc, 0.65f, y, y + 1.6f, c, wall);
                 }
             }
         }
@@ -201,17 +240,26 @@ static void house(float x0, float z0, float x1, float z1, int door, Rng *r) {
     mb_box2(cur, v3(x0, CURB, z0), v3(x1, h, z1), wall, wall, BOX_NOBOTTOM | BOX_NOTOP);
     cur->ao = 0;
     mb_roof(cur, x0 - 0.4f, z0 - 0.4f, x1 + 0.4f, z1 + 0.4f, h, 2.0f, 1, roof, wall);
+    if (g_worldDetail >= 2) {   /* dakgoten */
+        mb_box(cur, v3(x0 - 0.45f, h - 0.12f, z0 - 0.52f), v3(x1 + 0.45f, h + 0.02f, z0 - 0.36f), col(220, 220, 216), 0);
+        mb_box(cur, v3(x0 - 0.45f, h - 0.12f, z1 + 0.36f), v3(x1 + 0.45f, h + 0.02f, z1 + 0.52f), col(220, 220, 216), 0);
+    }
     mb_box(cur, v3(x1 - 2.0f, h + 0.5f, z0 + 1.2f), v3(x1 - 1.3f, h + 2.6f, z0 + 1.9f), col(130, 80, 70), BOX_NOBOTTOM);
     for (k = 0; k < 4; k++) {
         V3 A, dir, n; float L;
         face_info(x0, z0, x1, z1, k, &A, &dir, &n, &L);
+        if (g_worldDetail >= 1) face_quad(A, dir, n, 0, L, CURB, CURB + 0.45f, 0.02f, col_mul(wall, 0.7f));   /* plint */
         if (k == door) {
+            if (g_worldDetail >= 1) {
+                face_quad(A, dir, n, L * 0.5f - 0.68f, L * 0.5f + 0.68f, CURB, CURB + 2.33f, 0.03f, col(240, 240, 236));
+                protrude_box(A, dir, n, L * 0.5f - 0.8f, L * 0.5f + 0.8f, CURB, CURB + 0.14f, 0.0f, 0.55f, col(160, 156, 150));
+                protrude_box(A, dir, n, L * 0.5f - 0.9f, L * 0.5f + 0.9f, CURB + 2.5f, CURB + 2.6f, 0.0f, 0.7f, col_mul(roof, 1.0f));   /* luifel */
+            }
             face_quad(A, dir, n, L * 0.5f - 0.55f, L * 0.5f + 0.55f, CURB, CURB + 2.2f, 0.04f, col(110, 60, 40));
-            face_quad(A, dir, n, 0.8f, 2.4f, CURB + 0.9f, CURB + 2.2f, 0.04f, col_e(255, 214, 140, rng_f(r) < 0.5f ? 200 : 0));
-            face_quad(A, dir, n, L - 2.4f, L - 0.8f, CURB + 0.9f, CURB + 2.2f, 0.04f, col(50, 65, 85));
+            window_at(A, dir, n, 1.6f, 0.8f, CURB + 0.9f, CURB + 2.2f, col_e(255, 214, 140, rng_f(r) < 0.5f ? 200 : 0), wall);
+            window_at(A, dir, n, L - 1.6f, 0.8f, CURB + 0.9f, CURB + 2.2f, col(50, 65, 85), wall);
         } else {
-            face_quad(A, dir, n, L * 0.5f - 0.8f, L * 0.5f + 0.8f, CURB + 0.9f, CURB + 2.2f, 0.04f,
-                      rng_f(r) < 0.3f ? col_e(255, 214, 140, 220) : col(50, 65, 85));
+            window_at(A, dir, n, L * 0.5f, 0.8f, CURB + 0.9f, CURB + 2.2f, rng_f(r) < 0.3f ? col_e(255, 214, 140, 220) : col(50, 65, 85), wall);
         }
     }
     add_box(x0, z0, x1, z1, h + 2.0f, BOX_BUILDING);

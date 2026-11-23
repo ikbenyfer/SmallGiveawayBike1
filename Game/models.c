@@ -652,6 +652,22 @@ static void car_wheels(MeshB *m, float wx, float wzf, float wzr, float r, float 
     }
 }
 
+/* v5.5: deurnaden, handgrepen, sierlijst, ruitenwissers en antenne (op elke auto) */
+static void car_extras(MeshB *m, float hw, float y, float zDoor0, float zDoor1, float zWind, float yWind, Col trim) {
+    Col seam = col(18, 18, 20), chrome = col(200, 202, 208);
+    int k;
+    for (k = -1; k <= 1; k += 2) {
+        float x = (hw + 0.006f) * k;
+        mb_rtube(m, v3(x, y - 0.24f, zDoor0), v3(x, y + 0.27f, zDoor0 + 0.03f), 0.007f, 0.007f, 4, seam);
+        mb_rtube(m, v3(x, y - 0.24f, zDoor1), v3(x, y + 0.27f, zDoor1 + 0.03f), 0.007f, 0.007f, 4, seam);
+        blob(m, v3(x, y + 0.16f, zDoor0 - 0.24f), v3(0.012f, 0.018f, 0.07f), 0.5f, 0.5f, 6, 3, chrome);   /* handgrepen */
+        blob(m, v3(x, y + 0.16f, zDoor1 - 0.24f), v3(0.012f, 0.018f, 0.07f), 0.5f, 0.5f, 6, 3, chrome);
+        mb_rtube(m, v3(x, y - 0.06f, zDoor0 + 0.9f), v3(x, y - 0.06f, zDoor1 - 0.9f), 0.008f, 0.008f, 4, trim);   /* sierlijst */
+        mb_rtube(m, v3(0.08f * k, yWind, zWind), v3(0.5f * k, yWind + 0.02f, zWind - 0.04f), 0.008f, 0.008f, 4, seam);   /* ruitenwissers */
+    }
+    mb_rtube(m, v3(-hw * 0.55f, y + 0.82f, zDoor1 - 0.2f), v3(-hw * 0.6f, y + 1.1f, zDoor1 - 0.32f), 0.005f, 0.004f, 4, seam);   /* antenne */
+}
+
 void model_car(MeshB *m, int v) {
     Col body = car_color(v), glass = col(40, 58, 82), dark = col(22, 22, 25), chrome = col(192, 194, 200);
     SQ s;
@@ -676,6 +692,7 @@ void model_car(MeshB *m, int v) {
     blob(m, v3(0, 0.62f, -2.04f), v3(0.2f, 0.06f, 0.015f), 0.3f, 0.3f, 8, 3, col(220, 210, 120));  /* kenteken */
     car_lights(m, 0.86f, 0.74f, 1.99f, -2.0f, 0.2f, 0.065f);
     car_wheels(m, 0.84f, 1.3f, -1.3f, 0.34f, 0.34f, chrome);
+    car_extras(m, 0.9f, 0.66f, 0.72f, -0.2f, 0.78f, 0.98f, chrome);
     if (v == POLICE_VARIANT) {
         blob(m, v3(0, 0.72f, 0), v3(0.935f, 0.09f, 1.72f), 0.3f, 0.15f, 24, 4, col(30, 50, 140));
         blob(m, v3(0, 1.5f, -0.2f), v3(0.58f, 0.05f, 0.14f), 0.4f, 0.4f, 14, 3, col(30, 30, 34));
@@ -741,6 +758,7 @@ void model_car_detail(MeshB *m, int model) {
         car_lights(m, 0.9f, 0.7f, 2.3f, -2.27f, 0.17f, 0.07f);
         for (k = -1; k <= 1; k += 2) mb_rtube(m, v3(0.35f * k, 0.3f, -2.2f), v3(0.35f * k, 0.3f, -2.42f), 0.05f, 0.05f, 10, chrome);   /* uitlaten */
         car_wheels(m, 0.9f, 1.45f, -1.45f, 0.35f, 0.38f, chrome);
+        car_extras(m, 0.93f, 0.62f, 0.6f, -0.45f, 0.72f, 0.95f, chrome);
         break;
     case 2:
         s = sq(v3(0, 0.88f, -0.3f), v3(0.8f, 0.22f, 0.86f), 0.3f, 0.3f, glass); s.tx = 0.82f; s.tz = 0.62f; s.shear = -0.12f; s.su = 20; s.sv = 6; mb_sq(m, &s);
@@ -748,6 +766,7 @@ void model_car_detail(MeshB *m, int model) {
         blob(m, v3(0, 0.33f, 2.2f), v3(0.85f, 0.04f, 0.08f), 0.4f, 0.3f, 14, 3, dark);
         car_lights(m, 0.88f, 0.55f, 2.17f, -2.1f, 0.18f, 0.05f);
         car_wheels(m, 0.9f, 1.4f, -1.35f, 0.34f, 0.35f, chrome);
+        car_extras(m, 0.9f, 0.5f, 0.45f, -0.55f, 0.55f, 0.72f, dark);
         break;
     case 3:
         s = sq(v3(0, 0.8f, 0.15f), v3(0.74f, 0.2f, 0.8f), 0.3f, 0.3f, glass); s.tx = 0.82f; s.tz = 0.6f; s.shear = -0.15f; s.su = 20; s.sv = 6; mb_sq(m, &s);
@@ -756,6 +775,7 @@ void model_car_detail(MeshB *m, int model) {
         blob(m, v3(0, 0.25f, 2.27f), v3(0.9f, 0.03f, 0.08f), 0.4f, 0.3f, 14, 3, dark);
         car_lights(m, 0.92f, 0.46f, 2.26f, -2.26f, 0.2f, 0.04f);
         car_wheels(m, 0.95f, 1.45f, -1.45f, 0.35f, 0.37f, chrome);
+        car_extras(m, 0.95f, 0.45f, 0.75f, -0.35f, 0.85f, 0.66f, dark);
         break;
     default:
         s = sq(v3(0, 1.17f, -0.18f), v3(0.82f, 0.27f, 0.98f), 0.3f, 0.26f, glass); s.tx = 0.86f; s.tz = 0.76f; s.su = 20; s.sv = 6; mb_sq(m, &s);

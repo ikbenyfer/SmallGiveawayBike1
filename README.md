@@ -14,6 +14,20 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v5.5.0: grote kwaliteitsupgrade + echte huizen in de NL-kaart
+
+**Echte NL-kaart:** de huizen komen nu echt overeen met de werkelijkheid. Alle data komt van 3D BAG (TU Delft).
+- **Hoge kwaliteit:** de echte dakvlakken uit 3D BAG LoD 2.2, met de echte helling en richting van elk dak. Je ziet schuine daken, dakkapellen, hoogteverschillen en rijtjeshuizen precies zoals ze zijn. Muren tussen huizen die tegen elkaar staan worden weggelaten.
+- **Lage en middelste kwaliteit** (zoals de iPad 2): echte plattegrond en hoogte, en bij schuine daken een schilddak tot de echte nokhoogte. Dat is lichter.
+- **Gevelkleur per bouwjaar:** donkere baksteen voor 1930, oranje baksteen tot 1960, gele steen en beton tot 1985, en lichter of modern daarna.
+- **Ramen en deuren:** ramen met witte kozijnen en voordeuren. Platte daken hebben een dakrand.
+- Online wordt altijd de nieuwe gebouwdata gebruikt. Het meegeleverde kaartpakket dient alleen als reserve als je offline bent.
+
+**Verzonnen stad en auto's:**
+- **Midden:** kozijnen om de ramen, een plint onderaan de gevels, en deuren met kozijn en stoep.
+- **Hoog:** daarbovenop vensterbanken, raamstijlen, lijsten tussen de verdiepingen, balkons, dakgoten, luifels boven voordeuren en gladdere modellen. Kies kwaliteit Hoog en start het spel opnieuw.
+- **Auto's:** deurnaden, handgrepen, sierlijsten, ruitenwissers en een antenne.
+
 ## v5.2.0: overval-fix (alle platforms)
 
 - De kassa van de GIVEAWAY MART kun je alleen nog overvallen met een **wapen in je hand**.

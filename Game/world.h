@@ -92,4 +92,6 @@ int world_on_road(const World *w, float x, float z);
 static inline float block_x0(int i) { return i * PITCH + ROADW; }
 static inline float road_c(int k) { return k * PITCH + ROADW * 0.5f; }
 
+void world_set_detail(int d);   /* v5.5: 0 laag, 1 midden, 2 hoog (voor world_init/het bouwen van de stad) */
+
 #endif

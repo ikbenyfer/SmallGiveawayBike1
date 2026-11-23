@@ -69,7 +69,7 @@ double plat_time(void) {
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-int plat_load_int(const char *key, int def) { (void)key; return def; }
+int plat_load_int(const char *key, int def) { const char *q = getenv("SGB_QUALITY"); if (q && strcmp(key, "quality") == 0) return atoi(q); return def; }
 void plat_save_int(const char *key, int val) { (void)key; (void)val; }
 void plat_save_flush(void) {}
 const char *plat_key_name(int code) { (void)code; return ""; }
