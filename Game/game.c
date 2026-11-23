@@ -2063,7 +2063,7 @@ int game_custom_price(const Game *g, int item) {
     if (g->p.veh < 0) return -1;
     v = &g->veh[g->p.veh];
     if (v->police) return -1;
-    if (v->type != VEH_CAR && !(item == 5 && v->custom)) return -1;   /* motoren: alleen vleugels + jet */
+    if (v->type != VEH_CAR && !(v->custom && IS_MOTO(v->model) && (item == 1 || item == 2 || item == 3 || item == 5))) return -1;   /* v6.2.1 motoren: motor, handling, neon, vleugels + jet */
     switch (item) {
     case 0: return 200;
     case 1: return v->eng < 3 ? ENGINE_PRICE[v->eng] : -1;
@@ -2108,7 +2108,7 @@ static void update_shops(Game *g) {
     g->inDealer = in2;
     /* BLOCK CUSTOMS: met een auto langzaam naar binnen rijden */
     dx = g->p.x - g->w->poi[POI_CUSTOMS].x; dz = g->p.z - g->w->poi[POI_CUSTOMS].z;
-    in2 = g->p.veh >= 0 && g->veh[g->p.veh].type == VEH_CAR && dx * dx + dz * dz < 3.5f * 3.5f;
+    in2 = g->p.veh >= 0 && (g->veh[g->p.veh].type == VEH_CAR || (g->veh[g->p.veh].custom && IS_MOTO(g->veh[g->p.veh].model))) && dx * dx + dz * dz < 3.5f * 3.5f;   /* v6.2.1: ook motoren */
     if (in2 && !g->inCustoms) {
         if (fabsf(g->veh[g->p.veh].speed) < 5.0f && !g->veh[g->p.veh].police) { g->customsOpen = 1; g->veh[g->p.veh].speed = 0; }
         else if (g->msgT <= 0) game_message(g, "Slow down to enter BLOCK CUSTOMS", 1.5f);
@@ -2116,7 +2116,7 @@ static void update_shops(Game *g) {
     g->inCustoms = in2;
     if (g->p.veh < 0) {
         dx = g->p.x - g->w->poi[POI_CUSTOMS].x; dz = g->p.z - g->w->poi[POI_CUSTOMS].z;
-        if (dx * dx + dz * dz < 3.0f * 3.0f && g->msgT <= 0) game_message(g, "BLOCK CUSTOMS: drive in with a car", 1.5f);
+        if (dx * dx + dz * dz < 3.0f * 3.0f && g->msgT <= 0) game_message(g, "BLOCK CUSTOMS: drive in with a car or motorbike", 1.5f);
     }
 }
 

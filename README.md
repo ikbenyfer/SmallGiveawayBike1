@@ -14,6 +14,10 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v6.2.1 (alle platforms, ook de iPad): motoren in BLOCK CUSTOMS
+
+- **Bugfix:** met een gekochte motor kon je BLOCK CUSTOMS niet in, want het menu ging alleen open voor auto's. Nu werkt het ook met motoren. Voor een motor zijn ENGINE, HANDLING, NEON en WINGS + JET beschikbaar. Lak en spoiler zijn alleen voor auto's.
+
 ## v6.2.0 (niet voor de iPad): ULTRA+ – EXTREME PHOTOREALISM
 
 Nieuwe kwaliteitsstand **ULTRA+** in SETTINGS, boven ULTRA. Kies hem en start de game opnieuw: de extra geometrie wordt bij het laden gebouwd. De iPad krijgt dit niet, want de iPad 2 kan het niet aan.
