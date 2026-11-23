@@ -3,6 +3,7 @@
 #include "../Game/biz.h"
 #include "../Game/stores.h"
 #include "../Game/voice.h"
+#include "../Game/human.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -132,6 +133,18 @@ static const char *FS_HQ_BODY =
     "float noise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);\n"
     "  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }\n"
     "float fbm(vec2 p) { return noise(p) * 0.5 + noise(p * 2.03) * 0.25 + noise(p * 4.01) * 0.125 + noise(p * 8.07) * 0.0625; }\n"
+    "vec3 bumpN(vec3 n, vec3 p, float s, float a) {\n"
+    "  vec3 an = abs(n), t, b; vec2 uv;\n"
+    "  if (an.y > 0.6) { uv = p.xz; t = vec3(1.0, 0.0, 0.0); b = vec3(0.0, 0.0, 1.0); }\n"
+    "  else if (an.x > an.z) { uv = p.zy; t = vec3(0.0, 0.0, 1.0); b = vec3(0.0, 1.0, 0.0); }\n"
+    "  else { uv = p.xy; t = vec3(1.0, 0.0, 0.0); b = vec3(0.0, 1.0, 0.0); }\n"
+    "  float e = 0.35 / s;\n"
+    "  float h0 = fbm(uv * s), hx = fbm((uv + vec2(e, 0.0)) * s), hy = fbm((uv + vec2(0.0, e)) * s);\n"
+    "  return normalize(n - (t * (hx - h0) + b * (hy - h0)) * (a / e));\n"
+    "}\n"
+    "float brickMortar(vec2 bp) { bp.x += mod(floor(bp.y), 2.0) * 0.5; vec2 f = fract(bp);\n"
+    "  return max(1.0 - smoothstep(0.0, 0.07, f.x), 1.0 - smoothstep(0.0, 0.13, f.y)); }\n"
+    "float tileJoint(vec2 tp) { vec2 tf = fract(tp); return max(1.0 - smoothstep(0.0, 0.05, tf.x), 1.0 - smoothstep(0.0, 0.05, tf.y)); }\n"
     "float unpackD(vec4 c) { return dot(c, vec4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 1.0 / 16581375.0)); }\n"
     "float shadowAt(vec2 uv, float z) { return unpackD(texture2D(uShadow, uv)) < z ? 0.0 : 1.0; }\n"
     "float shadowF(float ndl) {\n"
@@ -180,6 +193,7 @@ static const char *FS_HQ_BODY =
     "  vec3 v = normalize(uCam - vW);\n"
     "  vec3 c = vCol;\n"
     "  float m = vMat, spec = 0.08, refl = 0.0, rough = 0.7, wetOk = 0.0, skin = 0.0, cloth = 0.0, paint = 0.0;\n"
+    "  float bf = uUltra > 0.5 ? 1.0 - smoothstep(20.0, 55.0, length(uCam - vW)) : 0.0;\n"
     "  if (m < 0.5) {\n"
     "    c *= 0.94 + 0.12 * noise(vW.xz * 2.0 + vW.y * 1.7); wetOk = n.y > 0.7 ? 1.0 : 0.0;\n"
     "  } else if (m < 1.5) {\n"   /* asfalt: korrel, scheuren, reparatievlakken */
@@ -191,6 +205,7 @@ static const char *FS_HQ_BODY =
     "    c = mix(c, c * 0.45, crack);\n"
     "    c *= 0.92 + 0.16 * hash(floor(vW.xz * 18.0));\n"
     "    spec = 0.12; rough = 0.85; wetOk = 1.0;\n"
+    "    if (bf > 0.0) n = bumpN(n, vW, 9.0, 0.006 * bf);\n"
     "  } else if (m < 2.5) {\n"   /* baksteen: stenen in halfsteens verband, voegen */
     "    vec2 bp = vec2(dot(vW.xz, vec2(-n.z, n.x)) * 4.4, vW.y * 13.0);\n"
     "    bp.x += mod(floor(bp.y), 2.0) * 0.5;\n"
@@ -200,6 +215,14 @@ static const char *FS_HQ_BODY =
     "    c *= 0.82 + 0.3 * hash(floor(bp)) + 0.1 * noise(vW.xz * 3.0 + vW.y);\n"
     "    c = mix(c, vec3(0.72, 0.70, 0.66) * (0.6 + 0.4 * length(vCol)), mortar * 0.75);\n"
     "    spec = 0.04; rough = 0.9;\n"
+    "    if (bf > 0.0 && abs(n.y) < 0.7) {\n"
+    "      vec3 tw = normalize(vec3(-n.z, 0.0, n.x));\n"
+    "      vec2 b0 = vec2(dot(vW.xz, vec2(-n.z, n.x)) * 4.4, vW.y * 13.0);\n"
+    "      float m0 = brickMortar(b0), m1 = brickMortar(b0 + vec2(0.05, 0.0)), m2 = brickMortar(b0 + vec2(0.0, 0.05));\n"
+    "      float gx = -(m1 - m0) * 0.008 / (0.05 / 4.4), gy = -(m2 - m0) * 0.008 / (0.05 / 13.0);\n"
+    "      n = normalize(n - (tw * gx + vec3(0.0, gy, 0.0)) * bf * 0.5);\n"
+    "      n = bumpN(n, vW, 14.0, 0.0025 * bf);\n"
+    "    }\n"
     "  } else if (m < 3.5) {\n"   /* glas */
     "    spec = 1.0; refl = 0.55; rough = 0.05;\n"
     "  } else if (m < 4.5) {\n"   /* autolak met blanke laklaag */
@@ -209,6 +232,7 @@ static const char *FS_HQ_BODY =
     "  } else if (m < 6.5) {\n"   /* gras */
     "    c *= 0.72 + 0.5 * fbm(vW.xz * 1.6) + 0.12 * hash(floor(vW.xz * 9.0));\n"
     "    spec = 0.02; rough = 1.0;\n"
+    "    if (bf > 0.0) n = bumpN(n, vW, 7.0, 0.02 * bf);\n"
     "  } else if (m < 7.5) {\n"   /* beton/stoeptegels: tegelvoegen */
     "    vec2 tp = vW.xz / 0.6; vec2 tf = fract(tp);\n"
     "    float joint = max(1.0 - smoothstep(0.0, 0.05, tf.x), 1.0 - smoothstep(0.0, 0.05, tf.y));\n"
@@ -216,10 +240,17 @@ static const char *FS_HQ_BODY =
     "    c *= (0.86 + 0.2 * hash(floor(tp))) * (0.92 + 0.12 * noise(vW.xz * 4.0));\n"
     "    c = mix(c, c * 0.62, joint);\n"
     "    spec = 0.06; rough = 0.8; wetOk = 1.0;\n"
+    "    if (bf > 0.0 && n.y > 0.7) {\n"
+    "      vec2 t0 = vW.xz / 0.6;\n"
+    "      float j0 = tileJoint(t0), j1 = tileJoint(t0 + vec2(0.04, 0.0)), j2 = tileJoint(t0 + vec2(0.0, 0.04));\n"
+    "      n = normalize(n + vec3((j1 - j0), 0.0, (j2 - j0)) * (0.006 / (0.04 * 0.6)) * bf);\n"
+    "      n = bumpN(n, vW, 11.0, 0.003 * bf);\n"
+    "    }\n"
     "  } else if (m < 8.5) {\n"   /* dakpannen: rijen */
     "    float row = fract(vW.y * 4.5 + dot(vW.xz, vec2(0.13, 0.07)));\n"
     "    c *= 0.78 + 0.25 * smoothstep(0.0, 0.8, row) + 0.08 * hash(floor(vW.xz * 4.0 + vW.y * 4.5));\n"
     "    spec = 0.12; rough = 0.6;\n"
+    "    if (bf > 0.0) n = bumpN(n, vW, 10.0, 0.004 * bf);\n"
     "  } else if (m < 9.5) {\n"   /* water: golfjes */
     "    vec2 q = vW.xz * 0.6 + vec2(uTime * 0.25, uTime * 0.18);\n"
     "    n = normalize(n + vec3(noise(q) - 0.5, 0.0, noise(q + 7.3) - 0.5) * 0.35);\n"
@@ -359,7 +390,7 @@ static GLuint compile(GLenum type, const char *src) {
     GLint ok = 0;
 #ifdef SGB_DESKTOP_GL
     /* desktop-OpenGL 2.1: GLSL 1.20 kent geen precision-regel */
-    static char buf[16384];
+    static char buf[65536];
     if (strncmp(src, "precision", 9) == 0) { const char *nl = strchr(src, '\n'); if (nl) src = nl + 1; }
     snprintf(buf, sizeof(buf), "#version 120\n%s", src);
     src = buf;
@@ -608,17 +639,26 @@ void r_tex_upload(Tex *t, int w, int h, const uint8_t *rgba) { tex_from_rgba(t, 
 
 void r_build_models(Renderer *r) {
     MeshB m;
-    int i;
+    int i, hd = SGB_PRO_OK && g_sqDetail > 2.0f;   /* v7.0.0: ULTRA+ op de pc = PRO-mensen */
+    double t0 = plat_time();
     mb_init(&m);
 #define BUILD(dst, call) do { mb_reset(&m); g_meshMat = 0; call; g_meshMat = 0; upload(&(dst), &m); } while (0)
     for (i = 0; i < CHAR_VARIANTS; i++) {
         model_char_colors(i, &g_amSkin, &g_amHair);
         g_autoMat = 1;   /* v6.2.0: huid, haar, stof en ogen krijgen hun eigen materiaal */
-        BUILD(r->body[i], model_char_body(&m, i));
-        BUILD(r->thigh[i], model_char_thigh(&m, i));
-        BUILD(r->shin[i], model_char_shin(&m, i));
-        BUILD(r->uarm[i], model_char_uarm(&m, i));
-        BUILD(r->farm[i], model_char_farm(&m, i));
+        if (hd) {   /* v7.0.0 PRO-mensen (organisch, hoge detail) */
+            BUILD(r->body[i], human_body(&m, i));
+            BUILD(r->thigh[i], human_thigh(&m, i));
+            BUILD(r->shin[i], human_shin(&m, i));
+            BUILD(r->uarm[i], human_uarm(&m, i));
+            BUILD(r->farm[i], human_farm(&m, i));
+        } else {
+            BUILD(r->body[i], model_char_body(&m, i));
+            BUILD(r->thigh[i], model_char_thigh(&m, i));
+            BUILD(r->shin[i], model_char_shin(&m, i));
+            BUILD(r->uarm[i], model_char_uarm(&m, i));
+            BUILD(r->farm[i], model_char_farm(&m, i));
+        }
         BUILD(r->bodyLo[i], model_char_body_lo(&m, i));
         BUILD(r->leg[i], model_char_leg(&m, i));
         BUILD(r->arm[i], model_char_arm(&m, i));
@@ -650,6 +690,7 @@ void r_build_models(Renderer *r) {
         for (k = 0; k < CHAR_VARIANTS; k++) tv += r->body[k].count + r->thigh[k].count + r->shin[k].count + r->uarm[k].count + r->farm[k].count;
         for (k = 0; k < CAR_VARIANTS; k++) tv += r->car[k].count;
         for (k = 0; k < CAR_MODELS; k++) tv += r->carBody[k].count + r->carDetail[k].count;
+        plat_log("SGB modellen: PRO-mensen %s, bouwtijd %.2f s", hd ? "AAN" : "uit", plat_time() - t0);
         plat_log("SGB modellen v3: personage %d + %d + %d + %d + %d hoekpunten, auto %d, sportauto %d, motor %d, fiets %d (totaal hoog %d)",
                  r->body[0].count, r->thigh[0].count, r->shin[0].count, r->uarm[0].count, r->farm[0].count,
                  r->car[0].count, r->carBody[3].count + r->carDetail[3].count, r->moto[1].count, r->bike[0].count, tv);
@@ -765,6 +806,10 @@ void r_set_quality(Renderer *r, int q) {
         (void)q;
     }
     r->ultra = r->hq && q >= 4;   /* v6.2.0 ULTRA+ */
+    r->pro = SGB_PRO_OK && r->ultra;   /* v7.0.0: PRO-nabewerking op de pc */
+#ifdef SGB_HAVE_FBO
+    if (!SGB_HAVE_FBO()) r->pro = 0;
+#endif
     r->shadowsOn = r->hq;
 #ifdef SGB_HAVE_FBO
     if (!SGB_HAVE_FBO()) { r->shadowsOn = 0; return; }
@@ -1131,6 +1176,8 @@ static void shadow_pass(Renderer *r, Game *g) {
     glViewport(vp[0], vp[1], vp[2], vp[3]);
 }
 
+#include "pro_post.h"
+
 /* v6.0: luchtkoepel met verloop, zon en bewegende wolken (ook goed in VR) */
 static void draw_sky(Renderer *r, Game *g) {
     float rad = g->drawDist * 0.85f;
@@ -1172,6 +1219,7 @@ void r_draw_scene(Renderer *r, Game *g) {
         if (r->vr.bind_ui) r->vr.bind_ui(r->vr.u);
         return;
     }
+    if (r->pro && pro_draw(r, g)) return;   /* v7.0.0 PRO-engine */
     draw_scene_one(r, g);
 }
 
@@ -1250,7 +1298,7 @@ static void draw_scene_one(Renderer *r, Game *g) {
     glDisable(GL_BLEND);
 
     {   /* v6.0: programma kiezen: gewoon, HQ of schaduw-pass */
-        int pi = r->pass == 1 ? 2 : (r->hq ? 1 : 0);
+        int pi = r->pass ? 2 : (r->hq ? 1 : 0);   /* pass 1 schaduw, pass 2 diepte (PRO) */
         GLint *L = r->loc[pi];
         r->progW = r->prog[pi] ? r->prog[pi] : r->prog[0];
         r->wVP = L[0]; r->wModel = L[1]; r->wSun = L[2]; r->wSunCol = L[3]; r->wAmb = L[4]; r->wCam = L[5];
@@ -1484,7 +1532,7 @@ static void draw_scene_one(Renderer *r, Game *g) {
             shadows[nsh] = v3(g->p.x, ground, g->p.z); shs[nsh][0] = s; shs[nsh][1] = s; shs[nsh][2] = 0; nsh++;
         }
     }
-    if (r->pass == 1) {   /* schaduw-pass: alleen gebouwen, voertuigen en mensen */
+    if (r->pass) {   /* schaduw-/dieptepass: alleen gebouwen, voertuigen en mensen */
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glEnable(GL_CULL_FACE);
         return;

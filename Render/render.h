@@ -38,6 +38,9 @@ typedef struct {
     int pass;          /* 1 = schaduw-pass */
     int hq;            /* kwaliteit Hoog: HQ-shader */
     int ultra;         /* v6.2.0: ULTRA+ (niet op de iPad) */
+    /* v7.0.0 PRO-engine (pc, ULTRA+): nabewerking (pro_post.h) */
+    int pro, proOk, proFailed, proW, proH;
+    GLuint pFbo[6], pTex[6], pRb[6], pProg[5], pQuad;
     int shadowsOn;     /* schaduwen (kan automatisch uit bij lage fps) */
     float rain;        /* 0..1 regen (nat asfalt, druppels) */
     float hours;       /* tijd van de dag (alleen informatief) */

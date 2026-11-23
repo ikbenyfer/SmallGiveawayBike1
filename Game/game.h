@@ -101,6 +101,7 @@ typedef struct {
 
     float camYaw, camPitch, camDist, camIdle;
     V3 camPos, camTarget;
+    int camLock; V3 camLockPos, camLockTgt;   /* v7.0.0: vaste camera (screenshots) */
     float camSens; int invertY;
 
     MissionDef mdef[NMISSIONS];

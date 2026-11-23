@@ -264,11 +264,20 @@ int main(void) {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { printf("FBO niet compleet\n"); return 2; }
 
+    int proshots = getenv("SGB_PROSHOTS") != NULL;
+    if (proshots) autotest_on = 0;
     fe_init(1024, 768);
     for (frame = 0; frame < 30 * 500; frame++) {
         t += 1.0 / 30.0;
         if (wide) fe_resize_viewport(W, H);
         fe_frame(t);
+        if (proshots) {   /* v7.0.0: alleen de PRO-screenshots */
+            int done = 0;
+            const char *nm = fe_pro_shots(&done);
+            if (nm) plat_screenshot(nm, W, H);
+            if (done) { printf("PRO-screenshots klaar na %d frames\n", frame); return 0; }
+            continue;
+        }
         if (frame == 25) plat_screenshot("00a_logo_fadein", W, H);
         if (frame == 80) plat_screenshot("00b_loading", W, H);
         if (!autotest_on) {

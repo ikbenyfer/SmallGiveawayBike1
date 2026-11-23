@@ -22,6 +22,7 @@ int fe_text_wanted(void);
 void fe_text_char(int c);
 void fe_key_command(int cmd);
 void fe_resize_viewport(int w, int h);
+const char *fe_pro_shots(int *done);   /* v7.0.0: screenshotreeks van de PRO-engine (Linux-test) */
 void fe_set_viewport_origin(int x, int y);
 int fe_ui_width(void);   /* breedte van het UI-coordinatenstelsel (hoogte is altijd 768): 1024 bij 4:3, 1365 bij 16:9 */
 void fe_set_mptest(int mode);   /* 1 = host, 2 = meedoen (test met twee vensters) */

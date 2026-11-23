@@ -1658,6 +1658,7 @@ static void update_camera(Game *g, const Input *in, float dt) {
         g->camPos = want;
         g->camTarget = target;
     }
+    if (g->camLock) { g->camPos = g->camLockPos; g->camTarget = g->camLockTgt; }
 }
 
 /* ------------------------------------------------------------------ wapens, schieten, agenten te voet */

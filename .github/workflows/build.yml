@@ -27,6 +27,33 @@ jobs:
             Game/*.c Render/*.c Tests/preview_linux.c -o preview -lEGL -lGLESv2 -lz -pthread -lm 2>&1 | tee compile.log
           test -x preview
 
+      - name: PRO-engine screenshots (ULTRA+, v7)
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          SGB_WIDE: '1'
+          SGB_QUALITY: '4'
+          SGB_PROSHOTS: '1'
+          SGB_OUT: preview_out/pro
+        run: |
+          mkdir -p preview_out/pro
+          LIBGL_ALWAYS_SOFTWARE=1 timeout 1500 xvfb-run -a -s '-screen 0 1366x768x24' ./preview > preview_out/pro/run.log 2>&1 || echo "PRO-run stopte met fout $?"
+          grep -E "SGB-PRO|PRO-mensen|shader|link-fout|PRO-screenshots|runtime error|ERROR" preview_out/pro/run.log | head -40 || true
+          python3 - <<'PY'
+          import glob, os
+          from PIL import Image
+          for p in glob.glob("preview_out/pro/*.ppm"):
+              Image.open(p).save(p[:-4] + ".png")
+              os.remove(p)
+          PY
+          ls -l preview_out/pro
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview-pro
+          path: preview_out/pro
+
       - name: Hele game + automatische test draaien
         shell: bash
         env:

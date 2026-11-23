@@ -3885,6 +3885,88 @@ static void autotest_tick(float dt) {
 
 /* ------------------------------------------------------------------ hoofdlus */
 
+/* v7.0.0: vaste opnames van de PRO-engine (gezicht, lichaam, auto, straat, zonsondergang, nacht, ULTRA vs ULTRA+) */
+const char *fe_pro_shots(int *done) {
+    static int k = -1;
+    static char name[64];
+    Game *g = &F.G;
+    *done = 0;
+    if (!F.loadDone) return NULL;
+    if (k < 0) {
+        start_game();
+        r_set_time(&F.R, 13.5f, 0);
+        k = 0;
+        return NULL;
+    }
+    k++;
+    {
+        float h = g->p.h;
+        V3 fw = v3(sinf(h), 0, cosf(h)), rt = v3(cosf(h), 0, -sinf(h));
+        V3 head = v3(g->p.x, g->p.y + 1.72f, g->p.z);
+        name[0] = 0;
+        g->camLock = 1;
+        if (k < 12) {   /* gezicht van dichtbij */
+            g->camLockPos = v3add(head, v3add(v3scale(fw, 0.62f), v3(0, 0.03f, 0)));
+            g->camLockTgt = v3add(head, v3(0, 0.02f, 0));
+            if (k == 10) snprintf(name, sizeof(name), "pro_01_face");
+        } else if (k < 24) {   /* gezicht schuin */
+            g->camLockPos = v3add(head, v3add(v3scale(fw, 0.5f), v3add(v3scale(rt, 0.38f), v3(0, 0.06f, 0))));
+            g->camLockTgt = v3add(head, v3(0, 0.0f, 0));
+            if (k == 22) snprintf(name, sizeof(name), "pro_02_face_side");
+        } else if (k < 36) {   /* hele persoon */
+            g->camLockPos = v3add(v3(g->p.x, g->p.y + 1.3f, g->p.z), v3add(v3scale(fw, 2.6f), v3scale(rt, 0.9f)));
+            g->camLockTgt = v3(g->p.x, g->p.y + 0.95f, g->p.z);
+            if (k == 34) snprintf(name, sizeof(name), "pro_03_body");
+        } else if (k < 48) {   /* hand */
+            V3 hand = v3add(v3(g->p.x, g->p.y + 0.82f, g->p.z), v3scale(rt, 0.36f));
+            g->camLockPos = v3add(hand, v3add(v3scale(fw, 0.42f), v3scale(rt, 0.2f)));
+            g->camLockTgt = hand;
+            if (k == 46) snprintf(name, sizeof(name), "pro_04_hand");
+        } else if (k < 60) {   /* een geparkeerde auto */
+            int i, best = -1;
+            for (i = 0; i < g->firstTraffic; i++) if (g->veh[i].active && g->veh[i].type == VEH_CAR) { best = i; break; }
+            if (best >= 0) {
+                Vehicle *v = &g->veh[best];
+                V3 vf = v3(sinf(v->h), 0, cosf(v->h)), vr = v3(cosf(v->h), 0, -sinf(v->h));
+                g->camLockPos = v3add(v3(v->x, v->y + 1.4f, v->z), v3add(v3scale(vf, 4.2f), v3scale(vr, 3.0f)));
+                g->camLockTgt = v3(v->x, v->y + 0.7f, v->z);
+            }
+            if (k == 58) snprintf(name, sizeof(name), "pro_05_car");
+        } else if (k < 72) {   /* straat */
+            g->camLockPos = v3add(v3(g->p.x, g->p.y + 4.0f, g->p.z), v3scale(fw, -9.0f));
+            g->camLockTgt = v3add(v3(g->p.x, g->p.y + 1.5f, g->p.z), v3scale(fw, 12.0f));
+            if (k == 70) snprintf(name, sizeof(name), "pro_06_street");
+        } else if (k < 84) {   /* zonsondergang, naar de zon kijken */
+            V3 sd;
+            if (k == 61) r_set_time(&F.R, 18.4f, 0);
+            sd = v3norm(v3(F.R.sun[0], 0, F.R.sun[2]));
+            g->camLockPos = v3(g->p.x, g->p.y + 3.0f, g->p.z);
+            g->camLockTgt = v3add(g->camLockPos, v3add(v3scale(sd, 20.0f), v3(0, 2.5f, 0)));
+            if (k == 82) snprintf(name, sizeof(name), "pro_07_sunset");
+        } else if (k < 96) {   /* nacht */
+            if (k == 73) r_set_time(&F.R, 22.5f, 0);
+            g->camLockPos = v3add(v3(g->p.x, g->p.y + 4.0f, g->p.z), v3scale(fw, -9.0f));
+            g->camLockTgt = v3add(v3(g->p.x, g->p.y + 1.5f, g->p.z), v3scale(fw, 12.0f));
+            if (k == 94) snprintf(name, sizeof(name), "pro_08_night");
+        } else if (k < 108) {   /* vergelijking: zelfde straat in ULTRA (zonder PRO-nabewerking) */
+            if (k == 85) { F.quality = 3; apply_settings(); r_set_time(&F.R, 13.5f, 0); }
+            g->camLockPos = v3add(v3(g->p.x, g->p.y + 4.0f, g->p.z), v3scale(fw, -9.0f));
+            g->camLockTgt = v3add(v3(g->p.x, g->p.y + 1.5f, g->p.z), v3scale(fw, 12.0f));
+            if (k == 106) snprintf(name, sizeof(name), "cmp_ultra_street");
+        } else if (k < 120) {
+            if (k == 97) { F.quality = 3; apply_settings(); r_set_time(&F.R, 13.5f, 0); }
+            g->camLockPos = v3add(head, v3add(v3scale(fw, 0.62f), v3(0, 0.03f, 0)));
+            g->camLockTgt = v3add(head, v3(0, 0.02f, 0));
+            if (k == 118) snprintf(name, sizeof(name), "cmp_ultra_face");
+        } else {
+            g->camLock = 0;
+            F.quality = 4; apply_settings();
+            *done = 1;
+        }
+    }
+    return name[0] ? name : NULL;
+}
+
 void fe_frame(double now) {
     float dt;
     Renderer *R = &F.R;

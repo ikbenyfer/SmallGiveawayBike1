@@ -43,7 +43,7 @@
     X(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer)
 
 /* v6.0: framebuffers (schaduwkaart) - optioneel: zonder deze functies gewoon geen schaduwen */
-#define SGB_GL_OPT(X)     X(PFNGLGENFRAMEBUFFERSPROC, glGenFramebuffers)     X(PFNGLBINDFRAMEBUFFERPROC, glBindFramebuffer)     X(PFNGLFRAMEBUFFERTEXTURE2DPROC, glFramebufferTexture2D)     X(PFNGLFRAMEBUFFERRENDERBUFFERPROC, glFramebufferRenderbuffer)     X(PFNGLCHECKFRAMEBUFFERSTATUSPROC, glCheckFramebufferStatus)     X(PFNGLGENRENDERBUFFERSPROC, glGenRenderbuffers)     X(PFNGLBINDRENDERBUFFERPROC, glBindRenderbuffer)     X(PFNGLRENDERBUFFERSTORAGEPROC, glRenderbufferStorage)
+#define SGB_GL_OPT(X)     X(PFNGLGENFRAMEBUFFERSPROC, glGenFramebuffers)     X(PFNGLBINDFRAMEBUFFERPROC, glBindFramebuffer)     X(PFNGLFRAMEBUFFERTEXTURE2DPROC, glFramebufferTexture2D)     X(PFNGLFRAMEBUFFERRENDERBUFFERPROC, glFramebufferRenderbuffer)     X(PFNGLCHECKFRAMEBUFFERSTATUSPROC, glCheckFramebufferStatus)     X(PFNGLGENRENDERBUFFERSPROC, glGenRenderbuffers)     X(PFNGLBINDRENDERBUFFERPROC, glBindRenderbuffer)     X(PFNGLRENDERBUFFERSTORAGEPROC, glRenderbufferStorage)     X(PFNGLDELETEFRAMEBUFFERSPROC, glDeleteFramebuffers)     X(PFNGLDELETERENDERBUFFERSPROC, glDeleteRenderbuffers)
 
 #define SGB_GL_DECL(t, n) extern t sgb_##n;
 SGB_GL_EXT(SGB_GL_DECL)
@@ -57,7 +57,9 @@ SGB_GL_OPT(SGB_GL_DECL)
 #define glGenRenderbuffers sgb_glGenRenderbuffers
 #define glBindRenderbuffer sgb_glBindRenderbuffer
 #define glRenderbufferStorage sgb_glRenderbufferStorage
-#define SGB_HAVE_FBO() (sgb_glGenFramebuffers != 0 && sgb_glBindFramebuffer != 0 && sgb_glCheckFramebufferStatus != 0)
+#define glDeleteFramebuffers sgb_glDeleteFramebuffers
+#define glDeleteRenderbuffers sgb_glDeleteRenderbuffers
+#define SGB_HAVE_FBO() (sgb_glGenFramebuffers != 0 && sgb_glBindFramebuffer != 0 && sgb_glCheckFramebufferStatus != 0 && sgb_glDeleteFramebuffers != 0)
 
 #define glActiveTexture sgb_glActiveTexture
 #define glAttachShader sgb_glAttachShader

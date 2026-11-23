@@ -14,6 +14,39 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v7.0.0 (pc: Windows en Linux): de PRO-engine
+
+Kies **ULTRA+** in SETTINGS en start de game opnieuw. Op Windows en Linux draait de game dan op de nieuwe **PRO-engine**. Android, Quest en Switch houden de huidige engine (met ULTRA+). De iPad krijgt deze versie niet.
+
+**Nieuwe nabewerking van het beeld**, zoals in moderne games:
+- **SSAO** (screen-space ambient occlusion): echte schaduw in hoeken, onder auto's, tussen gebouwen en in plooien. Berekend uit een extra dieptepass vanuit de camera.
+- **Bloom:** zon, lampen, neon en glimmende lak gloeien over.
+- **Zonnestralen (godrays):** bij laaghangende zon vallen er stralen langs gebouwen en bomen.
+- **FXAA:** gladde randen.
+- **Afwerking:** vignet, kleurcorrectie en een fijne filmkorrel.
+
+**Nieuwe mensen (PRO-mensen):** elk personage wordt bij het laden opnieuw opgebouwd als organisch 3D-model. Het model komt uit signed distance fields, vloeiend samengevoegde vormen omgezet met *surface nets*, met tienduizenden driehoeken per persoon:
+- **Gezicht:** schedel, kaak, kin, jukbeenderen, wenkbrauwboog, neus met neusvleugels en neusgaten, boven- en onderlip met mondspleet, oogkassen, boven- en onderoogleden, oren met oorschelp.
+- **Ogen en gezichtsdetails:** echte oogbollen met iris (vier kleuren), pupil en glans, plus wenkbrauwen, wimpers en blosjes.
+- **Haar:** 8 kapsels (kort, lang tot de schouders, opgeschoren, krullen, paardenstaart, bob, kaal, pet) en baarden. Het haar heeft lokken en strengen in de shader.
+- **Lichaam:**
+  - Echte vormen voor mannen en vrouwen, slank tot stevig.
+  - Spieren (borst, schouders, rug, biceps, triceps, dijen, kuiten).
+  - Handen met vier vingers met kootjes, een duim en nagels.
+- **Kleding:**
+  - Plooien in shirt en broek, een kraag, een V-hals of lange mouwen, een riem met gesp en een gulp.
+  - Schoenen met zool en veters.
+  - Logo van de speler; agentenpenning en knopen.
+- **Belichting in de plooien:** zachte schaduw in de plooien, zoals in de oksel, onder de neus en in het oor (SDF-ambient occlusion per hoekpunt).
+
+**Reliëf (normal mapping):** asfalt, bakstenen (voegen liggen echt dieper), stoeptegels (voegen), dakpannen en gras hebben nu reliëf dat het licht vangt, zonder textures te downloaden.
+
+**Eerlijk:**
+- Alles wordt in code gemaakt. Er zijn geen gedownloade modellen of textures, dus ook geen licentieproblemen.
+- De mensen lijken veel meer op echte mensen dan eerst, maar het zijn geen 3D-scans. Ze bewegen ook nog met het bestaande skelet (stijve delen), niet met vervormende huid.
+- Auto's houden hun vorm uit v6.2.0 en krijgen het nieuwe licht, de reflecties, SSAO en bloom.
+- ULTRA+ op de PRO-engine vraagt een redelijke videokaart. Het laden duurt een paar seconden langer, omdat de mensen dan worden opgebouwd.
+
 ## v6.2.1 (alle platforms, ook de iPad): motoren in BLOCK CUSTOMS
 
 - **Bugfix:** met een gekochte motor kon je BLOCK CUSTOMS niet in, want het menu ging alleen open voor auto's. Nu werkt het ook met motoren. Voor een motor zijn ENGINE, HANDLING, NEON en WINGS + JET beschikbaar. Lak en spoiler zijn alleen voor auto's.
