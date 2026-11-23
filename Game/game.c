@@ -1,3 +1,4 @@
+#include <math.h>
 #include "game.h"
 #include "stores.h"
 #include "voice.h"
@@ -1144,9 +1145,12 @@ void game_store_enter(Game *g, int s) {
         vo_say(g, vo_pick(g, greet[s]), VP_MISSION);
     }
     if (s == STORE_MART) {
-        g->robArmed = 1;
         g->clerkScare = 0;
-        game_message(g, "GIVEAWAY MART - walk to the register to rob it ($10,000)", 3.0f);
+        if (g->robCool > 0) {
+            int t = (int)ceilf(g->robCool);
+            snprintf(b, sizeof(b), "GIVEAWAY MART - the register refills in %d:%02d", t / 60, t % 60);
+            game_message(g, b, 3.0f);
+        } else game_message(g, "GIVEAWAY MART - hold a gun at the register to rob it ($10,000)", 3.0f);
     } else {
         snprintf(b, sizeof(b), "%s - walk to the counter", store_name(s));
         game_message(g, b, 2.0f);
@@ -1161,12 +1165,26 @@ static void store_leave(Game *g, int s) {
     g->inShop = 0; g->inBiz = 0;
 }
 
-static void store_rob(Game *g) {
+/* announce = 1: net op de kassa gestapt (meldingen tonen); 0: je staat er al (alleen overvallen als het nu kan) */
+static void store_rob(Game *g, int announce) {
     float x, z, h;
-    if (!g->robArmed) { game_message(g, "The register is empty. Come back later!", 2.0f); vo_say(g, vo_pick(g, VB_ROB_EMPTY), VP_MISSION); return; }
+    char b[96];
+    if (g->robCool > 0) {
+        if (announce) {
+            int t = (int)ceilf(g->robCool);
+            snprintf(b, sizeof(b), "The register is empty - it refills in %d:%02d", t / 60, t % 60);
+            game_message(g, b, 2.5f);
+            vo_say(g, vo_pick(g, VB_ROB_EMPTY), VP_MISSION);
+        }
+        return;
+    }
+    if (g->weapon == WP_NONE || g->p.veh >= 0) {   /* v5.2: zonder wapen in je hand lacht de kassamedewerker je uit */
+        if (announce) game_message(g, "You need a gun in your hand to rob the store!", 2.5f);
+        return;
+    }
     vo_say(g, vo_pick(g, VB_ROB_YOU), VP_MISSION);
     vo_queue(g, vo_pick(g, VB_ROB_CLERK), VP_MISSION);
-    g->robArmed = 0;
+    g->robCool = MART_COOLDOWN;
     g->clerkScare = 6.0f;
     g->money += MART_LOOT;
     g->moneyFlash = 1.5f;
@@ -1204,11 +1222,12 @@ static void store_tick(Game *g, float dt) {
         float dx = g->p.x - pos[i].x, dz = g->p.z - pos[i].z;
         if (dx * dx + dz * dz < rad[i] * rad[i]) { cur = kind[i]; break; }
     }
+    if (cur == SM_ROB && g->storeMarker == SM_ROB) store_rob(g, 0);
     if (cur != g->storeMarker) {
         g->storeMarker = cur;
         if (cur == SM_NONE) return;
         if (cur == SM_EXIT) store_leave(g, s);
-        else if (cur == SM_ROB) store_rob(g);
+        else if (cur == SM_ROB) store_rob(g, 1);
         else if (cur == SM_COUNTER) {
             if (s == STORE_GUN) g->shopOpen = 1;
             else g->bizOpen = s - STORE_BURGER + BIZ_BURGER + 1;
@@ -2031,6 +2050,7 @@ void game_update(Game *g, const Input *in, float dt) {
     if (dt > 0.1f) dt = 0.1f;
     g->time += dt;
     vo_tick(g, dt);
+    if (g->robCool > 0) g->robCool -= dt;   /* loopt altijd door, ook buiten de winkel */
     if (g->cut) {   /* v4.5 cutscene: de wereld loopt door, de speler staat stil */
         cut_update(g, in, dt);
         memset(&still, 0, sizeof(still));

@@ -148,8 +148,9 @@ typedef struct {
     float boostT;
     int bizOpen, inBiz;   /* bizOpen = winkel + 1 (frontend opent het menu) */
     /* v4.0: binnen in winkels lopen; GIVEAWAY MART overvallen */
-    int storeMarker, robArmed, statRobs;
+    int storeMarker, statRobs;
     float storeCool, clerkScare;
+    float robCool;                /* v5.2: seconden tot de GIVEAWAY MART weer overvallen kan worden */
     /* v4.5: stemmen en cutscenes (zie voice.h) */
     int voReq;                    /* regel die de frontend moet afspelen: -1 niets, -2 stoppen */
     int voLine, voPrio; float voT;   /* huidige ondertitel en hoe lang nog */

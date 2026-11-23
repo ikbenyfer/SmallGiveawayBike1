@@ -1039,7 +1039,7 @@ static void draw_scene_one(Renderer *r, Game *g) {
                 for (q = 0; q < ns; q++) {
                     float cr, cg, cb;
                     if (sk[q] == SM_EXIT) { cr = 0.3f; cg = 1.0f; cb = 0.4f; }
-                    else if (sk[q] == SM_ROB) { cr = g->robArmed ? 1.0f : 0.4f; cg = g->robArmed ? 0.15f : 0.4f; cb = g->robArmed ? 0.1f : 0.4f; }
+                    else if (sk[q] == SM_ROB) { int ok = g->robCool <= 0; cr = ok ? 1.0f : 0.4f; cg = ok ? 0.15f : 0.4f; cb = ok ? 0.1f : 0.4f; }
                     else store_color(si - 1, &cr, &cg, &cb);
                     m = m4_mul(m4_trs_y(sp[q].x, 0.06f, sp[q].z, t), m4_scale(sr[q] * 0.9f, 1, sr[q] * 0.9f));
                     tint(r, cr * pulse, cg * pulse, cb * pulse);

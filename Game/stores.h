@@ -16,6 +16,7 @@ enum { STORE_GUN = 0, STORE_BURGER, STORE_GYM, STORE_DRIP, STORE_BLING, STORE_MA
 #define STORE_ZONE_Z (-300.0f)   /* z hieronder (en x > -300) = binnen in een winkel */
 #define STORE_H 3.4f
 #define MART_LOOT 10000
+#define MART_COOLDOWN 180.0f   /* v5.2: 3 minuten tot de kassa weer vol is (ook als je de winkel uit en in loopt) */
 
 enum { SM_NONE = 0, SM_EXIT, SM_COUNTER, SM_ROB };
 

@@ -14,6 +14,13 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v5.2.0: overval-fix (alle platforms)
+
+- De kassa van de GIVEAWAY MART kun je alleen nog overvallen met een **wapen in je hand**.
+- Na een overval moet de kassa **3 minuten** vollopen. In- en uitlopen zet de timer niet terug, en afsluiten en opnieuw starten ook niet.
+- Rechtsboven zie je de timer aftellen ("MART REFILL 2:35"). De marker bij de kassa is grijs zolang hij nog leeg is.
+- Nieuw in de release: de Nintendo Switch-versie (`SmallGiveawayBike1.nro`).
+
 ## v5.0.0: Meta Quest (VR)
 
 Er is nu een aparte VR-versie voor de Meta Quest 2, 3, 3S en Pro: `SmallGiveawayBike1-Quest.apk`. Die zet je er met sideloaden op (ontwikkelaarsmodus + SideQuest of `adb install`). De app heet "Giveaway Bike VR" en staat onder Onbekende bronnen.

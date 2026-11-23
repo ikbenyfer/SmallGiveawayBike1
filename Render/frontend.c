@@ -264,6 +264,7 @@ static void save_all(void) {
         ssave("outfits", F.G.outfits);
         ssave("outfit", F.G.outfit);
         ssave("decor", F.G.decor);
+        ssave("robcool", (int)ceilf(F.G.robCool));
         {
             int c;
             for (c = 0; c < MAX_OWNED; c++) {
@@ -356,6 +357,7 @@ static void load_slot(void) {
             F.G.outfits = sload("outfits", 0);
             F.G.outfit = sload("outfit", 0); if (F.G.outfit < 0 || F.G.outfit >= BIZ_OUTFITS) F.G.outfit = 0;
             F.G.decor = sload("decor", 0) & ((1 << BIZ_DECOR) - 1);
+            F.G.robCool = (float)sload("robcool", 0);
             F.G.stamina = game_stamina_max(&F.G);
         }
         {
@@ -1029,6 +1031,14 @@ static void draw_hud(void) {
     float x, y, r;
 
     if (g->cut) { draw_cutscene(); return; }
+    if (g->robCool > 0 && !g->nl) {   /* v5.2: wachttijd van de GIVEAWAY MART-kassa */
+        char rb[48];
+        int t = (int)ceilf(g->robCool);
+        snprintf(rb, sizeof(rb), "MART REFILL %d:%02d", t / 60, t % 60);
+        ui_rect(R, W - 236, 160, 216, 30, 0, 0, 0, 0.45f);
+        ui_circle(R, W - 220, 175, 7, 0.25f, 0.85f, 0.35f, 1);
+        ui_text(R, rb, W - 30, 163, 20, 1, 1, 1, 0.95f, 2);
+    }
     if (g->voT > 0 && g->voLine >= 0) draw_subtitle(g->voLine, H - 150, clampf(g->voT / 0.3f, 0, 1), 0);
 
     draw_minimap();
@@ -3449,8 +3459,9 @@ static void autotest_tick(float dt) {
             if (F.atBiz == STORE_MART) F.atStep = 132;
             else { F.atBiz++; F.atStep = 130; }
         }
-        else if (F.atStep == 132) {   /* kassa overvallen */
+        else if (F.atStep == 132) {   /* kassa overvallen (v5.2: met een wapen in de hand) */
             V3 sp[4]; int sk[4], q, ns; float sr[4];
+            g->owned[WP_PISTOL] = 1; g->weapon = WP_PISTOL;
             F.atMart0 = g->money;
             ns = store_markers(STORE_MART, sp, sk, sr, 4);
             for (q = 0; q < ns; q++) if (sk[q] == SM_ROB) game_teleport(g, sp[q].x, sp[q].z, 0);
@@ -3474,12 +3485,40 @@ static void autotest_tick(float dt) {
         }
         else if (F.atStep == 135 && t > F.atT3 + 1.5f) {
             int k;
-            rep("Uit de supermarkt: buiten=%d, op (%.0f, %.0f), sterren=%d", !game_store_inside(g), g->p.x, g->p.z, g->wanted);
+            rep("Uit de supermarkt: buiten=%d, op (%.0f, %.0f), sterren=%d, wachttijd %.0f s", !game_store_inside(g), g->p.x, g->p.z, g->wanted, g->robCool);
             g->camYaw = 0.0f;
             at_shot("48_mart_outside");
             g->wanted = 0;
             for (k = 0; k < MAX_POLICE; k++) g->veh[g->firstPolice + k].active = 0;
             for (k = MAX_PED - MAX_COPS; k < MAX_PED; k++) g->ped[k].active = 0;
+            F.atT3 = t;
+            F.atStep = 136;
+        }
+        else if (F.atStep == 136) {   /* v5.2: meteen weer naar binnen en nog eens overvallen: mag niet */
+            V3 sp[4]; int sk[4], q, ns; float sr[4];
+            F.atMart0 = g->money;
+            game_store_enter(g, STORE_MART);
+            ns = store_markers(STORE_MART, sp, sk, sr, 4);
+            for (q = 0; q < ns; q++) if (sk[q] == SM_ROB) game_teleport(g, sp[q].x, sp[q].z, 0);
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 137 && t > F.atT3 + 1.5f) {
+            rep("Tweede overval binnen 3 min: geld +%ld (0 verwacht), wachttijd %.0f s", g->money - F.atMart0, g->robCool);
+            at_shot("49_mart_cooldown");
+            g->weapon = WP_NONE;
+            g->robCool = 0;
+            F.atMart0 = g->money;
+            g->storeMarker = SM_NONE;
+            F.atT3 = t;
+            F.atStep++;
+        }
+        else if (F.atStep == 138 && t > F.atT3 + 1.0f) {
+            V3 sp[4]; int sk[4], q, ns; float sr[4];
+            rep("Overval zonder wapen: geld +%ld (0 verwacht)", g->money - F.atMart0);
+            ns = store_markers(STORE_MART, sp, sk, sr, 4);
+            for (q = 0; q < ns; q++) if (sk[q] == SM_EXIT) game_teleport(g, sp[q].x, sp[q].z, PI_F);
+            g->wanted = 0;
             F.atT3 = t;
             F.atStep = 140;
         }
