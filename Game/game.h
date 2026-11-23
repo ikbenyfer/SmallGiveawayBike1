@@ -172,6 +172,7 @@ typedef struct {
     int vphys, physVeh, pcarVeh;   /* v6.0.4: physics voor je eigen voertuig, extra plek voor de PHYSICS-modus */
     float flipT;
     int nl_noPhys;   /* (reserve) */
+    int arcade, god;   /* v6.0.6 ARCADE MODE: oneindig geld, onkwetsbaar */
     Craft craft;
     PDesign design;
     float physSaveX, physSaveZ, physSaveH;

@@ -14,6 +14,17 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v6.0.6 (niet voor de iPad): ARCADE MODE
+
+- **PHYSICS MODE is weg.** Daarvoor in de plaats komt **ARCADE MODE** (menu rechtsboven):
+  - **Oneindig geld.**
+  - **Pauze → ARCADE MENU:** spawn **elk voertuig**: City car, Taxi, Politieauto, alle dealer-auto's, de motoren en de Giveaway Bike. Elk voertuig kan ook als **vliegende variant** (FLYING: ON).
+  - Nieuw: de **SKY RIDER**, een vliegende motor die zweeft en vliegt (UP/DOWN om te stijgen en dalen, gas = jet).
+  - **INVINCIBLE ON/OFF:** onkwetsbaar.
+  - **PLAY REAL NL:** speel arcade in de echte NL-kaart.
+  - Je normale opgeslagen spel blijft onaangeroerd. Via MAIN MENU kom je terug in je echte voortgang.
+- **Bugfix:** je voertuig verdween als je via het pauzemenu SETTINGS opende, bijvoorbeeld om VEHICLE PHYSICS om te zetten. Dat gebeurt niet meer.
+
 ## v6.0.5 (niet voor de iPad): oude rijphysics terug, met een instelling
 
 - Standaard rijden auto's, motoren en fietsen weer met de **oude (arcade) rijphysics**, zoals voor v6.0.4.

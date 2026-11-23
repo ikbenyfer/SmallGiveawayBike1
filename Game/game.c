@@ -1332,10 +1332,12 @@ static void pcar_drive(Game *g, Vehicle *v, const Input *in, float dt) {
 void game_phys_start(Game *g, int here, int kind, int model, int fly) {
     Vehicle *v = &g->veh[g->physVeh];
     float x, z, h;
+    if (here && g->p.veh >= 0) { x = g->veh[g->p.veh].x; z = g->veh[g->p.veh].z; h = g->veh[g->p.veh].h; }
+    else { x = g->p.x; z = g->p.z; h = g->p.h; }
     if (g->p.veh >= 0) { g->veh[g->p.veh].speed = 0; g->veh[g->p.veh].phys = 0; g->p.veh = -1; }
-    g->mission = -1; g->wanted = 0; g->cut = 0;
-    if (here) { x = g->p.x; z = g->p.z; h = g->p.h; }
-    else { x = 432.0f; z = 70.0f; h = 0.0f; }
+    g->mission = -1; g->cut = 0;
+    if (!g->arcade) g->wanted = 0;
+    if (!here) { x = 432.0f; z = 70.0f; h = 0.0f; }
     memset(v, 0, sizeof(*v));
     v->active = 1; v->garageSlot = -1;
     v->fly = fly;
@@ -1350,7 +1352,7 @@ void game_phys_start(Game *g, int here, int kind, int model, int fly) {
     g->physOn = 1;
     g->camYaw = h; g->camPitch = 0.3f;
     g->camPos = v3(x - sinf(h) * 9.0f, v->y + 4.0f, z - cosf(h) * 9.0f);
-    banner(g, "PHYSICS MODE", fly ? "Gas = jet, UP/DOWN to fly, stick to steer" : "Ramps are east of here. JUMP = handbrake (drift)", 1, 4.0f);
+    if (fly) game_message(g, "Flying: UP/DOWN to rise/sink, gas = jet", 3.0f);
 }
 
 void game_phys_stop(Game *g) {
@@ -1966,7 +1968,7 @@ void game_add_wanted(Game *g, int n) {
 }
 
 void game_damage(Game *g, float amount) {
-    if (g->health <= 0) return;
+    if (g->health <= 0 || g->god) return;   /* v6.0.6: onkwetsbaar (arcade) */
     amount *= 1.0f - 0.1f * (float)(g->tough < 0 ? 0 : (g->tough > 3 ? 3 : g->tough));   /* BLOCK GYM: taaiheid */
     if (g->armor > 0) {
         float a = fminf(g->armor, amount * 0.75f);
@@ -2188,6 +2190,8 @@ void game_update(Game *g, const Input *in, float dt) {
     if (dt > 0.1f) dt = 0.1f;
     g->time += dt;
     vo_tick(g, dt);
+    if (g->arcade && g->money < 9999999) g->money = 9999999;   /* v6.0.6: oneindig geld */
+    if (g->god) { g->health = 100.0f; }
     if (g->robCool > 0) g->robCool -= dt;   /* loopt altijd door, ook buiten de winkel */
     if (g->cut) {   /* v4.5 cutscene: de wereld loopt door, de speler staat stil */
         cut_update(g, in, dt);

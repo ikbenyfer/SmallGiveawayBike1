@@ -69,6 +69,7 @@ static struct {
     int bDown, bDrag, bMirror, bHover;   /* v6.0.2 3D-bouwscherm */
     int bPreset;
     int vphys;   /* v6.0.5: 0 oude rijphysics, 1 echte physics */
+    int arcade, god;   /* v6.0.6 ARCADE MODE */
     int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
@@ -148,6 +149,7 @@ static void start_game(void);
 static void nl_play_at(double rx, double ry, const char *label, int from);
 static void nl_exit_to_city(void);
 static void nl_play_pc(const char *pc, int from);
+static void open_nl_input(int from);
 static void pad_load_binds(void);
 /* Alle besturing loslaten (sticks terug, knoppen los). Nodig als er een menu opengaat terwijl je
  * de joystick vasthoudt: het loslaten komt dan bij het menu binnen en de stick zou blijven hangen. */
@@ -212,6 +214,7 @@ static void apply_settings(void) {
         F.G.camSens = sens[F.camSpeed % 3];
         F.G.invertY = F.invertY;
         F.G.autoAim = F.autoAim;
+        F.G.arcade = F.arcade; F.G.god = F.arcade && F.god;
 #ifndef __APPLE__
         F.G.vphys = F.at ? F.G.vphys : F.vphys;   /* v6.0.5: instelling (autotest kiest zelf) */
 #endif
@@ -274,7 +277,7 @@ static void save_all(void) {
     plat_save_int("vphys", F.vphys);
     plat_save_int("music", F.musicOn);
     plat_save_int("sfx", F.sfxOn);
-    if (F.loadDone && !F.at && F.mode == 0) {
+    if (F.loadDone && !F.at && F.mode == 0 && !F.arcade) {   /* arcade: je echte voortgang blijft onaangeroerd */
         for (i = 0; i < NMISSIONS; i++) if (F.G.completed[i]) done |= 1 << i;
         ssave("used", 1);
         ssave("money", (int)F.G.money);
@@ -564,7 +567,7 @@ static void draw_menu(void) {
         big_button(MENU_ITEMS[i], cx, R->H - 74.0f, 32.0f * (1.0f + pulse), F.pressed == i + 1, a);
     }
 #ifndef __APPLE__
-    big_button("PHYSICS MODE", R->W - 170.0f, 40.0f, 26.0f, F.pressed == 50, a);   /* v6.0.1 */
+    big_button("ARCADE MODE", R->W - 160.0f, 40.0f, 26.0f, F.pressed == 50, a);   /* v6.0.6 */
 #endif
     for (i = 0; i < NMISSIONS; i++) done += F.G.completed[i];
     snprintf(line, sizeof(line), "$%ld   -   %d/%d MISSIONS", F.G.money, done, NMISSIONS);
@@ -943,12 +946,12 @@ void fe_vr_pointer(int on, float x, float y) {
 }
 
 
-/* ------------------------------------------------------------------ v6.0.4 PHYSICS-modus: voertuig kiezen */
+/* ------------------------------------------------------------------ v6.0.6 ARCADE MODE: voertuigen spawnen */
 
-#define PV_N 10
-static const int PV_KIND[PV_N] = {0, 0, 0, 1, 1, 1, 1, 2, 2, 3};
-static const int PV_MODEL[PV_N] = {0, 2, POLICE_VARIANT, 0, 1, 2, 3, 0, 1, 0};
-static const char *PV_NAME[PV_N] = {"CITY CAR", "TAXI", "POLICE CAR", NULL, NULL, NULL, NULL, NULL, NULL, "GIVEAWAY BIKE"};
+#define PV_N 11
+static const int PV_KIND[PV_N] = {0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 2};
+static const int PV_MODEL[PV_N] = {0, 2, POLICE_VARIANT, 0, 1, 2, 3, 0, 1, 0, 1};
+static const char *PV_NAME[PV_N] = {"CITY CAR", "TAXI", "POLICE CAR", NULL, NULL, NULL, NULL, NULL, NULL, "GIVEAWAY BIKE", "SKY RIDER (FLYING MOTOR)"};
 
 static const char *pv_name(int i) {
     if (PV_NAME[i]) return PV_NAME[i];
@@ -960,70 +963,85 @@ static void open_builder(void) {
     set_state(ST_BUILD);
 }
 
+/* hoofdmenu: arcade starten (eigen opslag blijft zoals hij is) */
+static void arcade_start(void) {
+    load_slot();
+    F.arcade = 1; F.god = 0;
+    apply_settings();
+    F.G.money = 9999999; F.G.moneyShown = F.G.money;
+    start_game();
+    snprintf(F.G.banner, sizeof(F.G.banner), "ARCADE MODE");
+    snprintf(F.G.sub, sizeof(F.G.sub), "Infinite money. Pause > ARCADE MENU to spawn any vehicle.");
+    F.G.bannerT = 5.0f; F.G.bannerGood = 1;
+}
+
+static void arcade_stop(void) {
+    if (!F.arcade) return;
+    F.arcade = 0; F.god = 0;
+    game_phys_stop(&F.G);
+    F.G.arcade = 0; F.G.god = 0;
+    load_slot();   /* terug naar je echte voortgang */
+}
+
 static void draw_build(void) {
     Renderer *R = &F.R;
     float W = (float)R->W;
     int i;
     ui_rect(R, 0, 0, W, (float)R->H, 0, 0, 0, 1);
     draw_backdrop(0.35f, 0.0f, F.t);
-    ui_text(R, "PHYSICS MODE", W * 0.5f, 26, 50, 1, 0.85f, 0.25f, 1, 1);
-    ui_text(R, "Pick a vehicle. FLYING adds wings and a jet: UP/DOWN to rise and sink.", W * 0.5f, 88, 18, 1, 1, 1, 0.9f, 1);
-    ui_text(R, F.vphys ? "Vehicle physics: REAL (change in SETTINGS)" : "Vehicle physics: OLD - flying vehicles always use REAL (change in SETTINGS)", W * 0.5f, 110, 15, 0.85f, 0.9f, 1, 0.8f, 1);
+    ui_text(R, "ARCADE MENU", W * 0.5f, 22, 50, 1, 0.85f, 0.25f, 1, 1);
+    ui_text(R, "Pick a vehicle and press SPAWN. FLYING adds wings and a jet (UP/DOWN to rise and sink).", W * 0.5f, 84, 17, 1, 1, 1, 0.9f, 1);
     for (i = 0; i < PV_N; i++) {
-        float bx = W * 0.5f - 470 + (i % 2) * 480, by = 130.0f + (i / 2) * 64.0f;
+        float bx = W * 0.5f - 470 + (i % 2) * 480, by = 116.0f + (i / 2) * 60.0f;
         int sel = F.bSel == i;
-        ui_rect(R, bx, by, 460, 54, sel ? 0.9f : 0.12f, sel ? 0.6f : 0.14f, sel ? 0.1f : 0.2f, 0.92f);
-        ui_text(R, pv_name(i), bx + 20, by + 14, 24, 1, 1, 1, 1, 0);
-        ui_text(R, PV_KIND[i] == 2 ? "MOTOR" : (PV_KIND[i] == 3 ? "BIKE" : "CAR"), bx + 440, by + 18, 16, 0.85f, 0.9f, 1, 0.8f, 2);
+        ui_rect(R, bx, by, 460, 52, sel ? 0.9f : 0.12f, sel ? 0.6f : 0.14f, sel ? 0.1f : 0.2f, 0.92f);
+        ui_text(R, pv_name(i), bx + 18, by + 14, 22, 1, 1, 1, 1, 0);
+        ui_text(R, PV_KIND[i] == 2 ? "MOTOR" : (PV_KIND[i] == 3 ? "BIKE" : "CAR"), bx + 442, by + 18, 15, 0.85f, 0.9f, 1, 0.8f, 2);
     }
     {
-        static const char *bt[4] = {NULL, "DRIVE: TEST TRACK", "DRIVE: REAL NL", "BACK"};
-        float by = 130.0f + 5 * 64.0f + 20;
+        const char *bt[5];
+        float by = 116.0f + 6 * 60.0f + 14;
         int k;
-        for (k = 0; k < 4; k++) {
-            float bx = W * 0.5f - 470 + k * 240;
-            int pr = F.pressed == 2000 + k;
-            ui_rect(R, bx, by, 220, 60, k == 0 ? (F.bMirror ? 0.2f : 0.15f) : (pr ? 0.9f : (k < 3 ? 0.15f : 0.22f)),
-                    k == 0 ? (F.bMirror ? 0.6f : 0.17f) : (pr ? 0.6f : (k < 3 ? 0.5f : 0.24f)), k == 0 ? (F.bMirror ? 0.3f : 0.22f) : (pr ? 0.1f : (k < 3 ? 0.25f : 0.3f)), 0.95f);
-            ui_text(R, k == 0 ? (F.bMirror ? "FLYING: ON" : "FLYING: OFF") : bt[k], bx + 110, by + 18, 21, 1, 1, 1, 1, 1);
+        bt[0] = F.bMirror ? "FLYING: ON" : "FLYING: OFF";
+        bt[1] = F.god ? "INVINCIBLE: ON" : "INVINCIBLE: OFF";
+        bt[2] = "SPAWN";
+        bt[3] = "PLAY REAL NL";
+        bt[4] = "BACK";
+        for (k = 0; k < 5; k++) {
+            float bx = W * 0.5f - 475 + k * 190;
+            int pr = F.pressed == 2000 + k, on = (k == 0 && F.bMirror) || (k == 1 && F.god);
+            ui_rect(R, bx, by, 180, 60, pr ? 0.9f : (on ? 0.2f : (k == 2 ? 0.15f : 0.14f)), pr ? 0.6f : (on ? 0.6f : (k == 2 ? 0.5f : 0.16f)),
+                    pr ? 0.1f : (on ? 0.3f : (k == 2 ? 0.25f : 0.22f)), 0.95f);
+            ui_text(R, bt[k], bx + 90, by + 20, 17, 1, 1, 1, 1, 1);
         }
     }
+    ui_text(R, "Money is infinite in arcade; your normal save is not changed.", W * 0.5f, 116.0f + 6 * 60.0f + 90, 15, 0.85f, 0.9f, 1, 0.8f, 1);
 }
 
-static void phys_go(int nl) {
-    if (nl) {
-        double rx, ry;
-        const char *nm;
-        ns_pack_load();
-        nm = ns_pack_start(0, &rx, &ry);
-        F.physPending = 1; F.physNL = 1;
-        if (!nm) { nl_play_pc("1012JS", ST_BUILD); return; }
-        nl_play_at(rx, ry, nm, ST_BUILD);
-        return;
-    }
-    F.physNL = 0;
-    if (!F.G.w) load_slot();
-    if (F.mode != 0) nl_exit_to_city();
+static void arcade_spawn(void) {
+    int fly = F.bMirror || F.bSel == 10;
     set_state(ST_GAME);
-    F.fade = 1.0f;
-    game_phys_start(&F.G, 0, PV_KIND[F.bSel], PV_MODEL[F.bSel], F.bMirror);
+    F.fade = 0.6f;
+    game_phys_start(&F.G, 1, PV_KIND[F.bSel], PV_MODEL[F.bSel], fly);
+    F.G.god = F.arcade && F.god;
 }
 
 static void build_tap(float x, float y, int phase) {
     Renderer *R = &F.R;
-    float W = (float)R->W, by = 130.0f + 5 * 64.0f + 20;
+    float W = (float)R->W, by = 116.0f + 6 * 60.0f + 14;
     int i, k, hit = 0;
     for (i = 0; i < PV_N; i++) {
-        float bx = W * 0.5f - 470 + (i % 2) * 480, byy = 130.0f + (i / 2) * 64.0f;
-        if (x > bx && x < bx + 460 && y > byy && y < byy + 54) { if (phase == TOUCH_BEGIN) F.bSel = i; return; }
+        float bx = W * 0.5f - 470 + (i % 2) * 480, byy = 116.0f + (i / 2) * 60.0f;
+        if (x > bx && x < bx + 460 && y > byy && y < byy + 52) { if (phase == TOUCH_BEGIN) F.bSel = i; return; }
     }
-    for (k = 0; k < 4; k++) { float bx = W * 0.5f - 470 + k * 240; if (x > bx && x < bx + 220 && y > by && y < by + 60) hit = 2000 + k; }
+    for (k = 0; k < 5; k++) { float bx = W * 0.5f - 475 + k * 190; if (x > bx && x < bx + 180 && y > by && y < by + 60) hit = 2000 + k; }
     if (phase != TOUCH_END) { F.pressed = hit; return; }
     F.pressed = 0;
     if (hit == 2000) F.bMirror = !F.bMirror;
-    else if (hit == 2001) phys_go(0);
-    else if (hit == 2002) phys_go(1);
-    else if (hit == 2003) set_state(ST_MENU);
+    else if (hit == 2001) { F.god = !F.god; F.G.god = F.arcade && F.god; }
+    else if (hit == 2002) arcade_spawn();
+    else if (hit == 2003) open_nl_input(ST_BUILD);
+    else if (hit == 2004) set_state(ST_GAME);
 }
 
 static void draw_pad_cursor(void) {
@@ -2762,6 +2780,7 @@ static void draw_pause(void) {
     const char *items[5] = {"RESUME", "MISSIONS", "HOST ONLINE", "SETTINGS", "MAIN MENU"};
     if (F.mode == 1) items[1] = "NEW POSTCODE";
     if (mp_mode()) items[2] = "LEAVE ONLINE";
+    if (F.arcade) items[2] = "ARCADE MENU";
     ui_rect(R, 0, 0, (float)R->W, (float)R->H, 0, 0, 0, 0.6f);
     ui_text(R, "PAUSED", R->W * 0.5f, 130, 70, 1, 1, 1, 1, 1);
     for (i = 0; i < 5; i++) big_button(items[i], R->W * 0.5f, 250.0f + i * 88.0f, 44, F.pressed == i + 1, 1);
@@ -2920,7 +2939,7 @@ static void menu_tap(float x, float y, int phase) {
         for (i = 0; i < 6; i++)
             if (hit_text(x, y, MENU_ITEMS[i], MENU_X(i), R->H - 74.0f + 18, 32)) hit = i + 1;
 #ifndef __APPLE__
-        if (hit_text(x, y, "PHYSICS MODE", R->W - 170.0f, 40.0f + 15, 26)) hit = 50;
+        if (hit_text(x, y, "ARCADE MODE", R->W - 160.0f, 40.0f + 15, 26)) hit = 50;
 #endif
         if (phase != TOUCH_END) { F.pressed = hit; return; }
         F.pressed = 0;
@@ -2930,7 +2949,7 @@ static void menu_tap(float x, float y, int phase) {
         else if (hit == 4) open_mp_screen();
         else if (hit == 5) set_state(ST_SETTINGS);
         else if (hit == 6) set_state(ST_CREDITS);
-        else if (hit == 50) open_builder();
+        else if (hit == 50) arcade_start();
         return;
     }
     if (F.state == ST_BUILD) { build_tap(x, y, phase); return; }
@@ -3031,6 +3050,7 @@ static void menu_tap(float x, float y, int phase) {
         const char *pi[5] = {"RESUME", "MISSIONS", "HOST ONLINE", "SETTINGS", "MAIN MENU"};
         if (F.mode == 1) pi[1] = "NEW POSTCODE";
         if (mp_mode()) pi[2] = "LEAVE ONLINE";
+        if (F.arcade) pi[2] = "ARCADE MENU";
         for (i = 0; i < 5; i++)
             if (hit_text(x, y, pi[i], R->W * 0.5f, 250.0f + i * 88.0f + 22, 44)) hit = i + 1;
         if (phase != TOUCH_END) { F.pressed = hit; return; }
@@ -3038,12 +3058,13 @@ static void menu_tap(float x, float y, int phase) {
         if (hit == 1) set_state(ST_GAME);
         else if (hit == 2 && F.mode == 1) open_nl_input(ST_PAUSE);
         else if (hit == 2) { F.shopMsg[0] = 0; set_state(ST_MISSIONS); F.missionsFrom = ST_PAUSE; }
+        else if (hit == 3 && F.arcade) open_builder();
         else if (hit == 3) {
             if (mp_mode()) { mp_leave(); game_message(&F.G, "You left the online game", 2.0f); set_state(ST_GAME); }
             else mp_host_here();
         }
         else if (hit == 4) { set_state(ST_SETTINGS); F.prevState = ST_PAUSE; }
-        else if (hit == 5) { save_all(); mp_leave(); nl_exit_to_city(); set_state(ST_MENU); }
+        else if (hit == 5) { save_all(); mp_leave(); nl_exit_to_city(); arcade_stop(); set_state(ST_MENU); }
     }
 }
 
@@ -3711,7 +3732,7 @@ static void autotest_tick(float dt) {
         else if (F.atStep == 160) {   /* v6.0.1 PHYSICS-modus */
             F.bSel = 3; F.bMirror = 1;   /* vliegende dealer-auto */
             g->vphys = 1;
-            phys_go(0);
+            arcade_spawn();
             rep("Physics gestart: aan=%d, voertuig %d (vliegend %d)", g->physOn, g->p.veh, g->veh[g->p.veh].fly);
             F.atT3 = t;
             F.atStep = 162;
@@ -3896,9 +3917,9 @@ void fe_frame(double now) {
 
     if (F.physPending && F.state == ST_GAME && F.loadDone && (!F.physNL || F.mode == 1)) {   /* NL geladen: voertuig neerzetten */
         F.physPending = 0;
-        game_phys_start(&F.G, 1, PV_KIND[F.bSel], PV_MODEL[F.bSel], F.bMirror);
+        game_phys_start(&F.G, 1, PV_KIND[F.bSel], PV_MODEL[F.bSel], F.bMirror || F.bSel == 10);
     }
-    if (F.G.physOn && F.state != ST_GAME && F.state != ST_PAUSE && F.state != ST_BIGMAP) game_phys_stop(&F.G);
+    if (F.G.physOn && (F.state == ST_MENU || F.state == ST_SLOTS)) game_phys_stop(&F.G);   /* v6.0.6: alleen bij terug naar het hoofdmenu */
     switch (F.state) {
     case ST_LOGO:
         if (F.st > 2.5f) { set_state(ST_LOAD); F.loadStart = plat_time(); }
