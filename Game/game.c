@@ -1456,6 +1456,23 @@ static void pcar_drive(Game *g, Vehicle *v, const Input *in, float dt) {
     v->wheel += v->speed * dt / 0.34f;
     v->phys = 1;
     v->pm = mm;
+    /* v6.1.1: botsen met gebouwen, bomen, palen en je huis zoals bij de oude rijphysics
+     * (de hoekpunten van de physics-onderdelen glipten langs dunne dingen zoals bomen) */
+    if (v->hitcool > 0) v->hitcool -= dt;
+    bx = v->x; bz = v->z;
+    vehicle_world_collide(g, v);
+    if (fabsf(v->x - bx) + fabsf(v->z - bz) > 1e-4f) {
+        V3 n = v3(v->x - bx, 0, v->z - bz);
+        float l = v3len(n), vn;
+        n = v3scale(n, 1.0f / l);
+        c->pos.x += v->x - bx; c->pos.z += v->z - bz;
+        vn = v3dot(c->vel, n);
+        if (vn < 0) c->vel = v3sub(c->vel, v3scale(n, vn * 1.25f));   /* niet erdoorheen, klein beetje terugkaatsen */
+        c->vel.x *= 0.85f; c->vel.z *= 0.85f;
+        c->angv = v3scale(c->angv, 0.7f);
+        v->speed = v3dot(c->vel, f);
+        v->pm = ph_model_matrix(c);
+    }
     /* botsen met ander verkeer (zelfde regels als vroeger) */
     bx = v->x; bz = v->z;
     collide_vehicles(g, v);

@@ -17,6 +17,7 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 ## v6.1.1 (niet voor de iPad): bugfixes
 
 - **Bugfix:** als je van een gespawnde vliegende motor (ARCADE MENU) afstapte, werkte de W-toets niet meer om te lopen. W telde nog als gas. Dat is opgelost. Ook het motorgeluid hoort nu weer bij het voertuig waar je in zit.
+- **Bugfix echte physics (REAL):** je reed tijdens het rijden door bomen, lantaarnpalen, borden en je huis heen. Nu bots je overal tegen, net als bij de oude rijphysics.
 - **Bugfix VEHICLE PHYSICS:** de instelling sprong na het laden van het spel, arcade starten/stoppen of een ander slot kiezen stilletjes terug naar OLD, terwijl SETTINGS nog REAL liet zien. Nu geldt altijd wat in SETTINGS staat.
 
 ## v6.1.0 (alle platforms, ook de iPad): 4x grotere stad, WINGS + JET en arcade-vliegen
