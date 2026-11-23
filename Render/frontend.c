@@ -1035,8 +1035,8 @@ static void draw_hud(void) {
         char rb[48];
         int t = (int)ceilf(g->robCool);
         snprintf(rb, sizeof(rb), "MART REFILL %d:%02d", t / 60, t % 60);
-        ui_rect(R, W - 236, 160, 216, 30, 0, 0, 0, 0.45f);
-        ui_circle(R, W - 220, 175, 7, 0.25f, 0.85f, 0.35f, 1);
+        ui_rect(R, W - 262, 160, 242, 30, 0, 0, 0, 0.45f);
+        ui_circle(R, W - 246, 175, 7, 0.25f, 0.85f, 0.35f, 1);
         ui_text(R, rb, W - 30, 163, 20, 1, 1, 1, 0.95f, 2);
     }
     if (g->voT > 0 && g->voLine >= 0) draw_subtitle(g->voLine, H - 150, clampf(g->voT / 0.3f, 0, 1), 0);
