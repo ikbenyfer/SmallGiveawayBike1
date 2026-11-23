@@ -375,6 +375,9 @@ static void load_slot(void) {
     game_init(&F.G, &F.W);
     F.G.noCutscenes = F.at;   /* autotest: cutscenes alleen in de eigen teststap */
     if (F.at) F.G.vphys = 0;   /* autotest rijdt met de oude rijregels (stabiel); physics heeft een eigen stap */
+#ifndef __APPLE__
+    else F.G.vphys = F.vphys;   /* v6.1.1: instelling bleef na laden/arcade/slot wisselen op OLD hangen */
+#endif
     if (!F.at) {
         F.G.money = sload("money", 0);
         F.G.moneyShown = F.G.money;
@@ -928,7 +931,7 @@ static void pad_build_input(Input *in) {
     in->jump |= pa_held(PA_JUMP);
     in->up |= pb_held(PB_RB);
     in->down |= pb_held(PB_LB);
-    if (F.G.p.veh >= 0 || F.G.physOn) {
+    if (F.G.p.veh >= 0) {
         in->gas |= pa_held(PA_GAS) || P.ax[5] > 0.15f * (P.bind[PA_GAS] == PB_RT);
         in->brake |= pa_held(PA_BRAKE) || P.ax[4] > 0.15f * (P.bind[PA_BRAKE] == PB_LT);
     } else in->fire |= pa_held(PA_FIRE);
@@ -3122,8 +3125,8 @@ static void build_input(void) {
     if (g_desktop) {
         in->mx = clampf(in->mx + g_dk.mx, -1, 1);
         in->my = clampf(in->my + g_dk.my, -1, 1);
-        in->gas |= g_dk.gas && (F.G.p.veh >= 0 || F.G.physOn);
-        in->brake |= g_dk.brake && (F.G.p.veh >= 0 || F.G.physOn);
+        in->gas |= g_dk.gas && (F.G.p.veh >= 0);
+        in->brake |= g_dk.brake && (F.G.p.veh >= 0);
         in->jump |= g_dk.jump;
         in->up |= g_dk.up;
         in->down |= g_dk.down;
@@ -3132,7 +3135,7 @@ static void build_input(void) {
         in->jumpPressed |= g_dk.jumpPressed;
         in->actionPressed |= g_dk.actionPressed;
         in->switchPressed |= g_dk.switchPressed;
-        if (F.G.p.veh >= 0 || F.G.physOn) { if (g_dk.gas) in->my = 0; }   /* W = gas, niet dubbel */
+        if (F.G.p.veh >= 0) { if (g_dk.gas) in->my = 0; }   /* W = gas, niet dubbel */
         g_dk.jumpPressed = g_dk.actionPressed = g_dk.switchPressed = 0;
     }
 }
@@ -4129,8 +4132,7 @@ void fe_frame(double now) {
                 if (g->sfxq[i] == SFX_PISTOL || g->sfxq[i] == SFX_SMG || g->sfxq[i] == SFX_SHOTGUN) vol *= 0.8f;
                 plat_sfx(g->sfxq[i], vol);
             }
-            if (g->physOn) { float sp = clampf(g->craft.speed / 40.0f, 0, 1); eng = g->craft.nmotor || g->craft.njet ? 0.22f + 0.45f * sp : 0; engRate = 0.75f + 1.3f * sp; }
-            else if (g->p.veh >= 0) {
+            if (g->p.veh >= 0) {   /* v6.1.1: niet meer op physOn (bleef na uitstappen aan) */
                 const Vehicle *v = &g->veh[g->p.veh];
                 float top = v->custom ? car_top_speed(v) : (v->type == VEH_BIKE ? 11.5f : 19.0f);
                 float sp = clampf(fabsf(v->speed) / top, 0, 1);

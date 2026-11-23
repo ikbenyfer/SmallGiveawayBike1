@@ -14,6 +14,11 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v6.1.1 (niet voor de iPad): bugfixes
+
+- **Bugfix:** als je van een gespawnde vliegende motor (ARCADE MENU) afstapte, werkte de W-toets niet meer om te lopen. W telde nog als gas. Dat is opgelost. Ook het motorgeluid hoort nu weer bij het voertuig waar je in zit.
+- **Bugfix VEHICLE PHYSICS:** de instelling sprong na het laden van het spel, arcade starten/stoppen of een ander slot kiezen stilletjes terug naar OLD, terwijl SETTINGS nog REAL liet zien. Nu geldt altijd wat in SETTINGS staat.
+
 ## v6.1.0 (alle platforms, ook de iPad): 4x grotere stad, WINGS + JET en arcade-vliegen
 
 - **De stad is 4x zo groot:** 14 x 14 blokken (796 m) in plaats van 7 x 7 (404 m). De oude stad ligt linksboven, daaromheen liggen nieuwe wijken met winkelstraten, kantoren, parken en buitenwijken. Je huis en BLOCK SPRAY liggen nu midden in de stad.
