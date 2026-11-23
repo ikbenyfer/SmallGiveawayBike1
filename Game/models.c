@@ -2,6 +2,9 @@
 
 typedef struct { Col shirt, pants, skin, hair, shoe; int cap; } CharLook;
 
+static CharLook look(int v);
+void model_char_colors(int v, Col *skin, Col *hair) { CharLook l = look(v); *skin = l.skin; *hair = l.hair; }
+
 static CharLook look(int v) {
     static const int shirts[CHAR_VARIANTS][3] = {
         {196, 36, 40}, {60, 110, 190}, {230, 200, 70}, {70, 150, 90},
@@ -413,6 +416,22 @@ void model_char_body(MeshB *m, int v) {
         blob(m, v3(0.05f * k, 1.852f, 0.126f), v3(0.034f, 0.008f, 0.012f), 0.5f, 0.6f, 6, 3, col_mul(l.hair, 0.8f)); /* wenkbrauw */
     }
     blob(m, v3(0, 1.783f, 0.137f), v3(0.02f, 0.036f, 0.026f), 0.8f, 0.8f, 6, 5, skinD);           /* neus */
+    if (g_sqDetail > 2.0f) {   /* v6.2.0 ULTRA+: iris, oogleden, wimpers, lippen, neusgaten, kin */
+        static const int irisC[4][3] = {{92, 62, 38}, {60, 96, 140}, {70, 110, 70}, {50, 36, 26}};
+        Col iris = col(irisC[v % 4][0], irisC[v % 4][1], irisC[v % 4][2]);
+        for (k = -1; k <= 1; k += 2) {
+            blob(m, v3(0.047f * k, 1.818f, 0.1325f), v3(0.0135f, 0.0145f, 0.004f), 0.95f, 0.95f, 12, 5, iris);
+            blob(m, v3(0.047f * k, 1.818f, 0.1355f), v3(0.0065f, 0.0065f, 0.003f), 0.95f, 0.95f, 8, 4, dark);
+            blob(m, v3(0.044f * k, 1.822f, 0.137f), v3(0.0025f, 0.0025f, 0.0015f), 0.95f, 0.95f, 6, 3, col(250, 250, 250));   /* lichtpuntje */
+            blob(m, v3(0.047f * k, 1.832f, 0.127f), v3(0.03f, 0.007f, 0.014f), 0.6f, 0.7f, 10, 3, skinD);   /* bovenooglid */
+            blob(m, v3(0.047f * k, 1.836f, 0.133f), v3(0.028f, 0.0025f, 0.006f), 0.4f, 0.5f, 10, 3, col_mul(l.hair, 0.6f));   /* wimpers */
+            blob(m, v3(0.011f * k, 1.765f, 0.152f), v3(0.006f, 0.004f, 0.006f), 0.8f, 0.8f, 6, 3, col(60, 40, 36));   /* neusgat */
+            blob(m, v3(0.075f * k, 1.765f, 0.11f), v3(0.03f, 0.025f, 0.02f), 0.8f, 0.8f, 8, 5, l.skin);   /* jukbeen */
+        }
+        blob(m, v3(0, 1.733f, 0.123f), v3(0.034f, 0.007f, 0.011f), 0.6f, 0.6f, 12, 4, col(165, 84, 74));   /* bovenlip */
+        blob(m, v3(0, 1.720f, 0.121f), v3(0.031f, 0.008f, 0.012f), 0.6f, 0.6f, 12, 4, col(160, 80, 70));   /* onderlip */
+        blob(m, v3(0, 1.69f, 0.105f), v3(0.04f, 0.028f, 0.03f), 0.8f, 0.8f, 10, 5, l.skin);   /* kin */
+    }
     blob(m, v3(0, 1.727f, 0.118f), v3(0.038f, 0.009f, 0.012f), 0.6f, 0.6f, 8, 3, col(150, 72, 62)); /* mond */
     /* haar (bovenkant en achterkant), of pet */
     if (l.cap) {
@@ -469,6 +488,14 @@ void model_char_farm(MeshB *m, int v) {
     if (long_sleeves(v)) mb_capsule(m, v3(0, -0.2f, 0), v3(0, -0.26f, 0), 0.044f, 0.04f, 8, l.skin);
     blob(m, v3(0, -0.31f, 0.005f), v3(0.04f, 0.06f, 0.03f), 0.7f, 0.7f, 10, 6, l.skin);
     mb_capsule(m, v3(0, -0.28f, 0.03f), v3(0, -0.33f, 0.055f), 0.016f, 0.014f, 6, l.skin);   /* duim */
+    if (g_sqDetail > 2.0f) {   /* v6.2.0 ULTRA+: vier losse vingers met kootjes */
+        int f;
+        for (f = 0; f < 4; f++) {
+            float x = -0.027f + f * 0.018f, len = f == 0 || f == 3 ? 0.05f : 0.062f;
+            mb_capsule(m, v3(x, -0.35f, 0.006f), v3(x, -0.35f - len * 0.55f, 0.012f), 0.0095f, 0.0088f, 6, l.skin);
+            mb_capsule(m, v3(x, -0.35f - len * 0.55f, 0.012f), v3(x, -0.35f - len, 0.022f), 0.0088f, 0.0078f, 6, l.skin);
+        }
+    }
 }
 
 /* ---------------------------------------------------------------- wapens (schoudercoordinaten, loop langs -y, greep naar +z) */

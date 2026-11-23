@@ -2,6 +2,8 @@
 
 float g_sqDetail = 1.0f;
 int g_meshMat;
+int g_autoMat;
+Col g_amSkin, g_amHair;
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -21,6 +23,23 @@ static void grow(MeshB *m, int add) {
     m->v = nv; m->cap = nc;
 }
 
+static int col_near(Col a, int r, int g, int b, int t) {
+    return abs((int)a.r - r) <= t && abs((int)a.g - g) <= t && abs((int)a.b - b) <= t;
+}
+
+static int auto_mat(Col c) {
+    if (g_autoMat == 1 && g_meshMat == MAT_DEFAULT && c.a == 0) {
+        Col s = g_amSkin, h = g_amHair;
+        if (col_near(c, s.r, s.g, s.b, 3) || col_near(c, (int)(s.r * 0.86f), (int)(s.g * 0.86f), (int)(s.b * 0.86f), 4)) return MAT_SKIN;
+        if (col_near(c, h.r, h.g, h.b, 3) || col_near(c, (int)(h.r * 0.8f), (int)(h.g * 0.8f), (int)(h.b * 0.8f), 4)) return MAT_HAIR;
+        if (c.r >= 240 && c.g >= 240 && c.b >= 235) return MAT_SHINY;   /* oogwit */
+        if (col_near(c, 20, 18, 18, 2) || col_near(c, 157, 77, 67, 10)) return MAT_SHINY;   /* pupil en lippen (vochtig) */
+        return MAT_CLOTH;
+    }
+    if (g_autoMat == 2 && g_meshMat != MAT_GLASS && c.a == 0 && c.r <= 32 && c.g <= 32 && c.b <= 34) return MAT_RUBBER;
+    return g_meshMat;
+}
+
 static void put(MeshB *m, V3 p, V3 n, Col c) {
     if (m->n >= m->cap) { grow(m, 1); if (m->n >= m->cap) return; }
     Vtx *v = &m->v[m->n++];
@@ -28,7 +47,7 @@ static void put(MeshB *m, V3 p, V3 n, Col c) {
     v->nx = (int8_t)clampf(n.x * 127.0f, -127, 127);
     v->ny = (int8_t)clampf(n.y * 127.0f, -127, 127);
     v->nz = (int8_t)clampf(n.z * 127.0f, -127, 127);
-    v->pad = (int8_t)g_meshMat;
+    v->pad = (int8_t)(g_autoMat ? auto_mat(c) : g_meshMat);
     v->r = c.r; v->g = c.g; v->b = c.b; v->a = c.a;
 }
 
@@ -276,6 +295,7 @@ static void ring_tube(MeshB *m, V3 a, V3 b, float ra, float rb, int seg, Col c, 
     Col cc[4];
     int i, k;
     if (len < 1e-5f) return;
+    if (g_sqDetail > 2.0f) seg = seg * 2 > 40 ? 40 : seg * 2;   /* v6.2.0 ULTRA+: rondere ledematen en buizen */
     if (seg < 3) seg = 3;
     cc[0] = cc[1] = cc[2] = cc[3] = c;
     f = v3scale(d, 1.0f / len);
@@ -353,7 +373,7 @@ void mb_lathe(MeshB *m, V3 c, int axis, const float *r, const float *d, const Co
 
 void mb_wheel(MeshB *m, V3 c, float r, float w, Col tire, Col rim, int spokes) {
     float hw = w * 0.5f, rr = r * 0.66f;
-    int i, seg = 18;
+    int i, seg = g_sqDetail > 2.0f ? 40 : 18;
     {   /* band: binnenwand -> afgerond loopvlak -> buitenwand */
         float pr[8] = {rr, r * 0.86f, r * 0.96f, r, r, r * 0.96f, r * 0.86f, rr};
         float pd[8] = {-hw, -hw, -hw * 0.82f, -hw * 0.45f, hw * 0.45f, hw * 0.82f, hw, hw};
@@ -373,6 +393,22 @@ void mb_wheel(MeshB *m, V3 c, float r, float w, Col tire, Col rim, int spokes) {
         (void)pdn;
         mb_lathe(m, c, 0, pr, pdp, rc, 4, seg);
         mb_lathe(m, c, 0, rn, dn, rcn, 4, seg);
+    }
+    if (g_sqDetail > 2.0f) {   /* v6.2.0 ULTRA+: bandprofiel (noppen) en remschijf met klauw */
+        Col lug = col_mul(tire, 0.8f), disc = col(150, 150, 156), cal = col(180, 30, 30);
+        int nl = 44;
+        for (i = 0; i < nl; i++) {
+            float a = 2 * PI_F * (i + 0.5f * (i & 1)) / nl, ca = cosf(a), sa = sinf(a);
+            float off = (i & 1) ? 0.18f : -0.18f;
+            mb_rtube(m, v3add(c, v3(hw * (off - 0.22f), ca * r * 1.004f, sa * r * 1.004f)),
+                        v3add(c, v3(hw * (off + 0.22f), ca * r * 1.004f, sa * r * 1.004f)), r * 0.035f, r * 0.035f, 4, lug);
+        }
+        {
+            float pr[3] = {rr * 0.86f, rr * 0.86f, rr * 0.3f}, pd[3] = {hw * 0.25f, hw * 0.4f, hw * 0.4f};
+            Col dc[3] = {disc, col_mul(disc, 1.1f), col_mul(disc, 0.8f)};
+            mb_lathe(m, c, 0, pr, pd, dc, 3, seg);
+        }
+        mb_box(m, v3add(c, v3(hw * 0.2f, rr * 0.55f, -rr * 0.25f)), v3add(c, v3(hw * 0.5f, rr * 0.9f, rr * 0.25f)), cal, 0);
     }
     for (i = 0; i < spokes; i++) {
         float a = 2 * PI_F * i / spokes;

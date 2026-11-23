@@ -312,7 +312,7 @@ void fe_init(int w, int h) {
     memset(&F, 0, sizeof(F));
     {   /* v5.5: modellen en stad met meer detail op hoge kwaliteit (geldt vanaf het opstarten) */
         int q0 = plat_load_int("quality", 1);
-        g_sqDetail = q0 >= 3 ? 1.8f : (q0 >= 2 ? 1.4f : 1.0f);
+        g_sqDetail = q0 >= 4 ? 2.6f : (q0 >= 3 ? 1.8f : (q0 >= 2 ? 1.4f : 1.0f));   /* ULTRA+: veel meer segmenten in de modellen */
         world_set_detail(q0);
     }
     r_init(&F.R, w, h);
@@ -578,11 +578,11 @@ static void draw_menu(void) {
     ui_text(R, "iOS LEGACY EDITION  v1.0", R->W - 20.0f, 18, 18, 0.85f, 0.85f, 0.85f, a * 0.7f, 2);
 }
 
-static const char *Q_NAMES[4] = {"LOW", "MEDIUM", "HIGH", "ULTRA"};
+static const char *Q_NAMES[5] = {"LOW", "MEDIUM", "HIGH", "ULTRA", "ULTRA+"};
 #ifdef __APPLE__
 #define NQUAL 3   /* iPad: geen ULTRA en geen PHYSICS-modus */
 #else
-#define NQUAL 4
+#define NQUAL 5   /* v6.2.0: ULTRA+ (extreem fotorealisme) */
 #endif
 static const char *T_NAMES[5] = {"DUSK", "NIGHT", "DAY", "RAIN", "LIVE (DAY/NIGHT + WEATHER)"};
 static const char *C_NAMES[3] = {"SLOW", "NORMAL", "FAST"};
@@ -4102,7 +4102,7 @@ void fe_frame(double now) {
         if (F.tod == 4) tod_apply();   /* v6.0 LIVE: dag/nacht en weer lopen mee */
         {   /* v6.0: automatisch schaduwen uit als het te traag wordt */
             static float lowT;
-            if (F.quality >= 2 && F.R.shadowsOn && F.fps > 1 && F.fps < 32.0f) lowT += dt; else lowT = 0;
+            if (F.quality >= 2 && F.quality < 4 && F.R.shadowsOn && F.fps > 1 && F.fps < 32.0f) lowT += dt; else lowT = 0;
             if (lowT > 6.0f) { F.R.shadowsOn = 0; lowT = 0; game_message(&F.G, "Shadows off to keep the game smooth", 3.0f); plat_log("SGB-HQ: schaduwen automatisch uit (fps %.0f)", F.fps); }
         }
         if (F.perfT > 10.0f) {

@@ -14,8 +14,12 @@ typedef struct {
 typedef struct { uint8_t r, g, b, a; } Col;
 
 /* v6.0 materialen (in Vtx.pad): de HQ-shader geeft elk materiaal eigen detail, glans en reflectie */
-enum { MAT_DEFAULT = 0, MAT_ASPHALT, MAT_BRICK, MAT_GLASS, MAT_PAINT, MAT_SHINY, MAT_GRASS, MAT_CONCRETE, MAT_ROOF, MAT_WATER };
-extern int g_meshMat;   /* materiaal voor alles wat nu gebouwd wordt */
+enum { MAT_DEFAULT = 0, MAT_ASPHALT, MAT_BRICK, MAT_GLASS, MAT_PAINT, MAT_SHINY, MAT_GRASS, MAT_CONCRETE, MAT_ROOF, MAT_WATER,
+       MAT_SKIN, MAT_CLOTH, MAT_HAIR, MAT_RUBBER };   /* v6.2.0: huid, stof, haar, rubber */
+extern int g_meshMat;
+/* v6.2.0: automatisch materiaal kiezen op kleur: 1 = personage (huid/haar/stof/ogen), 2 = voertuig (banden = rubber) */
+extern int g_autoMat;
+extern Col g_amSkin, g_amHair;   /* materiaal voor alles wat nu gebouwd wordt */
 
 static inline Col col(int r, int g, int b) { Col c; c.r = (uint8_t)r; c.g = (uint8_t)g; c.b = (uint8_t)b; c.a = 0; return c; }
 static inline Col col_e(int r, int g, int b, int e) { Col c = col(r, g, b); c.a = (uint8_t)e; return c; }

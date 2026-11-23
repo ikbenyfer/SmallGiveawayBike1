@@ -14,6 +14,42 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v6.2.0 (niet voor de iPad): ULTRA+ – EXTREME PHOTOREALISM
+
+Nieuwe kwaliteitsstand **ULTRA+** in SETTINGS, boven ULTRA. Kies hem en start de game opnieuw: de extra geometrie wordt bij het laden gebouwd. De iPad krijgt dit niet, want de iPad 2 kan het niet aan.
+
+**Wat ULTRA+ echt doet:**
+- **Nieuwe materialen** (ook in HIGH en ULTRA):
+  - **Huid:** kleurvariatie, zachte glans, en licht dat om de randen loopt (een benadering van subsurface scattering, met een rode gloed bij tegenlicht). In ULTRA+ ook porien.
+  - **Stof:** weefselstructuur, draden en een zachte glans aan de rand.
+  - **Haar:** strengenstructuur met glans.
+  - **Rubber:** banden en bumpers zijn mat rubber in plaats van glimmend.
+- **Belichting en shaders:**
+  - Natuurkundige glans (GGX + Fresnel) op alles.
+  - Metallic autolak met glinsterende flakes en een extra blanke laklaag (clearcoat).
+  - Lak, glas en plassen weerspiegelen nu een stad met gebouwen en, 's nachts, verlichte ramen. Eerder weerspiegelden ze alleen de lucht.
+  - Zachte schaduwranden (16 monsters per pixel in plaats van 4), scherpere schaduwen dichtbij.
+  - Contactschaduw bij de grond (ambient occlusion-benadering).
+  - Licht van de lucht plus licht dat van de grond terugkaatst.
+  - Filmische tonemapping en kleurcorrectie, zoals in moderne games.
+  - Schaduwen gaan in ULTRA+ niet meer automatisch uit als het spel trager wordt.
+- **Meer geometrie (echt meer hoekpunten, niet alleen textures):**
+  - Ronde vormen hebben veel meer segmenten (2,6x in plaats van 1,8x bij ULTRA).
+  - Ledematen en buizen zijn twee keer zo rond.
+  - **Gezichten:** iris in vier kleuren met pupil en lichtpuntje, oogleden, wimpers, boven- en onderlip, neusgaten, jukbeenderen en kin.
+  - **Handen:** vier losse vingers met twee kootjes.
+  - **Wielen** (auto's, motoren, fietsen): ronder (40 in plaats van 18 segmenten), bandprofiel met noppen, remschijf en rode remklauw.
+- **Verder kijken:** draw distance 380 m (ULTRA 260 m), meer voetgangers, 8x anti-aliasing (MSAA) op de pc.
+
+**Eerlijk: wat nog niet kan.** Deze game tekent alles zelf met OpenGL ES 2.0 en bouwt alle modellen uit code, zodat hij ook op oude hardware draait. Daardoor zitten er een paar dingen nog **niet** in:
+- Echte 3D-scans van mensen en auto's.
+- Losse haarstrengen.
+- Bewegende kleding.
+- Doorzichtige ramen met een interieur erachter.
+- Ray tracing, echte global illumination, screen-space reflections en texture maps (normal-, roughness- of albedo-maps).
+
+Daarvoor zou de game een nieuwe engine nodig hebben (bijvoorbeeld OpenGL 3+/Vulkan met een model- en texturepipeline) plus gelicenseerde 3D-modellen van honderden MB. Dat werkt niet meer op de Switch, de Quest en Android-telefoons. De vergelijking hierboven is dus geen fotorealisme op het niveau van GTA V/VI. Het is wel de beste stap die binnen deze engine kan.
+
 ## v6.1.1 (alle platforms, ook de iPad): bugfixes
 
 - **Bugfix (ook iPad):** in v6.1.0 schreef het geld op de stoep in de grotere stad buiten zijn lijst in het geheugen. Dat kon rare fouten of een crash geven. Dit is opgelost.

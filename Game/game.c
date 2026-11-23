@@ -1046,10 +1046,10 @@ static void update_ped(Game *g, Ped *p, float dt) {
 /* ------------------------------------------------------------------ init */
 
 void game_set_quality(Game *g, int q) {
-    static const int peds[4] = {6, 10, 14, 18}, traf[4] = {4, 7, 10, 13};
-    static const float dd[4] = {95.0f, 135.0f, 180.0f, 260.0f};
+    static const int peds[5] = {6, 10, 14, 18, 20}, traf[5] = {4, 7, 10, 13, 13};
+    static const float dd[5] = {95.0f, 135.0f, 180.0f, 260.0f, 380.0f};   /* v6.2.0: ULTRA+ kijkt het verst */
     int i;
-    if (q < 0) q = 0; if (q > 3) q = 3;
+    if (q < 0) q = 0; if (q > 4) q = 4;
     g->quality = q;
     g->wantPeds = peds[q];
     g->wantTraffic = traf[q];

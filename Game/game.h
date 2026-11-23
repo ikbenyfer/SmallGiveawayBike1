@@ -180,7 +180,7 @@ typedef struct {
 } Game;
 
 void game_init(Game *g, World *w);
-void game_set_quality(Game *g, int q);  /* 0 laag, 1 midden, 2 hoog */
+void game_set_quality(Game *g, int q);  /* 0 laag, 1 midden, 2 hoog, 3 ultra, 4 ultra+ */
 void game_update(Game *g, const Input *in, float dt);
 int game_mode(const Game *g);
 /* index van voertuig binnen bereik om in te stappen, of -1 */

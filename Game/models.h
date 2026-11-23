@@ -64,4 +64,6 @@ void model_gun(MeshB *m);       /* in de hand, loop langs -y (armrichting); oud 
 void model_weapon(MeshB *m, int weapon);   /* v3.0: 1 pistool, 2 SMG, 3 shotgun (zelfde coordinaten als model_gun) */
 void model_tracer(MeshB *m);    /* lijntje van z=0 tot z=1 */       /* missie-start: ring + ster */
 
+void model_char_colors(int v, Col *skin, Col *hair);   /* v6.2.0: voor automatische materialen */
+
 #endif

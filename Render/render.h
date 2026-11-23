@@ -28,7 +28,7 @@ typedef struct {
     /* v6.0 grafische upgrade: 0 = gewone shader, 1 = HQ (per pixel, materialen, schaduwen), 2 = schaduw-pass */
     GLuint prog[3];
     GLint loc[3][12];
-    GLint hqShadowVP, hqShadowTex, hqShadowOn, hqTexel, hqRain, hqTime, hqSkyTop, hqSkyHor;
+    GLint hqShadowVP, hqShadowTex, hqShadowOn, hqTexel, hqRain, hqTime, hqSkyTop, hqSkyHor, hqUltra, hqEmis2, skUltra;
     GLuint progSky; GLint skVP, skModel, skTop, skHor, skSun, skSunCol, skAmb, skFog, skRain, skTime;
     GMesh skyDome, rainMesh;
     GMesh phPart[PP_COUNT], phWheel, rampMesh, buildFloor;   /* v6.0.1 PHYSICS-modus */
@@ -37,6 +37,7 @@ typedef struct {
     M4 shVP;
     int pass;          /* 1 = schaduw-pass */
     int hq;            /* kwaliteit Hoog: HQ-shader */
+    int ultra;         /* v6.2.0: ULTRA+ (niet op de iPad) */
     int shadowsOn;     /* schaduwen (kan automatisch uit bij lage fps) */
     float rain;        /* 0..1 regen (nat asfalt, druppels) */
     float hours;       /* tijd van de dag (alleen informatief) */

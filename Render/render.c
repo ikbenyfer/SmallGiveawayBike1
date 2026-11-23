@@ -125,6 +125,8 @@ static const char *FS_HQ_BODY =
     "uniform float uTime;\n"
     "uniform float uShadowOn;\n"
     "uniform float uTexel;\n"
+    "uniform float uUltra;\n"
+    "uniform float uEmis2;\n"
     "uniform sampler2D uShadow;\n"
     "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
     "float noise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);\n"
@@ -139,14 +141,45 @@ static const char *FS_HQ_BODY =
     "  float z = s.z - b;\n"
     "  float t = uTexel;\n"
     "  float sum = shadowAt(s.xy + vec2(-t, -t), z) + shadowAt(s.xy + vec2(t, -t), z) + shadowAt(s.xy + vec2(-t, t), z) + shadowAt(s.xy + vec2(t, t), z);\n"
-    "  return sum * 0.25;\n"
+    "  if (uUltra < 0.5) return sum * 0.25;\n"
+    "  float a = hash(gl_FragCoord.xy) * 6.2832; mat2 rot = mat2(cos(a), sin(a), -sin(a), cos(a));\n"
+    "  sum += shadowAt(s.xy + rot * vec2(-0.94, -0.40) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(0.95, -0.77) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(-0.09, -0.93) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(0.34, 0.29) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(-0.92, 0.46) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(-0.22, 0.03) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(0.49, -0.42) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(0.80, 0.53) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(-0.38, 0.86) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(0.19, 0.98) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(-0.70, -0.82) * t * 2.2, z);\n"
+    "  sum += shadowAt(s.xy + rot * vec2(0.97, 0.06) * t * 2.2, z);\n"
+    "  return sum / 16.0;\n"
     "}\n"
     "vec3 skyCol(vec3 d) { float t = clamp(d.y * 1.4 + 0.15, 0.0, 1.0); return mix(uSkyHor, uSkyTop, t); }\n"
+    "vec3 envCity(vec3 r) {\n"
+    "  vec3 e = skyCol(r);\n"
+    "  if (r.y < 0.3) {\n"
+    "    float ang = atan(r.z, r.x);\n"
+    "    float cl = floor(ang * 16.0);\n"
+    "    float bh = 0.04 + 0.24 * hash(vec2(cl, 3.1));\n"
+    "    float bld = 1.0 - smoothstep(bh - 0.006, bh + 0.006, r.y);\n"
+    "    vec3 bc = uFogCol * 0.42 + uAmb * 0.25 + uSunCol * 0.12 * hash(vec2(cl, 9.7));\n"
+    "    float win = step(0.62, hash(vec2(floor(ang * 150.0), floor(r.y * 90.0)))) * uEmis2;\n"
+    "    bc += vec3(1.0, 0.82, 0.5) * win * 0.7;\n"
+    "    e = mix(e, bc, bld);\n"
+    "  }\n"
+    "  return e;\n"
+    "}\n"
+    "float ggx(vec3 n, vec3 h, float r) { float a = max(r * r, 0.002); float a2 = a * a; float nh = max(dot(n, h), 0.0);\n"
+    "  float d = nh * nh * (a2 - 1.0) + 1.0; return a2 / (3.14159 * d * d); }\n"
+    "vec3 filmic(vec3 x) { x *= 1.08; return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }\n"
     "void main() {\n"
     "  vec3 n = normalize(vN);\n"
     "  vec3 v = normalize(uCam - vW);\n"
     "  vec3 c = vCol;\n"
-    "  float m = vMat, spec = 0.08, refl = 0.0, rough = 0.7, wetOk = 0.0;\n"
+    "  float m = vMat, spec = 0.08, refl = 0.0, rough = 0.7, wetOk = 0.0, skin = 0.0, cloth = 0.0, paint = 0.0;\n"
     "  if (m < 0.5) {\n"
     "    c *= 0.94 + 0.12 * noise(vW.xz * 2.0 + vW.y * 1.7); wetOk = n.y > 0.7 ? 1.0 : 0.0;\n"
     "  } else if (m < 1.5) {\n"   /* asfalt: korrel, scheuren, reparatievlakken */
@@ -170,7 +203,7 @@ static const char *FS_HQ_BODY =
     "  } else if (m < 3.5) {\n"   /* glas */
     "    spec = 1.0; refl = 0.55; rough = 0.05;\n"
     "  } else if (m < 4.5) {\n"   /* autolak met blanke laklaag */
-    "    spec = 1.2; refl = 0.32; rough = 0.12;\n"
+    "    spec = 1.2; refl = 0.32; rough = 0.12; paint = 1.0;\n"
     "  } else if (m < 5.5) {\n"   /* glimmend: chroom, metaal, kunststof */
     "    spec = 0.9; refl = 0.4; rough = 0.25;\n"
     "  } else if (m < 6.5) {\n"   /* gras */
@@ -187,10 +220,27 @@ static const char *FS_HQ_BODY =
     "    float row = fract(vW.y * 4.5 + dot(vW.xz, vec2(0.13, 0.07)));\n"
     "    c *= 0.78 + 0.25 * smoothstep(0.0, 0.8, row) + 0.08 * hash(floor(vW.xz * 4.0 + vW.y * 4.5));\n"
     "    spec = 0.12; rough = 0.6;\n"
-    "  } else {\n"   /* water: golfjes */
+    "  } else if (m < 9.5) {\n"   /* water: golfjes */
     "    vec2 q = vW.xz * 0.6 + vec2(uTime * 0.25, uTime * 0.18);\n"
     "    n = normalize(n + vec3(noise(q) - 0.5, 0.0, noise(q + 7.3) - 0.5) * 0.35);\n"
     "    spec = 1.0; refl = 0.65; rough = 0.05;\n"
+    "  } else if (m < 10.5) {\n"   /* v6.2.0 huid: kleurvariatie, porien, zachte glans */
+    "    c *= 0.95 + 0.1 * noise(vW.xy * 30.0 + vW.z * 17.0);\n"
+    "    c = mix(c, c * vec3(1.06, 0.93, 0.9), 0.5 * noise(vW.xz * 9.0 + vW.y * 7.0));\n"
+    "    if (uUltra > 0.5) n = normalize(n + (vec3(noise(vW.xy * 260.0), noise(vW.yz * 260.0), noise(vW.zx * 260.0)) - 0.5) * 0.09);\n"
+    "    spec = 0.22; rough = 0.42; skin = 1.0;\n"
+    "  } else if (m < 11.5) {\n"   /* stof: weefsel en draad */
+    "    float wv = noise(vec2(dot(vW.xz, vec2(0.7, 0.7)), vW.y) * 140.0);\n"
+    "    float th = abs(fract((vW.y + vW.x * 0.3) * 120.0) - 0.5);\n"
+    "    c *= 0.88 + 0.14 * wv + 0.06 * th;\n"
+    "    c *= 0.93 + 0.12 * fbm(vW.xz * 6.0 + vW.y * 5.0);\n"
+    "    spec = 0.03; rough = 0.95; cloth = 1.0;\n"
+    "  } else if (m < 12.5) {\n"   /* haar: strengen */
+    "    c *= 0.72 + 0.45 * noise(vec2(dot(vW.xz, vec2(1.0, 0.6)) * 160.0, vW.y * 9.0));\n"
+    "    spec = 0.55; rough = 0.32;\n"
+    "  } else {\n"   /* rubber: banden, bumpers */
+    "    c *= 0.9 + 0.14 * noise(vW.xz * 40.0 + vW.y * 40.0);\n"
+    "    spec = 0.1; rough = 0.78;\n"
     "  }\n"
     "  if (uRain > 0.01 && wetOk > 0.5 && n.y > 0.7) {\n"   /* nat: donkerder, glanzend, plassen */
     "    float puddle = smoothstep(0.55, 0.72, fbm(vW.xz * 0.22));\n"
@@ -202,20 +252,39 @@ static const char *FS_HQ_BODY =
     "    float rip = noise(vW.xz * 6.0 + uTime * 3.0);\n"
     "    n = normalize(n + vec3(rip - 0.5, 0.0, noise(vW.xz * 6.0 - uTime * 2.7) - 0.5) * 0.12 * puddle * uRain);\n"
     "  }\n"
-    "  float ndl = max(dot(n, uSun), 0.0);\n"
-    "  float sh = uShadowOn > 0.5 ? shadowF(ndl) : 1.0;\n"
-    "  vec3 light = uAmb * (0.7 + 0.3 * n.y) + uSunCol * ndl * sh;\n"
+    "  float ndr = dot(n, uSun);\n"
+    "  float ndl = max(mix(ndr, (ndr + 0.4) / 1.4, skin), 0.0);\n"
+    "  float sh = uShadowOn > 0.5 ? shadowF(max(ndr, 0.0)) : 1.0;\n"
+    "  float ao = 1.0;\n"
+    "  if (uUltra > 0.5 && n.y < 0.6) ao = mix(0.55, 1.0, smoothstep(0.0, 0.85, vW.y));\n"
+    "  vec3 amb = uAmb * (0.7 + 0.3 * n.y);\n"
+    "  if (uUltra > 0.5) amb = mix(uAmb * vec3(0.9, 0.85, 0.78) * 0.6, uAmb * 1.08, n.y * 0.5 + 0.5) + uSunCol * vec3(0.06, 0.05, 0.035) * (1.0 - n.y) * 0.5;\n"
+    "  vec3 light = amb * ao + uSunCol * ndl * sh;\n"
+    "  light += uSunCol * vec3(0.32, 0.08, 0.04) * skin * max(0.0, 0.35 - ndr) * (0.4 + 0.6 * sh);\n"
     "  vec3 lit = c * light + c * vEm * uEmis;\n"
     "  vec3 h = normalize(uSun + v);\n"
-    "  float sp = pow(max(dot(n, h), 0.0), mix(6.0, 140.0, 1.0 - rough)) * spec * sh;\n"
+    "  float sp;\n"
+    "  if (uUltra > 0.5) {\n"
+    "    float fh = 0.04 + 0.96 * pow(1.0 - max(dot(h, v), 0.0), 5.0);\n"
+    "    sp = min(ggx(n, h, rough) * fh * spec * max(ndr, 0.0) * 0.6, 24.0) * sh;\n"
+    "    if (paint > 0.5) {\n"
+    "      float fl = step(0.9, hash(floor(vW.xz * 260.0) + floor(vW.y * 260.0) * 7.0));\n"
+    "      sp += fl * pow(max(dot(n, h), 0.0), 18.0) * 0.9 * sh;\n"
+    "      sp += min(ggx(n, h, 0.035) * fh * 0.5 * max(ndr, 0.0), 30.0) * sh;\n"
+    "    }\n"
+    "    if (cloth > 0.5) sp += pow(1.0 - max(dot(n, v), 0.0), 4.0) * 0.12 * max(ndr + 0.3, 0.0);\n"
+    "  } else sp = pow(max(dot(n, h), 0.0), mix(6.0, 140.0, 1.0 - rough)) * spec * sh;\n"
     "  lit += uSunCol * sp;\n"
-    "  float fres = refl * (0.22 + 0.78 * pow(1.0 - max(dot(n, v), 0.0), 3.0));\n"
+    "  float fres = refl * (0.22 + 0.78 * pow(1.0 - max(dot(n, v), 0.0), uUltra > 0.5 ? 5.0 : 3.0));\n"
     "  vec3 r = reflect(-v, n);\n"
-    "  vec3 env = skyCol(r) * (0.55 + 0.45 * max(uSunCol.r, 0.2));\n"
+    "  vec3 env = (uUltra > 0.5 ? envCity(r) : skyCol(r)) * (0.55 + 0.45 * max(uSunCol.r, 0.2));\n"
     "  if (r.y < 0.0) env = mix(env, uFogCol * 0.5, clamp(-r.y * 3.0, 0.0, 1.0));\n"
+    "  if (uUltra > 0.5) env *= mix(1.0, 0.75, rough);\n"
     "  lit = mix(lit, env, clamp(fres, 0.0, 1.0));\n"
     "  lit = mix(lit, c, uUnlit);\n"
-    "  gl_FragColor = vec4(mix(lit, uFogCol, vFog), uAlpha);\n"
+    "  vec3 outc = mix(lit, uFogCol, vFog);\n"
+    "  if (uUltra > 0.5 && uUnlit < 0.5) { vec3 f = filmic(outc); float l = dot(f, vec3(0.299, 0.587, 0.114)); outc = mix(outc, mix(vec3(l), f, 1.08), 0.7); }\n"
+    "  gl_FragColor = vec4(outc, uAlpha);\n"
     "}\n";
 
 static const char *VS_SH =
@@ -254,6 +323,8 @@ static const char *FS_SKY_BODY =
     "uniform vec3 uFogCol;\n"
     "uniform float uRain;\n"
     "uniform float uTime;\n"
+    "uniform float uUltra;\n"
+    "vec3 filmic(vec3 x) { x *= 1.08; return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }\n"
     "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
     "float noise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);\n"
     "  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }\n"
@@ -272,6 +343,7 @@ static const char *FS_SKY_BODY =
     "    c = mix(c, cc, cl * smoothstep(0.0, 0.18, d.y));\n"
     "  }\n"
     "  c = mix(c, uFogCol, (1.0 - smoothstep(-0.02, 0.18, d.y)) * 0.85);\n"
+    "  if (uUltra > 0.5) { vec3 f = filmic(c); float l = dot(f, vec3(0.299, 0.587, 0.114)); c = mix(c, mix(vec3(l), f, 1.08), 0.7); }\n"
     "  gl_FragColor = vec4(c, 1.0);\n"
     "}\n";
 
@@ -437,6 +509,8 @@ int r_init(Renderer *r, int w, int h) {
         r->hqTexel = glGetUniformLocation(r->prog[1], "uTexel");
         r->hqRain = glGetUniformLocation(r->prog[1], "uRain");
         r->hqTime = glGetUniformLocation(r->prog[1], "uTime");
+        r->hqUltra = glGetUniformLocation(r->prog[1], "uUltra");
+        r->hqEmis2 = glGetUniformLocation(r->prog[1], "uEmis2");
         r->hqSkyTop = glGetUniformLocation(r->prog[1], "uSkyTop");
         r->hqSkyHor = glGetUniformLocation(r->prog[1], "uSkyHor");
         r->skVP = glGetUniformLocation(r->progSky, "uVP");
@@ -449,6 +523,7 @@ int r_init(Renderer *r, int w, int h) {
         r->skFog = glGetUniformLocation(r->progSky, "uFogCol");
         r->skRain = glGetUniformLocation(r->progSky, "uRain");
         r->skTime = glGetUniformLocation(r->progSky, "uTime");
+        r->skUltra = glGetUniformLocation(r->progSky, "uUltra");
     }
     r->progU = link_prog(VS_U, FS_U, 1);
     r->wVP = glGetUniformLocation(r->progW, "uVP");
@@ -537,6 +612,8 @@ void r_build_models(Renderer *r) {
     mb_init(&m);
 #define BUILD(dst, call) do { mb_reset(&m); g_meshMat = 0; call; g_meshMat = 0; upload(&(dst), &m); } while (0)
     for (i = 0; i < CHAR_VARIANTS; i++) {
+        model_char_colors(i, &g_amSkin, &g_amHair);
+        g_autoMat = 1;   /* v6.2.0: huid, haar, stof en ogen krijgen hun eigen materiaal */
         BUILD(r->body[i], model_char_body(&m, i));
         BUILD(r->thigh[i], model_char_thigh(&m, i));
         BUILD(r->shin[i], model_char_shin(&m, i));
@@ -545,9 +622,12 @@ void r_build_models(Renderer *r) {
         BUILD(r->bodyLo[i], model_char_body_lo(&m, i));
         BUILD(r->leg[i], model_char_leg(&m, i));
         BUILD(r->arm[i], model_char_arm(&m, i));
+        g_autoMat = 0;
     }
+    g_autoMat = 2;   /* v6.2.0: banden van rubber */
     for (i = 0; i < BIKE_VARIANTS; i++) { BUILD(r->bike[i], model_bike(&m, i)); BUILD(r->bikeLo[i], model_bike_lo(&m, i)); }
     for (i = 0; i < CAR_VARIANTS; i++) { BUILD(r->car[i], model_car(&m, i)); BUILD(r->carLo[i], model_car_lo(&m, i)); }
+    g_autoMat = 0;
     for (i = 1; i < 4; i++) BUILD(r->weapon[i], model_weapon(&m, i));
     BUILD(r->cash, model_cash(&m));
     BUILD(r->gift, model_gift(&m));
@@ -558,11 +638,13 @@ void r_build_models(Renderer *r) {
     BUILD(r->siren, model_siren(&m));
     BUILD(r->gun, model_gun(&m));
     BUILD(r->spoiler, model_spoiler(&m));
+    g_autoMat = 2;
     for (i = 0; i < CAR_MODELS; i++) {
         BUILD(r->carBody[i], model_car_body(&m, i)); BUILD(r->carDetail[i], model_car_detail(&m, i));
         BUILD(r->carBodyLo[i], model_car_body_lo(&m, i)); BUILD(r->carDetailLo[i], model_car_detail_lo(&m, i));
     }
     for (i = 0; i < MOTO_MODELS; i++) { BUILD(r->moto[i], model_moto(&m, i)); BUILD(r->motoLo[i], model_moto_lo(&m, i)); }
+    g_autoMat = 0;
     {
         int tv = 0, k;
         for (k = 0; k < CHAR_VARIANTS; k++) tv += r->body[k].count + r->thigh[k].count + r->shin[k].count + r->uarm[k].count + r->farm[k].count;
@@ -682,6 +764,7 @@ void r_set_quality(Renderer *r, int q) {
 #endif
         (void)q;
     }
+    r->ultra = r->hq && q >= 4;   /* v6.2.0 ULTRA+ */
     r->shadowsOn = r->hq;
 #ifdef SGB_HAVE_FBO
     if (!SGB_HAVE_FBO()) { r->shadowsOn = 0; return; }
@@ -710,7 +793,7 @@ void r_set_quality(Renderer *r, int q) {
         plat_log("SGB-HQ: schaduwkaart %dx%d %s", r->shSize, r->shSize, r->shOk ? "ok" : "MISLUKT");
     }
     if (!r->shOk) r->shadowsOn = 0;
-    r->shArea = q >= 3 ? 220.0f : 150.0f;
+    r->shArea = q >= 4 ? 190.0f : (q >= 3 ? 220.0f : 150.0f);   /* ULTRA+: scherpere schaduwen dichtbij */
 }
 
 static void lerp3(float *o, const float *a, const float *b, float t) { int i; for (i = 0; i < 3; i++) o[i] = a[i] + (b[i] - a[i]) * t; }
@@ -1068,6 +1151,7 @@ static void draw_sky(Renderer *r, Game *g) {
     glUniform3f(r->skFog, r->fogCol[0], r->fogCol[1], r->fogCol[2]);
     glUniform1f(r->skRain, r->rain);
     glUniform1f(r->skTime, g->time);
+    glUniform1f(r->skUltra, r->ultra ? 1.0f : 0.0f);
     bind_mesh(&r->skyDome);
     glDrawArrays(GL_TRIANGLES, 0, r->skyDome.count);
     r->drawCalls++;
@@ -1181,6 +1265,8 @@ static void draw_scene_one(Renderer *r, Game *g) {
         glUniform1f(r->hqTexel, r->shSize > 0 ? 1.0f / (float)r->shSize : 0.0f);
         glUniform1f(r->hqRain, r->rain);
         glUniform1f(r->hqTime, g->time);
+        glUniform1f(r->hqUltra, r->ultra ? 1.0f : 0.0f);
+        glUniform1f(r->hqEmis2, r->emis);
         glUniform3f(r->hqSkyTop, r->skyTop[0], r->skyTop[1], r->skyTop[2]);
         glUniform3f(r->hqSkyHor, r->skyHor[0], r->skyHor[1], r->skyHor[2]);
         glActiveTexture(GL_TEXTURE1);
