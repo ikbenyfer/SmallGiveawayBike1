@@ -18,10 +18,16 @@ mkdir -p $P/app/src/main/java/nl/yf/smallgiveawaybike1/vr
 cp Quest/QuestActivity.java $P/app/src/main/java/nl/yf/smallgiveawaybike1/vr/
 
 # OpenXR-loader voor Android (Khronos)
+# Maven Central geeft soms 429 (te veel verzoeken): ook de Google-mirror, en een paar keer opnieuw met pauze
 ok=0
-for v in 1.1.47 1.1.46 1.1.43 1.1.41 1.1.38 1.1.36 1.0.34; do
-  u=https://repo1.maven.org/maven2/org/khronos/openxr/openxr_loader_for_android/$v/openxr_loader_for_android-$v.aar
-  if curl -fsSL -o openxr.aar "$u"; then echo "OpenXR-loader $v"; ok=1; break; fi
+for try in 1 2 3 4; do
+  for host in https://maven-central.storage-download.googleapis.com/maven2 https://repo1.maven.org/maven2 https://repo.maven.apache.org/maven2; do
+    for v in 1.1.47 1.1.46 1.1.43 1.1.41; do
+      u=$host/org/khronos/openxr/openxr_loader_for_android/$v/openxr_loader_for_android-$v.aar
+      if curl -fsSL --retry 2 --retry-delay 5 -o openxr.aar "$u"; then echo "OpenXR-loader $v van $host"; ok=1; break 3; fi
+    done
+  done
+  echo "poging $try mislukt, even wachten"; sleep 20
 done
 [ $ok = 1 ] || { echo "OpenXR-loader niet gevonden"; exit 1; }
 rm -rf oxr && mkdir oxr && (cd oxr && unzip -q ../openxr.aar)
