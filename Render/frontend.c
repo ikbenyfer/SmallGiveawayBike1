@@ -929,7 +929,7 @@ void fe_vr_pointer(int on, float x, float y) {
 
 static const float PCOL[PP_COUNT][3] = {{0.15f, 0.15f, 0.17f}, {0.32f, 0.42f, 0.6f}, {0.85f, 0.2f, 0.2f}, {0.45f, 0.45f, 0.5f},
                                          {0.12f, 0.12f, 0.13f}, {0.92f, 0.92f, 0.9f}, {1.0f, 0.55f, 0.15f}};
-static const char *PSHORT[PP_COUNT] = {"", "BLK", "SEAT", "MOT", "WHL", "WING", "JET"};
+static const char *PH_SHORT[PP_COUNT] = {"", "BLK", "SEAT", "MOT", "WHL", "WING", "JET"};
 
 static void design_load(void) {
     char *d = NULL; long len = 0;
@@ -975,7 +975,7 @@ static void draw_build(void) {
             if (below && !cur) ui_rect(R, cx + 6, cy + 6, BG_C - 12, BG_C - 12, PCOL[below][0], PCOL[below][1], PCOL[below][2], 0.3f);
             if (cur) {
                 ui_rect(R, cx + 3, cy + 3, BG_C - 6, BG_C - 6, PCOL[cur][0], PCOL[cur][1], PCOL[cur][2], 1);
-                ui_text(R, PSHORT[cur], cx + BG_C * 0.5f, cy + 16, 15, cur == PP_WING ? 0.1f : 1, cur == PP_WING ? 0.1f : 1, cur == PP_WING ? 0.1f : 1, 1, 1);
+                ui_text(R, PH_SHORT[cur], cx + BG_C * 0.5f, cy + 16, 15, cur == PP_WING ? 0.1f : 1, cur == PP_WING ? 0.1f : 1, cur == PP_WING ? 0.1f : 1, 1, 1);
             }
         }
     ui_text(R, "FRONT", BG_X + PH_GX * BG_C * 0.5f, BG_Y - 30, 18, 0.8f, 0.9f, 1, 1, 1);
@@ -3758,11 +3758,11 @@ static void autotest_tick(float dt) {
         else if (F.atStep == 160) {   /* v6.0.1 PHYSICS-modus */
             ph_default(&F.G.design);
             F.G.design.c[1][1][3] = PP_JET;
-            open_builder();
+            phys_go(0);
+            rep("Physics gestart: aan=%d, %d onderdelen, %.0f kg", g->physOn, g->craft.np, g->craft.mass);
             F.atT3 = t;
-            F.atStep++;
+            F.atStep = 162;
         }
-        else if (F.atStep == 161 && t > F.atT3 + 1.0f) { at_shot("50_builder"); phys_go(0); F.atT3 = t; F.atStep++; }
         else if (F.atStep == 162) {   /* rijden */
             in->gas = 1;
             in->mx = t > F.atT3 + 3.0f ? 0.7f : 0.0f;
@@ -3782,12 +3782,11 @@ static void autotest_tick(float dt) {
         else if (F.atStep == 164 && t > F.atT3 + 2.5f) {
             rep("Physics-crash: kapot %d onderdelen, brokstukken, stoel heel=%d", g->craft.broken, !g->craft.crashed);
             at_shot("52_physics_crash");
-            g->physWantBuild = 1;
             F.atT3 = t; F.atStep++;
         }
         else if (F.atStep == 165 && t > F.atT3 + 0.5f) {
-            rep("Physics: terug in het bouwscherm=%d, physics uit=%d", F.state == ST_BUILD, !g->physOn);
-            set_state(ST_GAME);
+            game_phys_stop(g);
+            rep("Physics gestopt: uit=%d", !g->physOn);
             F.atStep = 140;
         }
 #else
