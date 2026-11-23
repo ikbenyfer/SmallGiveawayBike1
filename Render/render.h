@@ -25,6 +25,19 @@ typedef struct {
     float uiOff;           /* paneelmodus: UI-coordinaat 0 ligt uiOff pixels rechts van de schermrand (breedbeeld) */
     GLuint progW, progU;
     GLint wVP, wModel, wSun, wSunCol, wAmb, wCam, wFog, wFogCol, wTint, wEmis, wAlpha, wUnlit;
+    /* v6.0 grafische upgrade: 0 = gewone shader, 1 = HQ (per pixel, materialen, schaduwen), 2 = schaduw-pass */
+    GLuint prog[3];
+    GLint loc[3][12];
+    GLint hqShadowVP, hqShadowTex, hqShadowOn, hqTexel, hqRain, hqTime, hqSkyTop, hqSkyHor;
+    GLuint progSky; GLint skVP, skModel, skTop, skHor, skSun, skSunCol, skAmb, skFog, skRain, skTime;
+    GMesh skyDome, rainMesh;
+    GLuint shFbo, shTex, shDepth; int shSize, shOk;
+    M4 shVP;
+    int pass;          /* 1 = schaduw-pass */
+    int hq;            /* kwaliteit Hoog: HQ-shader */
+    int shadowsOn;     /* schaduwen (kan automatisch uit bij lage fps) */
+    float rain;        /* 0..1 regen (nat asfalt, druppels) */
+    float hours;       /* tijd van de dag (alleen informatief) */
     GLint uProj, uTex;
 
     /* v3.0: gladde modellen dichtbij, de oude blokmodellen (Lo) ver weg */
@@ -81,7 +94,9 @@ typedef struct {
     GMesh handMesh[4], wheelMesh;   /* 0/1 open links/rechts, 2/3 vuist links/rechts */
 } Renderer;
 
-int r_init(Renderer *r, int w, int h);          /* shaders, basistexturen, logo + achtergrond */
+int r_init(Renderer *r, int w, int h);
+void r_set_quality(Renderer *r, int q);           /* v6.0: 2 = HQ-shader + schaduwen */
+void r_set_time(Renderer *r, float hours, float rain);   /* v6.0: vloeiende dag/nacht + weer */          /* shaders, basistexturen, logo + achtergrond */
 int r_load_font(Renderer *r);
 void r_upload_world(Renderer *r, World *w, int slot); /* chunks naar VBO's, CPU-geheugen vrij */
 void r_build_models(Renderer *r);

@@ -1,6 +1,7 @@
 #include "mesh.h"
 
 float g_sqDetail = 1.0f;
+int g_meshMat;
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -27,7 +28,7 @@ static void put(MeshB *m, V3 p, V3 n, Col c) {
     v->nx = (int8_t)clampf(n.x * 127.0f, -127, 127);
     v->ny = (int8_t)clampf(n.y * 127.0f, -127, 127);
     v->nz = (int8_t)clampf(n.z * 127.0f, -127, 127);
-    v->pad = 0;
+    v->pad = (int8_t)g_meshMat;
     v->r = c.r; v->g = c.g; v->b = c.b; v->a = c.a;
 }
 

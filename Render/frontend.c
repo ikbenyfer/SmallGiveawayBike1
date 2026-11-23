@@ -186,6 +186,16 @@ static void set_state(int s) {
     F.prevState = F.state; F.state = s; F.st = 0; F.pressed = 0;
 }
 
+/* v6.0: tijd en weer toepassen (LIVE loopt elke frame mee met de speltijd) */
+static void tod_apply(void) {
+    if (F.tod <= 2) { r_set_tod(&F.R, F.tod); F.R.rain = 0; }
+    else if (F.tod == 3) r_set_time(&F.R, 13.0f, 1.0f);
+    else {
+        float tm = F.G.time, w = sinf(tm * 0.0021f) + sinf(tm * 0.0057f + 1.3f);
+        r_set_time(&F.R, fmodf(10.0f + tm / 50.0f, 24.0f), clampf((w - 0.9f) * 1.4f, 0, 1));
+    }
+}
+
 static void apply_settings(void) {
     static const float sens[3] = {0.6f, 1.0f, 1.5f};
     ns_set_detail(F.quality >= 2);
@@ -195,7 +205,8 @@ static void apply_settings(void) {
         F.G.invertY = F.invertY;
         F.G.autoAim = F.autoAim;
     }
-    r_set_tod(&F.R, F.tod);
+    tod_apply();
+    r_set_quality(&F.R, F.quality);
 }
 
 /* ------------------------------------------------------------------ opslagslots (v3.3)
@@ -314,7 +325,8 @@ void fe_init(int w, int h) {
         static const char *const loops[LOOP_COUNT] = {"engine", "bike", "siren"};
         plat_audio_init(sfx, SFX_COUNT, loops, LOOP_COUNT);
     }
-    r_set_tod(&F.R, F.tod);
+    tod_apply();
+    r_set_quality(&F.R, plat_load_int("quality", 1));
     world_init(&F.W);
     F.loadTotal = 1 + world_build_steps() + 3;
     F.at = plat_autotest_requested();
@@ -544,7 +556,7 @@ static void draw_menu(void) {
 }
 
 static const char *Q_NAMES[3] = {"LOW", "MEDIUM", "HIGH"};
-static const char *T_NAMES[3] = {"DUSK", "NIGHT", "DAY"};
+static const char *T_NAMES[5] = {"DUSK", "NIGHT", "DAY", "RAIN", "LIVE (DAY/NIGHT + WEATHER)"};
 static const char *C_NAMES[3] = {"SLOW", "NORMAL", "FAST"};
 
 static void draw_settings(void) {
@@ -553,7 +565,7 @@ static void draw_settings(void) {
     const char *labels[9] = {"GRAPHICS", "TIME OF DAY", "CAMERA SPEED", "INVERT CAMERA Y", "SHOW FPS", "AUTO AIM", "MUSIC", "SOUND EFFECTS", "RESET PROGRESS"};
     const char *vals[9];
     vals[0] = Q_NAMES[F.quality % 3];
-    vals[1] = T_NAMES[F.tod % 3];
+    vals[1] = T_NAMES[F.tod % 5];
     vals[2] = C_NAMES[F.camSpeed % 3];
     vals[3] = F.invertY ? "ON" : "OFF";
     vals[4] = F.showFps ? "ON" : "OFF";
@@ -2853,7 +2865,7 @@ static void menu_tap(float x, float y, int phase) {
         if (hit == 20) { F.controlsFrom = F.prevState; set_state(ST_CONTROLS); return; }
         switch (hit) {
         case 1: F.quality = (F.quality + 1) % 3; break;
-        case 2: F.tod = (F.tod + 1) % 3; break;
+        case 2: F.tod = (F.tod + 1) % 5; break;
         case 3: F.camSpeed = (F.camSpeed + 1) % 3; break;
         case 4: F.invertY = !F.invertY; break;
         case 5: F.showFps = !F.showFps; break;
@@ -3100,8 +3112,10 @@ static void autotest_tick(float dt) {
         else if (F.atStep == 32 && t > 47.5f) { F.quality = 2; apply_settings(); F.atStep++; }
         else if (F.atStep == 33 && t > 51.0f) { at_shot("12_quality_high"); F.atStep++; }
         else if (F.atStep == 34 && t > 53.5f) { F.tod = 1; apply_settings(); F.atStep++; }
-        else if (F.atStep == 35 && t > 56.0f) { at_shot("13_night"); F.atStep++; }
+        else if (F.atStep == 35 && t > 56.0f) { at_shot("13_night"); F.tod = 3; apply_settings(); F.atStep++; }
         else if (F.atStep == 36 && t > 58.5f) {
+            at_shot("13b_rain");   /* v6.0: regen, natte weg */
+            rep("HQ: shader=%d, schaduwen=%d (kaart %d), regen=%.1f", F.R.hq, F.R.shadowsOn, F.R.shSize, F.R.rain);
             F.tod = 0; apply_settings();
             F.quality = 1; apply_settings();
             game_add_wanted(g, 2);
@@ -3864,6 +3878,12 @@ void fe_frame(double now) {
         }
         ui_flush(R);
         F.perfT += dt;
+        if (F.tod == 4) tod_apply();   /* v6.0 LIVE: dag/nacht en weer lopen mee */
+        {   /* v6.0: automatisch schaduwen uit als het te traag wordt */
+            static float lowT;
+            if (F.quality >= 2 && F.R.shadowsOn && F.fps > 1 && F.fps < 32.0f) lowT += dt; else lowT = 0;
+            if (lowT > 6.0f) { F.R.shadowsOn = 0; lowT = 0; game_message(&F.G, "Shadows off to keep the game smooth", 3.0f); plat_log("SGB-HQ: schaduwen automatisch uit (fps %.0f)", F.fps); }
+        }
         if (F.perfT > 10.0f) {
             F.perfT = 0;
             plat_log("SGB-PERF fps=%.1f min=%.1f dc=%d tris=%d modus=%d kwaliteit=%d peds=%d verkeer=%d",

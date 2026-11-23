@@ -88,7 +88,9 @@ static void window_at(V3 A, V3 dir, V3 n, float tc, float hw, float y0, float y1
         Col fr = light ? col(226, 224, 216) : col(70, 66, 62);
         face_quad(A, dir, n, tc - hw - 0.09f, tc + hw + 0.09f, y0 - 0.09f, y1 + 0.09f, 0.03f, fr);
     }
+    g_meshMat = MAT_GLASS;
     face_quad(A, dir, n, tc - hw, tc + hw, y0, y1, 0.045f, glass);
+    g_meshMat = MAT_DEFAULT;
     if (g_worldDetail >= 2) {
         protrude_box(A, dir, n, tc - hw - 0.14f, tc + hw + 0.14f, y0 - 0.16f, y0 - 0.06f, 0.0f, 0.14f, col_mul(wall, 0.82f));
         if (hw >= 0.55f) face_quad(A, dir, n, tc - 0.035f, tc + 0.035f, y0, y1, 0.05f, col(226, 224, 216));
@@ -146,7 +148,9 @@ static void building(float x0, float z0, float x1, float z1, int floors, Col wal
     Col roof = col_mul(wall, 0.55f);
     int k;
     cur->ao = 0.35f;
+    g_meshMat = MAT_BRICK;
     mb_box2(cur, v3(x0, CURB, z0), v3(x1, h, z1), roof, wall, BOX_NOBOTTOM);
+    g_meshMat = MAT_DEFAULT;
     cur->ao = 0;
     /* dakrand */
     {
@@ -196,7 +200,9 @@ static void building(float x0, float z0, float x1, float z1, int floors, Col wal
                 startf = 1;
                 if (shop) {
                     Col aw = col(60 + rng_int(r, 190), 60 + rng_int(r, 150), 60 + rng_int(r, 120));
+                    g_meshMat = MAT_GLASS;
                     face_quad(A, dir, n, 1.0f, L - 1.0f, CURB + 0.25f, CURB + 2.7f, 0.04f, col_e(200, 220, 230, 150));
+                    g_meshMat = MAT_DEFAULT;
                     face_quad(A, dir, n, L * 0.5f - 0.8f, L * 0.5f + 0.8f, CURB, CURB + 2.5f, 0.06f, col(60, 45, 35));
                     protrude_box(A, dir, n, 0.6f, L - 0.6f, CURB + 2.85f, CURB + 3.05f, 0.0f, 1.4f, aw);
                     protrude_box(A, dir, n, 1.5f, L - 1.5f, CURB + 3.2f, CURB + 4.0f, 0.0f, 0.25f, col_e(aw.r, aw.g, aw.b, 170));
@@ -239,7 +245,9 @@ static void house(float x0, float z0, float x1, float z1, int door, Rng *r) {
     cur->ao = 0.3f;
     mb_box2(cur, v3(x0, CURB, z0), v3(x1, h, z1), wall, wall, BOX_NOBOTTOM | BOX_NOTOP);
     cur->ao = 0;
+    g_meshMat = MAT_ROOF;
     mb_roof(cur, x0 - 0.4f, z0 - 0.4f, x1 + 0.4f, z1 + 0.4f, h, 2.0f, 1, roof, wall);
+    g_meshMat = MAT_DEFAULT;
     if (g_worldDetail >= 2) {   /* dakgoten */
         mb_box(cur, v3(x0 - 0.45f, h - 0.12f, z0 - 0.52f), v3(x1 + 0.45f, h + 0.02f, z0 - 0.36f), col(220, 220, 216), 0);
         mb_box(cur, v3(x0 - 0.45f, h - 0.12f, z1 + 0.36f), v3(x1 + 0.45f, h + 0.02f, z1 + 0.52f), col(220, 220, 216), 0);
@@ -435,7 +443,9 @@ static void gen_houses(float ix0, float iz0, float ix1, float iz1, Rng *r, int b
 static void gen_park(float ix0, float iz0, float ix1, float iz1, Rng *r, int stage) {
     float cx = (ix0 + ix1) * 0.5f, cz = (iz0 + iz1) * 0.5f;
     int k;
+    g_meshMat = MAT_GRASS;
     mb_flat(cur, ix0, iz0, ix1, iz1, CURB + 0.02f, col(70, 145, 62));
+    g_meshMat = MAT_DEFAULT;
     mb_flat(cur, ix0, cz - 1.5f, ix1, cz + 1.5f, CURB + 0.04f, col(190, 175, 140));
     mb_flat(cur, cx - 1.5f, iz0, cx + 1.5f, cz - 1.5f, CURB + 0.04f, col(190, 175, 140));
     mb_flat(cur, cx - 1.5f, cz + 1.5f, cx + 1.5f, iz1, CURB + 0.04f, col(190, 175, 140));
@@ -648,6 +658,41 @@ static void gen_bank(float ix0, float iz0, float ix1, float iz1, Rng *r) {
     add_park(ix0 + 8.0f, iz1 - 5.0f, PI_F * 0.5f, VEH_CAR, 5);
 }
 
+/* v6.0: verkeerslicht op een hoek (paal, arm over de weg, kast met drie lampen) */
+static void traffic_light(float x, float z, float ax, float az, int green) {
+    Col pole = col(48, 50, 54), box = col(22, 22, 24);
+    float hx = x + ax * 2.2f, hz = z + az * 2.2f;
+    g_meshMat = MAT_SHINY;
+    mb_box(cur, v3(x - 0.08f, CURB, z - 0.08f), v3(x + 0.08f, CURB + 5.2f, z + 0.08f), pole, BOX_NOBOTTOM);
+    mb_box(cur, v3(fminf(x, hx) - 0.05f, CURB + 5.0f, fminf(z, hz) - 0.05f), v3(fmaxf(x, hx) + 0.05f, CURB + 5.12f, fmaxf(z, hz) + 0.05f), pole, 0);
+    mb_box(cur, v3(hx - 0.2f, CURB + 4.05f, hz - 0.2f), v3(hx + 0.2f, CURB + 5.0f, hz + 0.2f), box, 0);
+    mb_box(cur, v3(x - 0.16f, CURB + 2.2f, z - 0.16f), v3(x + 0.16f, CURB + 3.0f, z + 0.16f), box, 0);   /* voetgangerslicht */
+    g_meshMat = MAT_DEFAULT;
+    {
+        int k;
+        for (k = 0; k < 3; k++) {
+            int on = green ? k == 2 : k == 0;
+            Col c = k == 0 ? (on ? col_e(255, 40, 30, 255) : col(70, 16, 14)) : (k == 1 ? col(70, 60, 14) : (on ? col_e(60, 255, 120, 255) : col(14, 60, 24)));
+            mb_box(cur, v3(hx - 0.21f, CURB + 4.78f - k * 0.3f, hz - 0.21f), v3(hx + 0.21f, CURB + 4.98f - k * 0.3f, hz + 0.21f), c, 0);
+        }
+        mb_box(cur, v3(x - 0.17f, CURB + 2.6f, z - 0.17f), v3(x + 0.17f, CURB + 2.9f, z + 0.17f), green ? col_e(240, 240, 240, 220) : col_e(255, 60, 40, 220), 0);
+    }
+    add_box(x - 0.15f, z - 0.15f, x + 0.15f, z + 0.15f, 5.2f, BOX_PROP);
+}
+
+static void bin(float x, float z) {
+    g_meshMat = MAT_SHINY;
+    mb_cyl(cur, v3(x, CURB + 0.45f, z), 0.28f, 0.9f, 10, 1, col(40, 70, 50), col(30, 30, 32), 1);
+    g_meshMat = MAT_DEFAULT;
+    add_box(x - 0.3f, z - 0.3f, x + 0.3f, z + 0.3f, CURB + 0.9f, BOX_PROP);
+}
+
+static void street_sign(float x, float z) {
+    mb_box(cur, v3(x - 0.04f, CURB, z - 0.04f), v3(x + 0.04f, CURB + 2.9f, z + 0.04f), col(150, 150, 154), BOX_NOBOTTOM);
+    mb_box(cur, v3(x - 0.45f, CURB + 2.55f, z - 0.03f), v3(x + 0.45f, CURB + 2.85f, z + 0.03f), col(30, 60, 150), 0);
+    mb_box(cur, v3(x - 0.03f, CURB + 2.55f, z - 0.45f), v3(x + 0.03f, CURB + 2.85f, z + 0.45f), col(30, 60, 150), 0);
+}
+
 static void gen_block(int i, int j) {
     char t = W->type[j][i];
     float bx0 = block_x0(i), bz0 = block_x0(j), bx1 = bx0 + BLOCKW, bz1 = bz0 + BLOCKW;
@@ -657,7 +702,9 @@ static void gen_block(int i, int j) {
     r.s = 1234567u + (uint32_t)i * 7919u + (uint32_t)j * 104729u;
     at((bx0 + bx1) * 0.5f, (bz0 + bz1) * 0.5f);
     /* stoeptegel-plaat met stoeprand */
+    g_meshMat = MAT_CONCRETE;
     mb_box2(cur, v3(bx0, 0, bz0), v3(bx1, CURB, bz1), col(158, 156, 150), col(118, 116, 110), BOX_NOBOTTOM);
+    g_meshMat = MAT_DEFAULT;
     /* lantaarns langs de stoep */
     for (k = 0; k < 2; k++) {
         float t2 = 11.0f + k * 22.0f;
@@ -665,6 +712,15 @@ static void gen_block(int i, int j) {
         lamp(bx0 + t2, bz1 - 0.5f, 0, 1);
         lamp(bx0 + 0.5f, bz0 + t2, -1, 0);
         lamp(bx1 - 0.5f, bz0 + t2, 1, 0);
+    }
+    if (t != 'P') {   /* v6.0: straatmeubilair op de hoeken */
+        traffic_light(bx0 + 0.6f, bz0 + 0.6f, -1, 0, (i + j) & 1);
+        traffic_light(bx1 - 0.6f, bz1 - 0.6f, 1, 0, (i + j) & 1);
+        if (g_worldDetail >= 1) {
+            street_sign(bx1 - 0.7f, bz0 + 0.7f);
+            bin(bx0 + 15.0f, bz0 + 0.9f);
+            bin(bx1 - 15.0f, bz1 - 0.9f);
+        }
     }
     switch (t) {
     case 'D':
@@ -687,6 +743,7 @@ static void gen_block(int i, int j) {
 
 static void gen_roads(void) {
     int k, s;
+    g_meshMat = MAT_ASPHALT;
     Col asph = col(56, 56, 62), dash = col_e(230, 200, 60, 30), white = col(220, 220, 215);
     for (k = 0; k <= NB; k++) {
         float r0 = k * PITCH, r1 = r0 + ROADW, rc = r0 + ROADW * 0.5f;
@@ -717,6 +774,7 @@ static void gen_roads(void) {
             }
         }
     }
+    g_meshMat = MAT_DEFAULT;
 }
 
 static void gen_outer(void) {

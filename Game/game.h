@@ -160,6 +160,7 @@ typedef struct {
     float cutT, cutLineT, cutShotT, cutX, cutZ, cutH;
     /* v5.0 VR: richten met de rechtercontroller (first person) */
     int vrAim; float vrAimYaw; V3 vrMuzzle;
+    float camFov;      /* v6.0: beeldhoek (graden), wijder bij hoge snelheid */
 } Game;
 
 void game_init(Game *g, World *w);

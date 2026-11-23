@@ -672,7 +672,16 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    if (plat_load_int("quality", 1) >= 2) {   /* v6.0: anti-aliasing (MSAA 4x) op Hoog */
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+    }
     win = SDL_CreateWindow("Small Giveaway Bike 1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    if (!win) {   /* geen MSAA mogelijk: zonder proberen */
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+        win = SDL_CreateWindow("Small Giveaway Bike 1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    }
     if (win) SDL_SetWindowMinimumSize(win, 640, 400);
 #endif
     if (!win) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Small Giveaway Bike 1", SDL_GetError(), NULL); return 1; }
@@ -690,6 +699,15 @@ int main(int argc, char **argv) {
     if (!ctx) {   /* sommige toestellen hebben geen 24-bits diepte */
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
         ctx = SDL_GL_CreateContext(win);
+    }
+#endif
+#if !defined(SGB_TOUCH)
+    if (!ctx) {   /* context met MSAA lukt niet: venster opnieuw zonder */
+        SDL_DestroyWindow(win);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+        win = SDL_CreateWindow("Small Giveaway Bike 1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+        ctx = win ? SDL_GL_CreateContext(win) : NULL;
     }
 #endif
 #ifdef _WIN32

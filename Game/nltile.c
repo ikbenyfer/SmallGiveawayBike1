@@ -606,6 +606,8 @@ static Col roof_col(int sloped, unsigned hsh) {
 
 static unsigned grp_hash(const TFeat *f) { unsigned h = (unsigned)f->grp * 2654435761u; return h ^ (h >> 15); }
 
+static int g_nlBrick;   /* v6.0: gevel van baksteen (oudere panden) */
+
 /* gevel van (x0,z0) naar (x1,z1): van onderkant ya/yb tot bovenkant ta/tb, met ramen als dat kan */
 static void wall_strip(BCtx *b, float x0, float z0, float x1, float z1, float ya, float yb, float ta, float tb,
                        Col wall, int windows, unsigned hsh) {
@@ -617,8 +619,10 @@ static void wall_strip(BCtx *b, float x0, float z0, float x1, float z1, float ya
     nrm = v3(ez / L, 0, -ex / L);
     dir = v3(ex / L, 0, ez / L);
     m = sub_at(b, (x0 + x1) * 0.5f, (z0 + z1) * 0.5f);
+    g_meshMat = g_nlBrick ? MAT_BRICK : MAT_DEFAULT;
     mb_quad4(m, v3(x0, ya, z0), v3(x1, yb, z1), v3(x1, tb, z1), v3(x0, ta, z0), nrm,
              col_mul(wall, ya < 0.1f ? 0.72f : 0.95f), col_mul(wall, yb < 0.1f ? 0.72f : 0.95f), wall, wall);
+    g_meshMat = MAT_DEFAULT;
     if (!windows || L < 2.6f) return;
     top = fminf(ta, tb);
     floors = (int)((top - 0.4f) / 2.9f);
@@ -643,13 +647,16 @@ static void wall_strip(BCtx *b, float x0, float z0, float x1, float z1, float ya
             }
             mb_quad(m, fa, fc, v3(fc.x, y + wh + 0.07f, fc.z), v3(fa.x, y + wh + 0.07f, fa.z), nrm, fr);   /* kozijn */
             a.x += nrm.x * 0.01f; a.z += nrm.z * 0.01f; c2.x += nrm.x * 0.01f; c2.z += nrm.z * 0.01f;
+            g_meshMat = MAT_GLASS;
             mb_quad(m, a, c2, v3(c2.x, y + wh, c2.z), v3(a.x, y + wh, a.z), nrm, c);
+            g_meshMat = MAT_DEFAULT;
         }
     }
 }
 
 static void roof_poly(BCtx *b, const float *x, const float *z, const float *y, int n, V3 nrm, Col c) {
     int t, cnt = triangulate(x, z, n);
+    g_meshMat = nrm.y < 0.97f ? MAT_ROOF : MAT_DEFAULT;
     MeshB *m;
     float cx = 0, cz = 0;
     for (t = 0; t < n; t++) { cx += x[t]; cz += z[t]; }
@@ -658,6 +665,7 @@ static void roof_poly(BCtx *b, const float *x, const float *z, const float *y, i
         int a = tri_idx[t * 3], bb = tri_idx[t * 3 + 1], cc = tri_idx[t * 3 + 2];
         mb_tri(m, v3(x[a], y[a], z[a]), v3(x[bb], y[bb], z[bb]), v3(x[cc], y[cc], z[cc]), nrm, c);
     }
+    g_meshMat = MAT_DEFAULT;
 }
 
 static float ry_[MAXP];
@@ -669,6 +677,7 @@ static void building(BCtx *b, const TFeat *f) {
     float eave = hip ? f->h0 : f->h;
     Col wall = facade_col(f->year, hsh), roof = roof_col(hip, hsh);
     if (n < 3) return;
+    g_nlBrick = f->year < 1985 && !(f->year == 0 && f->h > 25);
     if (f->year == 0 && f->h > 25) wall = col(150 + (int)(hsh % 40), 150 + (int)(hsh % 40), 156 + (int)(hsh % 40));
     for (i = 0; i < n; i++) {
         int j = (i + 1) % n;
@@ -704,9 +713,11 @@ static void building(BCtx *b, const TFeat *f) {
             nr = v3(ez / L, 0, -ex / L);
             run = fabsf((wx_[i] - ix[i]) * nr.x + (wz_[i] - iz[i]) * nr.z) + 0.01f;
             rn = v3norm(v3(nr.x * rise / run, 1.0f, nr.z * rise / run));
+            g_meshMat = MAT_ROOF;
             mb_quad4(sub_at(b, (wx_[i] + wx_[j]) * 0.5f, (wz_[i] + wz_[j]) * 0.5f),
                      v3(wx_[i] + nr.x * 0.25f, eave - 0.1f, wz_[i] + nr.z * 0.25f), v3(wx_[j] + nr.x * 0.25f, eave - 0.1f, wz_[j] + nr.z * 0.25f),
                      v3(ix[j], f->h, iz[j]), v3(ix[i], f->h, iz[i]), rn, col_mul(roof, 0.9f), col_mul(roof, 0.9f), roof, roof);
+            g_meshMat = MAT_DEFAULT;
         }
         for (i = 0; i < n; i++) ry_[i] = f->h;
         roof_poly(b, ix, iz, ry_, n, v3(0, 1, 0), roof);
@@ -779,6 +790,7 @@ static void build_faces(BCtx *b, const TileData *td) {
         V3 nrm;
         if (f->code != BK_FACE) continue;
         wall = facade_col(f->year, hsh); roof = roof_col(f->sl > 0, hsh);
+        g_nlBrick = f->year < 1985;
         if (f->sl > 0) {
             float s = sinf(f->sl * PI_F / 180.0f), c = cosf(f->sl * PI_F / 180.0f);
             nrm = v3(s * sinf(f->az * PI_F / 180.0f), c, -s * cosf(f->az * PI_F / 180.0f));
@@ -886,19 +898,25 @@ void tb_build(const TileData *td, float wx0, float wzS, TileBuilt *out) {
         Col c = terrain_col(td->t[i].code);
         if (n < 3) continue;
         raster_poly(&b, wx_, wz_, n, (int)(c.r * 0.8f), (int)(c.g * 0.8f), (int)(c.b * 0.8f));
+        g_meshMat = c.g > c.r + 10 ? MAT_GRASS : MAT_DEFAULT;
         flat_poly(&b, wx_, wz_, n, 0.01f, c);
+        g_meshMat = MAT_DEFAULT;
         out->nt++;
     }
     for (i = 0; i < td->nw; i++) {
         int n = to_world(&b, &td->w[i], 1);
         if (n < 3) continue;
         raster_poly(&b, wx_, wz_, n, 70, 120, 175);
+        g_meshMat = MAT_WATER;
         flat_poly(&b, wx_, wz_, n, 0.03f, col_e(58, 104, 150, 30));
+        g_meshMat = MAT_DEFAULT;
         out->nw++;
     }
     nameAt = (int *)malloc(sizeof(int) * (size_t)(td->nnames > 0 ? td->nnames : 1));
     for (i = 0; i < td->nnames; i++) nameAt[i] = add_name(&b, td->names[i]);
+    g_meshMat = MAT_ASPHALT;
     for (i = 0; i < td->nr; i++) road(&b, &td->r[i], td->r[i].name >= 0 && td->r[i].name < td->nnames ? nameAt[td->r[i].name] : -1);
+    g_meshMat = MAT_DEFAULT;
     free(nameAt);
     for (i = 0; i < td->nb; i++) { b.idx = i; if (td->b[i].code != BK_FACE) building(&b, &td->b[i]); }
     build_faces(&b, td);

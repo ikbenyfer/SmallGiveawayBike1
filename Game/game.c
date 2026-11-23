@@ -961,6 +961,7 @@ void game_init(Game *g, World *w) {
     g->rng.s = 20261118u;
     g->mission = -1;
     g->voReq = -1; g->voLine = -1;
+    g->camFov = 58.0f;
     g->nl = w->real;
     g->autoAim = 1;
     g->p.x = w->poi[POI_SPAWN].x;
@@ -1353,6 +1354,16 @@ static void update_camera(Game *g, const Input *in, float dt) {
             want.x = clampf(want.x, x0 + 0.3f, x1 - 0.3f);
             want.z = clampf(want.z, z0 + 0.3f, z1 - 0.3f);
             want.y = fminf(want.y, STORE_H - 0.5f);
+        }
+        {   /* v6.0 GTA IV-achtige camera: zacht verende volgcamera, wijdere blik en een klein beetje trilling bij hoge snelheid */
+            float sp = mode == MODE_FOOT ? 0.0f : fabsf(g->veh[g->p.veh].speed);
+            float fov = 58.0f + (mode == MODE_FOOT ? 0.0f : clampf(sp / 22.0f, 0, 1) * 11.0f);
+            g->camFov = approachf(g->camFov > 1.0f ? g->camFov : 58.0f, fov, 12.0f * dt);
+            if (!indoors && !inStore && !g->cut && v3len(v3sub(want, g->camPos)) < 10.0f) {
+                float k = 1.0f - expf(-dt * (mode == MODE_FOOT ? 16.0f : 10.0f));
+                want = v3lerp(g->camPos, want, k);
+                if (sp > 14.0f) want.y += sinf(g->time * 37.0f) * 0.012f * clampf((sp - 14.0f) / 10.0f, 0, 1);
+            }
         }
         g->camPos = want;
         g->camTarget = target;

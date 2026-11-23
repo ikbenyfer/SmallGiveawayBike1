@@ -68,12 +68,226 @@ static const char *FS_U =
     "uniform sampler2D uTex;\n"
     "void main() { gl_FragColor = texture2D(uTex, vUV) * vCol; }\n";
 
+
+/* ------------------------------------------------------------------ v6.0 HQ-shaders (kwaliteit Hoog) */
+
+#define HQ_PREC "#ifdef GL_ES\n#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n#endif\n"
+
+static const char *VS_HQ =
+    "attribute vec3 aPos;\n"
+    "attribute vec4 aNrm;\n"
+    "attribute vec4 aCol;\n"
+    "uniform mat4 uVP;\n"
+    "uniform mat4 uModel;\n"
+    "uniform mat4 uShadowVP;\n"
+    "uniform vec4 uTint;\n"
+    "uniform vec3 uCam;\n"
+    "uniform vec2 uFog;\n"
+    "varying vec3 vCol;\n"
+    "varying vec3 vN;\n"
+    "varying vec3 vW;\n"
+    "varying vec4 vSh;\n"
+    "varying float vFog;\n"
+    "varying float vMat;\n"
+    "varying float vEm;\n"
+    "void main() {\n"
+    "  vec4 wp = uModel * vec4(aPos, 1.0);\n"
+    "  vW = wp.xyz;\n"
+    "  vN = (uModel * vec4(aNrm.xyz, 0.0)).xyz;\n"
+    "  vCol = aCol.rgb * uTint.rgb;\n"
+    "  vEm = aCol.a;\n"
+    "  vMat = floor(aNrm.w * 127.0 + 0.5);\n"
+    "  vSh = uShadowVP * wp;\n"
+    "  float dist = length(wp.xyz - uCam);\n"
+    "  vFog = clamp((dist - uFog.x) / (uFog.y - uFog.x), 0.0, 1.0);\n"
+    "  gl_Position = uVP * wp;\n"
+    "}\n";
+
+static const char *FS_HQ_BODY =
+    "varying vec3 vCol;\n"
+    "varying vec3 vN;\n"
+    "varying vec3 vW;\n"
+    "varying vec4 vSh;\n"
+    "varying float vFog;\n"
+    "varying float vMat;\n"
+    "varying float vEm;\n"
+    "uniform vec3 uSun;\n"
+    "uniform vec3 uSunCol;\n"
+    "uniform vec3 uAmb;\n"
+    "uniform vec3 uCam;\n"
+    "uniform vec3 uFogCol;\n"
+    "uniform vec3 uSkyTop;\n"
+    "uniform vec3 uSkyHor;\n"
+    "uniform float uEmis;\n"
+    "uniform float uUnlit;\n"
+    "uniform float uAlpha;\n"
+    "uniform float uRain;\n"
+    "uniform float uTime;\n"
+    "uniform float uShadowOn;\n"
+    "uniform float uTexel;\n"
+    "uniform sampler2D uShadow;\n"
+    "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
+    "float noise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);\n"
+    "  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }\n"
+    "float fbm(vec2 p) { return noise(p) * 0.5 + noise(p * 2.03) * 0.25 + noise(p * 4.01) * 0.125 + noise(p * 8.07) * 0.0625; }\n"
+    "float unpackD(vec4 c) { return dot(c, vec4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 1.0 / 16581375.0)); }\n"
+    "float shadowAt(vec2 uv, float z) { return unpackD(texture2D(uShadow, uv)) < z ? 0.0 : 1.0; }\n"
+    "float shadowF(float ndl) {\n"
+    "  vec3 s = vSh.xyz / vSh.w * 0.5 + 0.5;\n"
+    "  if (s.x < 0.0 || s.x > 1.0 || s.y < 0.0 || s.y > 1.0 || s.z > 1.0) return 1.0;\n"
+    "  float b = 0.0012 + 0.003 * (1.0 - ndl);\n"
+    "  float z = s.z - b;\n"
+    "  float t = uTexel;\n"
+    "  float sum = shadowAt(s.xy + vec2(-t, -t), z) + shadowAt(s.xy + vec2(t, -t), z) + shadowAt(s.xy + vec2(-t, t), z) + shadowAt(s.xy + vec2(t, t), z);\n"
+    "  return sum * 0.25;\n"
+    "}\n"
+    "vec3 skyCol(vec3 d) { float t = clamp(d.y * 1.4 + 0.15, 0.0, 1.0); return mix(uSkyHor, uSkyTop, t); }\n"
+    "void main() {\n"
+    "  vec3 n = normalize(vN);\n"
+    "  vec3 v = normalize(uCam - vW);\n"
+    "  vec3 c = vCol;\n"
+    "  float m = vMat, spec = 0.08, refl = 0.0, rough = 0.7, wetOk = 0.0;\n"
+    "  if (m < 0.5) {\n"
+    "    c *= 0.94 + 0.12 * noise(vW.xz * 2.0 + vW.y * 1.7); wetOk = n.y > 0.7 ? 1.0 : 0.0;\n"
+    "  } else if (m < 1.5) {\n"   /* asfalt: korrel, scheuren, reparatievlakken */
+    "    float g = fbm(vW.xz * 0.9);\n"
+    "    float crack = 1.0 - smoothstep(0.0, 0.018, abs(noise(vW.xz * 0.32) - 0.5));\n"
+    "    crack *= smoothstep(0.55, 0.75, noise(vW.xz * 0.05));\n"
+    "    float patch = smoothstep(0.70, 0.72, noise(vW.xz * 0.07 + 3.0));\n"
+    "    c *= (0.78 + 0.38 * g) * mix(1.0, 0.8, patch);\n"
+    "    c = mix(c, c * 0.45, crack);\n"
+    "    c *= 0.92 + 0.16 * hash(floor(vW.xz * 18.0));\n"
+    "    spec = 0.12; rough = 0.85; wetOk = 1.0;\n"
+    "  } else if (m < 2.5) {\n"   /* baksteen: stenen in halfsteens verband, voegen */
+    "    vec2 bp = vec2(dot(vW.xz, vec2(-n.z, n.x)) * 4.4, vW.y * 13.0);\n"
+    "    bp.x += mod(floor(bp.y), 2.0) * 0.5;\n"
+    "    vec2 f = fract(bp);\n"
+    "    float mortar = max(1.0 - smoothstep(0.0, 0.07, f.x), 1.0 - smoothstep(0.0, 0.13, f.y));\n"
+    "    if (abs(n.y) > 0.7) mortar = 0.0;\n"
+    "    c *= 0.82 + 0.3 * hash(floor(bp)) + 0.1 * noise(vW.xz * 3.0 + vW.y);\n"
+    "    c = mix(c, vec3(0.72, 0.70, 0.66) * (0.6 + 0.4 * length(vCol)), mortar * 0.75);\n"
+    "    spec = 0.04; rough = 0.9;\n"
+    "  } else if (m < 3.5) {\n"   /* glas */
+    "    spec = 1.0; refl = 0.55; rough = 0.05;\n"
+    "  } else if (m < 4.5) {\n"   /* autolak met blanke laklaag */
+    "    spec = 1.2; refl = 0.32; rough = 0.12;\n"
+    "  } else if (m < 5.5) {\n"   /* glimmend: chroom, metaal, kunststof */
+    "    spec = 0.9; refl = 0.4; rough = 0.25;\n"
+    "  } else if (m < 6.5) {\n"   /* gras */
+    "    c *= 0.72 + 0.5 * fbm(vW.xz * 1.6) + 0.12 * hash(floor(vW.xz * 9.0));\n"
+    "    spec = 0.02; rough = 1.0;\n"
+    "  } else if (m < 7.5) {\n"   /* beton/stoeptegels: tegelvoegen */
+    "    vec2 tp = vW.xz / 0.6; vec2 tf = fract(tp);\n"
+    "    float joint = max(1.0 - smoothstep(0.0, 0.05, tf.x), 1.0 - smoothstep(0.0, 0.05, tf.y));\n"
+    "    if (n.y < 0.7) joint = 0.0;\n"
+    "    c *= (0.86 + 0.2 * hash(floor(tp))) * (0.92 + 0.12 * noise(vW.xz * 4.0));\n"
+    "    c = mix(c, c * 0.62, joint);\n"
+    "    spec = 0.06; rough = 0.8; wetOk = 1.0;\n"
+    "  } else if (m < 8.5) {\n"   /* dakpannen: rijen */
+    "    float row = fract(vW.y * 4.5 + dot(vW.xz, vec2(0.13, 0.07)));\n"
+    "    c *= 0.78 + 0.25 * smoothstep(0.0, 0.8, row) + 0.08 * hash(floor(vW.xz * 4.0 + vW.y * 4.5));\n"
+    "    spec = 0.12; rough = 0.6;\n"
+    "  } else {\n"   /* water: golfjes */
+    "    vec2 q = vW.xz * 0.6 + vec2(uTime * 0.25, uTime * 0.18);\n"
+    "    n = normalize(n + vec3(noise(q) - 0.5, 0.0, noise(q + 7.3) - 0.5) * 0.35);\n"
+    "    spec = 1.0; refl = 0.65; rough = 0.05;\n"
+    "  }\n"
+    "  if (uRain > 0.01 && wetOk > 0.5 && n.y > 0.7) {\n"   /* nat: donkerder, glanzend, plassen */
+    "    float puddle = smoothstep(0.55, 0.72, fbm(vW.xz * 0.22));\n"
+    "    float w = uRain * (0.5 + 0.5 * puddle);\n"
+    "    c *= 1.0 - 0.42 * w;\n"
+    "    refl = max(refl, w * (0.35 + 0.45 * puddle));\n"
+    "    spec = max(spec, w * 1.2);\n"
+    "    rough = mix(rough, 0.04, w);\n"
+    "    float rip = noise(vW.xz * 6.0 + uTime * 3.0);\n"
+    "    n = normalize(n + vec3(rip - 0.5, 0.0, noise(vW.xz * 6.0 - uTime * 2.7) - 0.5) * 0.12 * puddle * uRain);\n"
+    "  }\n"
+    "  float ndl = max(dot(n, uSun), 0.0);\n"
+    "  float sh = uShadowOn > 0.5 ? shadowF(ndl) : 1.0;\n"
+    "  vec3 light = uAmb * (0.7 + 0.3 * n.y) + uSunCol * ndl * sh;\n"
+    "  vec3 lit = c * light + c * vEm * uEmis;\n"
+    "  vec3 h = normalize(uSun + v);\n"
+    "  float sp = pow(max(dot(n, h), 0.0), mix(6.0, 140.0, 1.0 - rough)) * spec * sh;\n"
+    "  lit += uSunCol * sp;\n"
+    "  float fres = refl * (0.22 + 0.78 * pow(1.0 - max(dot(n, v), 0.0), 3.0));\n"
+    "  vec3 r = reflect(-v, n);\n"
+    "  vec3 env = skyCol(r) * (0.55 + 0.45 * max(uSunCol.r, 0.2));\n"
+    "  if (r.y < 0.0) env = mix(env, uFogCol * 0.5, clamp(-r.y * 3.0, 0.0, 1.0));\n"
+    "  lit = mix(lit, env, clamp(fres, 0.0, 1.0));\n"
+    "  lit = mix(lit, c, uUnlit);\n"
+    "  gl_FragColor = vec4(mix(lit, uFogCol, vFog), uAlpha);\n"
+    "}\n";
+
+static const char *VS_SH =
+    "attribute vec3 aPos;\n"
+    "attribute vec4 aNrm;\n"
+    "attribute vec4 aCol;\n"
+    "uniform mat4 uVP;\n"
+    "uniform mat4 uModel;\n"
+    "varying float vD;\n"
+    "void main() { vec4 p = uVP * (uModel * vec4(aPos, 1.0)); vD = p.z / p.w * 0.5 + 0.5; gl_Position = p; }\n";
+
+static const char *FS_SH_BODY =
+    "varying float vD;\n"
+    "void main() {\n"
+    "  vec4 e = fract(vec4(1.0, 255.0, 65025.0, 16581375.0) * vD);\n"
+    "  e -= e.yzww * vec4(1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0, 0.0);\n"
+    "  gl_FragColor = e;\n"
+    "}\n";
+
+static const char *VS_SKY =
+    "attribute vec3 aPos;\n"
+    "attribute vec4 aNrm;\n"
+    "attribute vec4 aCol;\n"
+    "uniform mat4 uVP;\n"
+    "uniform mat4 uModel;\n"
+    "varying vec3 vDir;\n"
+    "void main() { vDir = aPos; gl_Position = uVP * (uModel * vec4(aPos, 1.0)); }\n";
+
+static const char *FS_SKY_BODY =
+    "varying vec3 vDir;\n"
+    "uniform vec3 uSkyTop;\n"
+    "uniform vec3 uSkyHor;\n"
+    "uniform vec3 uSun;\n"
+    "uniform vec3 uSunCol;\n"
+    "uniform vec3 uAmb;\n"
+    "uniform vec3 uFogCol;\n"
+    "uniform float uRain;\n"
+    "uniform float uTime;\n"
+    "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
+    "float noise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);\n"
+    "  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }\n"
+    "float fbm(vec2 p) { return noise(p) * 0.5 + noise(p * 2.03) * 0.25 + noise(p * 4.01) * 0.125 + noise(p * 8.07) * 0.0625; }\n"
+    "void main() {\n"
+    "  vec3 d = normalize(vDir);\n"
+    "  float t = clamp(d.y, 0.0, 1.0);\n"
+    "  vec3 c = mix(uSkyHor, uSkyTop, sqrt(t));\n"
+    "  float sd = max(dot(d, uSun), 0.0);\n"
+    "  c += uSunCol * (pow(sd, 600.0) * 3.0 + pow(sd, 10.0) * 0.3) * (1.0 - uRain * 0.8);\n"
+    "  if (d.y > 0.0) {\n"
+    "    vec2 p = d.xz / (d.y + 0.12) * 1.3 + vec2(uTime * 0.008, uTime * 0.003);\n"
+    "    float cl = smoothstep(0.42 - uRain * 0.35, 0.82, fbm(p));\n"
+    "    vec3 cc = (uAmb * 0.9 + uSunCol * 0.6) * mix(1.0, 0.5, uRain);\n"
+    "    cc += uSunCol * pow(sd, 6.0) * 0.4;\n"
+    "    c = mix(c, cc, cl * smoothstep(0.0, 0.18, d.y));\n"
+    "  }\n"
+    "  c = mix(c, uFogCol, (1.0 - smoothstep(-0.02, 0.18, d.y)) * 0.85);\n"
+    "  gl_FragColor = vec4(c, 1.0);\n"
+    "}\n";
+
+static char *cat2(const char *a, const char *b) {
+    size_t la = strlen(a), lb = strlen(b);
+    char *r = (char *)malloc(la + lb + 1);
+    memcpy(r, a, la); memcpy(r + la, b, lb + 1);
+    return r;
+}
+
 static GLuint compile(GLenum type, const char *src) {
     GLuint s = glCreateShader(type);
     GLint ok = 0;
 #ifdef SGB_DESKTOP_GL
     /* desktop-OpenGL 2.1: GLSL 1.20 kent geen precision-regel */
-    char buf[4096];
+    static char buf[16384];
     if (strncmp(src, "precision", 9) == 0) { const char *nl = strchr(src, '\n'); if (nl) src = nl + 1; }
     snprintf(buf, sizeof(buf), "#version 120\n%s", src);
     src = buf;
@@ -206,6 +420,36 @@ int r_init(Renderer *r, int w, int h) {
     memset(r, 0, sizeof(*r));
     r->W = w; r->H = h;
     r->progW = link_prog(VS_W, FS_W, 0);
+    {   /* v6.0: HQ-, schaduw- en lucht-programma's */
+        static const char *names[12] = {"uVP", "uModel", "uSun", "uSunCol", "uAmb", "uCam", "uFog", "uFogCol", "uTint", "uEmis", "uAlpha", "uUnlit"};
+        char *fhq = cat2(HQ_PREC, FS_HQ_BODY), *fsh = cat2(HQ_PREC, FS_SH_BODY), *fsk = cat2(HQ_PREC, FS_SKY_BODY);
+        int pi, k;
+        r->prog[0] = r->progW;
+        r->prog[1] = link_prog(VS_HQ, fhq, 0);
+        r->prog[2] = link_prog(VS_SH, fsh, 0);
+        r->progSky = link_prog(VS_SKY, fsk, 0);
+        free(fhq); free(fsh); free(fsk);
+        for (pi = 0; pi < 3; pi++)
+            for (k = 0; k < 12; k++) r->loc[pi][k] = glGetUniformLocation(r->prog[pi], names[k]);
+        r->hqShadowVP = glGetUniformLocation(r->prog[1], "uShadowVP");
+        r->hqShadowTex = glGetUniformLocation(r->prog[1], "uShadow");
+        r->hqShadowOn = glGetUniformLocation(r->prog[1], "uShadowOn");
+        r->hqTexel = glGetUniformLocation(r->prog[1], "uTexel");
+        r->hqRain = glGetUniformLocation(r->prog[1], "uRain");
+        r->hqTime = glGetUniformLocation(r->prog[1], "uTime");
+        r->hqSkyTop = glGetUniformLocation(r->prog[1], "uSkyTop");
+        r->hqSkyHor = glGetUniformLocation(r->prog[1], "uSkyHor");
+        r->skVP = glGetUniformLocation(r->progSky, "uVP");
+        r->skModel = glGetUniformLocation(r->progSky, "uModel");
+        r->skTop = glGetUniformLocation(r->progSky, "uSkyTop");
+        r->skHor = glGetUniformLocation(r->progSky, "uSkyHor");
+        r->skSun = glGetUniformLocation(r->progSky, "uSun");
+        r->skSunCol = glGetUniformLocation(r->progSky, "uSunCol");
+        r->skAmb = glGetUniformLocation(r->progSky, "uAmb");
+        r->skFog = glGetUniformLocation(r->progSky, "uFogCol");
+        r->skRain = glGetUniformLocation(r->progSky, "uRain");
+        r->skTime = glGetUniformLocation(r->progSky, "uTime");
+    }
     r->progU = link_prog(VS_U, FS_U, 1);
     r->wVP = glGetUniformLocation(r->progW, "uVP");
     r->wModel = glGetUniformLocation(r->progW, "uModel");
@@ -291,7 +535,7 @@ void r_build_models(Renderer *r) {
     MeshB m;
     int i;
     mb_init(&m);
-#define BUILD(dst, call) do { mb_reset(&m); call; upload(&(dst), &m); } while (0)
+#define BUILD(dst, call) do { mb_reset(&m); g_meshMat = 0; call; g_meshMat = 0; upload(&(dst), &m); } while (0)
     for (i = 0; i < CHAR_VARIANTS; i++) {
         BUILD(r->body[i], model_char_body(&m, i));
         BUILD(r->thigh[i], model_char_thigh(&m, i));
@@ -335,6 +579,28 @@ void r_build_models(Renderer *r) {
     for (i = 0; i < 2; i++) BUILD(r->handMesh[i], model_vr_hand(&m, i ? 1.0f : -1.0f));
     for (i = 0; i < 2; i++) BUILD(r->handMesh[2 + i], model_vr_fist(&m, i ? 1.0f : -1.0f));
     BUILD(r->wheelMesh, model_vr_wheel(&m));
+    {   /* v6.0: luchtkoepel (eenheidsbol) en regendruppels */
+        int a, b2;
+        mb_reset(&m);
+        for (b2 = 0; b2 < 10; b2++)
+            for (a = 0; a < 24; a++) {
+                float t0 = -0.25f + b2 * 0.175f, t1 = t0 + 0.175f, p0 = a * 2 * PI_F / 24, p1 = (a + 1) * 2 * PI_F / 24;
+                V3 A = v3(cosf(t0) * cosf(p0), sinf(t0), cosf(t0) * sinf(p0)), B = v3(cosf(t0) * cosf(p1), sinf(t0), cosf(t0) * sinf(p1));
+                V3 C = v3(cosf(t1) * cosf(p1), sinf(t1), cosf(t1) * sinf(p1)), D = v3(cosf(t1) * cosf(p0), sinf(t1), cosf(t1) * sinf(p0));
+                mb_quad(&m, A, B, C, D, v3scale(v3norm(v3add(A, C)), -1.0f), col(255, 255, 255));
+            }
+        upload(&r->skyDome, &m);
+        mb_reset(&m);
+        {
+            Rng rr; rr.s = 777u;
+            for (a = 0; a < 700; a++) {
+                float x = rng_range(&rr, -22, 22), y = rng_range(&rr, 0, 30), z = rng_range(&rr, -22, 22);
+                mb_quad(&m, v3(x - 0.012f, y, z), v3(x + 0.012f, y, z), v3(x + 0.012f, y + 0.55f, z), v3(x - 0.012f, y + 0.55f, z), v3(0, 0, 1), col(200, 210, 225));
+                mb_quad(&m, v3(x, y, z - 0.012f), v3(x, y, z + 0.012f), v3(x, y + 0.55f, z + 0.012f), v3(x, y + 0.55f, z - 0.012f), v3(1, 0, 0), col(200, 210, 225));
+            }
+        }
+        upload(&r->rainMesh, &m);
+    }
     for (i = 0; i < BIKE_VARIANTS; i++) {
         g_modelPart = 1; BUILD(r->bikeBody[i], model_bike(&m, i));
         g_modelPart = 2; BUILD(r->bikeFront[i], model_bike(&m, i));
@@ -350,6 +616,81 @@ void r_build_models(Renderer *r) {
 }
 
 static void set3(float *d, float a, float b, float c) { d[0] = a; d[1] = b; d[2] = c; }
+
+void r_set_quality(Renderer *r, int q) {
+    {
+        GLint ok = 0;
+        if (r->prog[1]) glGetProgramiv(r->prog[1], GL_LINK_STATUS, &ok);
+        r->hq = q >= 2 && ok;
+    }
+    r->shadowsOn = r->hq;
+#ifdef SGB_HAVE_FBO
+    if (!SGB_HAVE_FBO()) { r->shadowsOn = 0; return; }
+#endif
+    if (r->hq && !r->shFbo) {   /* schaduwkaart (RGBA met verpakte diepte, werkt overal met GLES 2) */
+        GLint mx = 0, prev = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &mx);
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev);
+        r->shSize = mx >= 2048 ? 2048 : 1024;
+        glGenTextures(1, &r->shTex);
+        glBindTexture(GL_TEXTURE_2D, r->shTex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, r->shSize, r->shSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glGenRenderbuffers(1, &r->shDepth);
+        glBindRenderbuffer(GL_RENDERBUFFER, r->shDepth);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, r->shSize, r->shSize);
+        glGenFramebuffers(1, &r->shFbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, r->shFbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, r->shTex, 0);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, r->shDepth);
+        r->shOk = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+        glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev);
+        plat_log("SGB-HQ: schaduwkaart %dx%d %s", r->shSize, r->shSize, r->shOk ? "ok" : "MISLUKT");
+    }
+    if (!r->shOk) r->shadowsOn = 0;
+}
+
+static void lerp3(float *o, const float *a, const float *b, float t) { int i; for (i = 0; i < 3; i++) o[i] = a[i] + (b[i] - a[i]) * t; }
+
+/* vloeiende tijd van de dag: nacht -> dageraad -> dag -> avond -> nacht, plus regen (grijzer, minder zon) */
+void r_set_time(Renderer *r, float hours, float rain) {
+    static Renderer d, k, n;
+    float h = fmodf(hours, 24.0f), t;
+    const Renderer *a, *b;
+    r_set_tod(&d, TOD_DAY); r_set_tod(&k, TOD_DUSK); r_set_tod(&n, TOD_NIGHT);
+    if (h < 5.0f) { a = &n; b = &n; t = 0; }
+    else if (h < 6.5f) { a = &n; b = &k; t = (h - 5.0f) / 1.5f; }
+    else if (h < 8.0f) { a = &k; b = &d; t = (h - 6.5f) / 1.5f; }
+    else if (h < 17.5f) { a = &d; b = &d; t = 0; }
+    else if (h < 19.5f) { a = &d; b = &k; t = (h - 17.5f) / 2.0f; }
+    else if (h < 21.0f) { a = &k; b = &n; t = (h - 19.5f) / 1.5f; }
+    else { a = &n; b = &n; t = 0; }
+    lerp3(r->skyTop, a->skyTop, b->skyTop, t); lerp3(r->skyHor, a->skyHor, b->skyHor, t);
+    lerp3(r->fogCol, a->fogCol, b->fogCol, t); lerp3(r->sunCol, a->sunCol, b->sunCol, t);
+    lerp3(r->amb, a->amb, b->amb, t);
+    r->emis = a->emis + (b->emis - a->emis) * t;
+    {   /* zon (of maan) loopt mee met de klok */
+        float ang = (h - 6.0f) / 12.0f * PI_F;
+        V3 sd = h >= 6.0f && h <= 18.0f ? v3(cosf(ang) * 0.75f, sinf(ang) * 0.9f + 0.12f, 0.45f) : v3(-cosf(ang) * 0.5f, 0.75f, -0.45f);
+        sd = v3norm(sd);
+        r->sun[0] = sd.x; r->sun[1] = sd.y; r->sun[2] = sd.z;
+    }
+    if (rain > 0) {   /* bewolkt: grijzer, minder direct zonlicht */
+        static const float gt[3] = {0.42f, 0.45f, 0.5f}, gh[3] = {0.6f, 0.62f, 0.66f};
+        float g = clampf(rain, 0, 1) * (r->emis > 0.9f ? 0.35f : 0.75f);
+        float top[3], hor[3];
+        int i;
+        for (i = 0; i < 3; i++) { top[i] = gt[i] * (0.25f + 0.75f * r->amb[i] / 0.66f); hor[i] = gh[i] * (0.25f + 0.75f * r->amb[i] / 0.66f); }
+        lerp3(r->skyTop, r->skyTop, top, g); lerp3(r->skyHor, r->skyHor, hor, g); lerp3(r->fogCol, r->fogCol, hor, g);
+        for (i = 0; i < 3; i++) r->sunCol[i] *= 1.0f - 0.65f * clampf(rain, 0, 1);
+    }
+    r->rain = clampf(rain, 0, 1);
+    r->hours = h;
+    r->tod = h >= 8.0f && h < 17.5f ? TOD_DAY : (h >= 21.0f || h < 5.0f ? TOD_NIGHT : TOD_DUSK);
+}
 
 void r_set_tod(Renderer *r, int tod) {
     r->tod = tod;
@@ -622,7 +963,58 @@ static void draw_shadow(Renderer *r, float x, float y, float z, float sx, float 
 
 static void draw_scene_one(Renderer *r, Game *g);
 
+/* v6.0: schaduwkaart vanuit de zon, rond de speler (orthografisch, 150 x 150 m) */
+static void shadow_pass(Renderer *r, Game *g) {
+    GLint prevFb = 0, vp[4];
+    V3 c = g->camTarget, sd = v3(r->sun[0], r->sun[1], r->sun[2]);
+    float S = 150.0f, texel;
+    M4 view, proj;
+    if (sd.y < 0.1f || r->sunCol[0] + r->sunCol[1] < 0.35f) { r->shVP = m4_identity(); return; }
+    texel = S / (float)r->shSize;
+    c.x = floorf(c.x / texel) * texel; c.z = floorf(c.z / texel) * texel;
+    view = m4_lookat(v3add(c, v3scale(sd, 200.0f)), c, fabsf(sd.y) > 0.95f ? v3(0, 0, 1) : v3(0, 1, 0));
+    proj = m4_ortho(-S * 0.5f, S * 0.5f, -S * 0.5f, S * 0.5f, 1.0f, 420.0f);
+    r->shVP = m4_mul(proj, view);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFb);
+    glGetIntegerv(GL_VIEWPORT, vp);
+    glBindFramebuffer(GL_FRAMEBUFFER, r->shFbo);
+    glViewport(0, 0, r->shSize, r->shSize);
+    glClearColor(1, 1, 1, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    r->pass = 1;
+    draw_scene_one(r, g);
+    r->pass = 0;
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prevFb);
+    glViewport(vp[0], vp[1], vp[2], vp[3]);
+}
+
+/* v6.0: luchtkoepel met verloop, zon en bewegende wolken (ook goed in VR) */
+static void draw_sky(Renderer *r, Game *g) {
+    float rad = g->drawDist * 0.85f;
+    M4 m = m4_mul(m4_translate(r->cam.x, r->cam.y, r->cam.z), m4_scale(rad, rad, rad));
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glUseProgram(r->progSky);
+    glEnableVertexAttribArray(0); glEnableVertexAttribArray(1); glEnableVertexAttribArray(2);
+    glUniformMatrix4fv(r->skVP, 1, GL_FALSE, r->vp.m);
+    glUniformMatrix4fv(r->skModel, 1, GL_FALSE, m.m);
+    glUniform3f(r->skTop, r->skyTop[0], r->skyTop[1], r->skyTop[2]);
+    glUniform3f(r->skHor, r->skyHor[0], r->skyHor[1], r->skyHor[2]);
+    glUniform3f(r->skSun, r->sun[0], r->sun[1], r->sun[2]);
+    glUniform3f(r->skSunCol, r->sunCol[0], r->sunCol[1], r->sunCol[2]);
+    glUniform3f(r->skAmb, r->amb[0], r->amb[1], r->amb[2]);
+    glUniform3f(r->skFog, r->fogCol[0], r->fogCol[1], r->fogCol[2]);
+    glUniform1f(r->skRain, r->rain);
+    glUniform1f(r->skTime, g->time);
+    bind_mesh(&r->skyDome);
+    glDrawArrays(GL_TRIANGLES, 0, r->skyDome.count);
+    r->drawCalls++;
+}
+
 void r_draw_scene(Renderer *r, Game *g) {
+    if (r->hq && r->shadowsOn && r->shOk && !r->pass) shadow_pass(r, g);
     if (r->vr.active) {
         int e;
         if (r->vr.begin) r->vr.begin(r, g, r->vr.u);
@@ -641,7 +1033,7 @@ void r_draw_scene(Renderer *r, Game *g) {
 
 static void draw_scene_one(Renderer *r, Game *g) {
     float aspect = (float)r->W / (float)(r->H > 0 ? r->H : 1);
-    float fogEnd = g->drawDist, fogStart = g->drawDist * 0.45f;
+    float fogEnd = g->drawDist * (1.0f - 0.35f * r->rain), fogStart = fogEnd * 0.45f;   /* regen: minder zicht */
     float t = g->time;
     int i, mode = game_mode(g);
     V3 shadows[MAX_PED + MAX_VEH + 1];
@@ -656,14 +1048,15 @@ static void draw_scene_one(Renderer *r, Game *g) {
         r->view = r->vr.view[r->vr.eye - 1];
     } else {
         r->cam = g->camPos;
-        r->proj = m4_perspective(58.0f * PI_F / 180.0f, aspect, 0.3f, g->drawDist + 40.0f);
+        r->proj = m4_perspective((g->camFov > 1.0f ? g->camFov : 58.0f) * PI_F / 180.0f, aspect, 0.3f, g->drawDist + 40.0f);
         r->view = m4_lookat(g->camPos, g->camTarget, v3(0, 1, 0));
     }
     r->vp = m4_mul(r->proj, r->view);
+    if (r->pass == 1) { r->vp = r->shVP; r->cam = g->camTarget; }
     extract_planes(r);
 
     /* lucht als verloop (2D); in VR niet (de horizon kantelt dan mee met je hoofd) */
-    if (!r->vr.eye) {
+    if (!r->vr.eye && !r->pass && !r->hq) {
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);
@@ -702,6 +1095,7 @@ static void draw_scene_one(Renderer *r, Game *g) {
     }
     ui_flush(r);
     }
+    if (r->hq && !r->pass) draw_sky(r, g);
 
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -711,7 +1105,29 @@ static void draw_scene_one(Renderer *r, Game *g) {
     glFrontFace(GL_CCW);
     glDisable(GL_BLEND);
 
+    {   /* v6.0: programma kiezen: gewoon, HQ of schaduw-pass */
+        int pi = r->pass == 1 ? 2 : (r->hq ? 1 : 0);
+        GLint *L = r->loc[pi];
+        r->progW = r->prog[pi] ? r->prog[pi] : r->prog[0];
+        r->wVP = L[0]; r->wModel = L[1]; r->wSun = L[2]; r->wSunCol = L[3]; r->wAmb = L[4]; r->wCam = L[5];
+        r->wFog = L[6]; r->wFogCol = L[7]; r->wTint = L[8]; r->wEmis = L[9]; r->wAlpha = L[10]; r->wUnlit = L[11];
+    }
     glUseProgram(r->progW);
+    if (r->pass == 1) glDisable(GL_CULL_FACE);
+    if (r->hq && !r->pass) {
+        int sh = r->shadowsOn && r->shOk;
+        glUniformMatrix4fv(r->hqShadowVP, 1, GL_FALSE, r->shVP.m);
+        glUniform1f(r->hqShadowOn, sh ? 1.0f : 0.0f);
+        glUniform1f(r->hqTexel, r->shSize > 0 ? 1.0f / (float)r->shSize : 0.0f);
+        glUniform1f(r->hqRain, r->rain);
+        glUniform1f(r->hqTime, g->time);
+        glUniform3f(r->hqSkyTop, r->skyTop[0], r->skyTop[1], r->skyTop[2]);
+        glUniform3f(r->hqSkyHor, r->skyHor[0], r->skyHor[1], r->skyHor[2]);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, sh ? r->shTex : r->white.id);
+        glActiveTexture(GL_TEXTURE0);
+        glUniform1i(r->hqShadowTex, 1);
+    }
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
@@ -911,6 +1327,11 @@ static void draw_scene_one(Renderer *r, Game *g) {
             float s = clampf(0.5f - (g->p.y - ground) * 0.15f, 0.2f, 0.5f);
             shadows[nsh] = v3(g->p.x, ground, g->p.z); shs[nsh][0] = s; shs[nsh][1] = s; shs[nsh][2] = 0; nsh++;
         }
+    }
+    if (r->pass == 1) {   /* schaduw-pass: alleen gebouwen, voertuigen en mensen */
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glEnable(GL_CULL_FACE);
+        return;
     }
     /* geld */
     glUniform1f(r->wUnlit, 0.35f);
@@ -1120,6 +1541,28 @@ static void draw_scene_one(Renderer *r, Game *g) {
             draw_mesh(r, &r->weapon[g->weapon], &wm);
         }
         if (r->vr.wheelOn) draw_mesh(r, &r->wheelMesh, &r->vr.wheel);
+        glEnable(GL_CULL_FACE);
+    }
+    if (r->rain > 0.02f && !r->pass) {   /* v6.0: regendruppels rond de camera */
+        float fall = fmodf(g->time * 16.0f, 30.0f);
+        int k;
+        glUseProgram(r->progW);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+        glDisable(GL_CULL_FACE);
+        glUniform1f(r->wUnlit, 1.0f);
+        glUniform1f(r->wAlpha, 0.3f * r->rain);
+        tint(r, 0.85f, 0.88f, 0.95f);
+        for (k = 0; k < 2; k++) {
+            M4 m = m4_translate(floorf(r->cam.x), r->cam.y - 12.0f - fall + k * 30.0f, floorf(r->cam.z));
+            draw_mesh(r, &r->rainMesh, &m);
+        }
+        glUniform1f(r->wUnlit, 0.0f);
+        glUniform1f(r->wAlpha, 1.0f);
+        tint(r, 1, 1, 1);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
         glEnable(GL_CULL_FACE);
     }
     glBindBuffer(GL_ARRAY_BUFFER, 0);

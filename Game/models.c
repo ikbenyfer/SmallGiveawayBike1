@@ -674,13 +674,17 @@ void model_car(MeshB *m, int v) {
     int k;
     v = ((v % CAR_VARIANTS) + CAR_VARIANTS) % CAR_VARIANTS;
     m->ao = 0.3f;
+    g_meshMat = MAT_PAINT;
     s = sq(v3(0, 0.64f, 0), v3(0.92f, 0.33f, 2.03f), 0.22f, 0.16f, body);
     s.tx = 0.95f; s.su = 28; s.sv = 8; mb_sq(m, &s);
     m->ao = 0;
+    g_meshMat = MAT_GLASS;
     s = sq(v3(0, 1.17f, -0.18f), v3(0.84f, 0.27f, 0.98f), 0.3f, 0.26f, glass);
     s.tx = 0.84f; s.tz = 0.76f; s.su = 20; s.sv = 6; mb_sq(m, &s);
+    g_meshMat = MAT_PAINT;
     s = sq(v3(0, 1.44f, -0.24f), v3(0.72f, 0.045f, 0.75f), 0.4f, 0.25f, body);
     s.su = 20; s.sv = 4; mb_sq(m, &s);
+    g_meshMat = MAT_SHINY;
     for (k = -1; k <= 1; k += 2) {   /* stijlen tussen de ramen, spiegels */
         mb_capsule(m, v3(0.77f * k, 0.95f, 0.7f), v3(0.66f * k, 1.43f, 0.45f), 0.035f, 0.03f, 6, body);
         mb_capsule(m, v3(0.8f * k, 0.95f, -0.18f), v3(0.69f * k, 1.43f, -0.2f), 0.03f, 0.03f, 6, body);
@@ -698,6 +702,7 @@ void model_car(MeshB *m, int v) {
         blob(m, v3(0, 1.5f, -0.2f), v3(0.58f, 0.05f, 0.14f), 0.4f, 0.4f, 14, 3, col(30, 30, 34));
     }
     if (v == 2) blob(m, v3(0, 1.57f, -0.15f), v3(0.24f, 0.08f, 0.14f), 0.4f, 0.4f, 10, 4, col_e(255, 230, 120, 160));   /* taxi */
+    g_meshMat = MAT_DEFAULT;
 }
 
 /* gekochte auto's: carrosserie wit (wordt gekleurd), details apart */
@@ -705,6 +710,7 @@ void model_car_body(MeshB *m, int model) {
     Col w = col(236, 236, 236);
     SQ s;
     int k;
+    g_meshMat = MAT_PAINT;
     m->ao = 0.28f;
     switch (model) {
     case 1:   /* RHINO V8: lang, hoekig-rond, luchthapper */
@@ -748,6 +754,7 @@ void model_car_detail(MeshB *m, int model) {
     Col glass = col(36, 52, 74), dark = col(22, 22, 25), chrome = col(195, 197, 204), black = col(12, 12, 14);
     SQ s;
     int k;
+    g_meshMat = MAT_SHINY;
     switch (model) {
     case 1:
         s = sq(v3(0, 1.13f, -0.48f), v3(0.84f, 0.24f, 0.8f), 0.3f, 0.26f, glass); s.tx = 0.9f; s.tz = 0.75f; s.su = 20; s.sv = 6; mb_sq(m, &s);
