@@ -307,6 +307,8 @@ static void save_all(void) {
     plat_save_flush();
 }
 
+static float s_detail0 = 1.0f;   /* v7.0.0: modeldetail van de opstartkwaliteit (voor r_build_models tijdens het laden) */
+
 void fe_init(int w, int h) {
     int i;
     memset(&F, 0, sizeof(F));
@@ -314,6 +316,7 @@ void fe_init(int w, int h) {
         int q0 = plat_load_int("quality", 1);
         g_sqDetail = q0 >= 4 ? 2.6f : (q0 >= 3 ? 1.8f : (q0 >= 2 ? 1.4f : 1.0f));   /* ULTRA+: veel meer segmenten in de modellen */
         world_set_detail(q0);
+        s_detail0 = g_sqDetail;
     }
     r_init(&F.R, w, h);
     g_sqDetail = 1.0f;
@@ -425,7 +428,7 @@ static void load_step(void) {
     if (s == 0) r_load_font(&F.R);
     else if (s >= 1 && s <= nb) world_build_step(&F.W, s - 1);
     else if (s == nb + 1) r_upload_world(&F.R, &F.W, 0);
-    else if (s == nb + 2) r_build_models(&F.R);
+    else if (s == nb + 2) { g_sqDetail = s_detail0; r_build_models(&F.R); g_sqDetail = 1.0f; }   /* v7.0.0: detail gold eerst niet meer bij het laden */
     else if (s == nb + 3) {
         slots_migrate();
         F.slot = plat_load_int("slot", 1);
@@ -3938,27 +3941,33 @@ const char *fe_pro_shots(int *done) {
             if (k == 70) snprintf(name, sizeof(name), "pro_06_street");
         } else if (k < 84) {   /* zonsondergang, naar de zon kijken */
             V3 sd;
-            if (k == 61) r_set_time(&F.R, 18.4f, 0);
+            if (k == 73) r_set_time(&F.R, 18.4f, 0);
             sd = v3norm(v3(F.R.sun[0], 0, F.R.sun[2]));
             g->camLockPos = v3(g->p.x, g->p.y + 3.0f, g->p.z);
             g->camLockTgt = v3add(g->camLockPos, v3add(v3scale(sd, 20.0f), v3(0, 2.5f, 0)));
             if (k == 82) snprintf(name, sizeof(name), "pro_07_sunset");
         } else if (k < 96) {   /* nacht */
-            if (k == 73) r_set_time(&F.R, 22.5f, 0);
+            if (k == 85) r_set_time(&F.R, 22.5f, 0);
             g->camLockPos = v3add(v3(g->p.x, g->p.y + 4.0f, g->p.z), v3scale(fw, -9.0f));
             g->camLockTgt = v3add(v3(g->p.x, g->p.y + 1.5f, g->p.z), v3scale(fw, 12.0f));
             if (k == 94) snprintf(name, sizeof(name), "pro_08_night");
         } else if (k < 108) {   /* vergelijking: zelfde straat in ULTRA (zonder PRO-nabewerking) */
-            if (k == 85) { F.quality = 3; apply_settings(); r_set_time(&F.R, 13.5f, 0); }
+            if (k == 97) { F.quality = 3; apply_settings(); r_set_time(&F.R, 13.5f, 0); }
             g->camLockPos = v3add(v3(g->p.x, g->p.y + 4.0f, g->p.z), v3scale(fw, -9.0f));
             g->camLockTgt = v3add(v3(g->p.x, g->p.y + 1.5f, g->p.z), v3scale(fw, 12.0f));
             if (k == 106) snprintf(name, sizeof(name), "cmp_ultra_street");
         } else if (k < 120) {
-            if (k == 97) { F.quality = 3; apply_settings(); r_set_time(&F.R, 13.5f, 0); }
+            if (k == 109) { F.quality = 3; apply_settings(); r_set_time(&F.R, 13.5f, 0); }
             g->camLockPos = v3add(head, v3add(v3scale(fw, 0.62f), v3(0, 0.03f, 0)));
             g->camLockTgt = v3add(head, v3(0, 0.02f, 0));
             if (k == 118) snprintf(name, sizeof(name), "cmp_ultra_face");
+        } else if (k < 132) {   /* AO-kanaal (controle) */
+            if (k == 121) { F.quality = 4; apply_settings(); r_set_time(&F.R, 13.5f, 0); F.R.proDebug = 1; }
+            g->camLockPos = v3add(v3(g->p.x, g->p.y + 4.0f, g->p.z), v3scale(fw, -9.0f));
+            g->camLockTgt = v3add(v3(g->p.x, g->p.y + 1.5f, g->p.z), v3scale(fw, 12.0f));
+            if (k == 130) snprintf(name, sizeof(name), "dbg_ao_street");
         } else {
+            F.R.proDebug = 0;
             g->camLock = 0;
             F.quality = 4; apply_settings();
             *done = 1;

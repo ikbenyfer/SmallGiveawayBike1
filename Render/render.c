@@ -187,7 +187,7 @@ static const char *FS_HQ_BODY =
     "}\n"
     "float ggx(vec3 n, vec3 h, float r) { float a = max(r * r, 0.002); float a2 = a * a; float nh = max(dot(n, h), 0.0);\n"
     "  float d = nh * nh * (a2 - 1.0) + 1.0; return a2 / (3.14159 * d * d); }\n"
-    "vec3 filmic(vec3 x) { x *= 1.08; return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }\n"
+    "vec3 filmic(vec3 x) { x *= 0.94; return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }\n"
     "void main() {\n"
     "  vec3 n = normalize(vN);\n"
     "  vec3 v = normalize(uCam - vW);\n"
@@ -314,7 +314,7 @@ static const char *FS_HQ_BODY =
     "  lit = mix(lit, env, clamp(fres, 0.0, 1.0));\n"
     "  lit = mix(lit, c, uUnlit);\n"
     "  vec3 outc = mix(lit, uFogCol, vFog);\n"
-    "  if (uUltra > 0.5 && uUnlit < 0.5) { vec3 f = filmic(outc); float l = dot(f, vec3(0.299, 0.587, 0.114)); outc = mix(outc, mix(vec3(l), f, 1.08), 0.7); }\n"
+    "  if (uUltra > 0.5 && uUnlit < 0.5) { vec3 f = filmic(outc); float l = dot(f, vec3(0.299, 0.587, 0.114)); outc = mix(outc, mix(vec3(l), f, 1.1), 0.92); }\n"
     "  gl_FragColor = vec4(outc, uAlpha);\n"
     "}\n";
 
@@ -355,7 +355,7 @@ static const char *FS_SKY_BODY =
     "uniform float uRain;\n"
     "uniform float uTime;\n"
     "uniform float uUltra;\n"
-    "vec3 filmic(vec3 x) { x *= 1.08; return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }\n"
+    "vec3 filmic(vec3 x) { x *= 0.94; return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }\n"
     "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
     "float noise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);\n"
     "  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }\n"
@@ -374,7 +374,7 @@ static const char *FS_SKY_BODY =
     "    c = mix(c, cc, cl * smoothstep(0.0, 0.18, d.y));\n"
     "  }\n"
     "  c = mix(c, uFogCol, (1.0 - smoothstep(-0.02, 0.18, d.y)) * 0.85);\n"
-    "  if (uUltra > 0.5) { vec3 f = filmic(c); float l = dot(f, vec3(0.299, 0.587, 0.114)); c = mix(c, mix(vec3(l), f, 1.08), 0.7); }\n"
+    "  if (uUltra > 0.5) { vec3 f = filmic(c); float l = dot(f, vec3(0.299, 0.587, 0.114)); c = mix(c, mix(vec3(l), f, 1.1), 0.92); }\n"
     "  gl_FragColor = vec4(c, 1.0);\n"
     "}\n";
 

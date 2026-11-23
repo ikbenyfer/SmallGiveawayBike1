@@ -117,6 +117,7 @@ static const char *FS_FINAL =
     "uniform vec3 uRayCol;\n"
     "uniform float uTime;\n"
     "uniform float uAoOn;\n"
+    "uniform float uDebug;\n"
     "vec3 fxaa(vec2 uv) {\n"
     "  vec3 nw = texture2D(uTex, uv + vec2(-1.0, -1.0) * uPx).rgb;\n"
     "  vec3 ne = texture2D(uTex, uv + vec2(1.0, -1.0) * uPx).rgb;\n"
@@ -143,11 +144,12 @@ static const char *FS_FINAL =
     "  c *= mix(1.0, ao, 0.9 * uAoOn);\n"
     "  c += texture2D(uBloom, vUv).rgb * 0.45;\n"
     "  c += texture2D(uRays, vUv).r * uRayCol;\n"
-    "  float vg = smoothstep(0.92, 0.3, length(vUv - 0.5));\n"
+    "  float vg = 1.0 - smoothstep(0.3, 0.92, length(vUv - 0.5));\n"
     "  c *= mix(0.8, 1.0, vg);\n"
     "  float l = dot(c, vec3(0.299, 0.587, 0.114));\n"
     "  c = mix(vec3(l), c, 1.05);\n"
     "  c += (hash(vUv * 1937.0 + fract(uTime) * 61.0) - 0.5) * 0.014;\n"
+    "  if (uDebug > 0.5) c = vec3(ao);\n"
     "  gl_FragColor = vec4(c, 1.0);\n"
     "}\n";
 
@@ -336,6 +338,7 @@ static void pro_post(Renderer *r, Game *g, const GLint *vp, GLuint outFb) {
     glUniform3f(glGetUniformLocation(P, "uRayCol"), r->sunCol[0] * 0.55f * rayK, r->sunCol[1] * 0.5f * rayK, r->sunCol[2] * 0.4f * rayK);
     glUniform1f(glGetUniformLocation(P, "uTime"), g->time);
     glUniform1f(glGetUniformLocation(P, "uAoOn"), 1.0f);
+    glUniform1f(glGetUniformLocation(P, "uDebug"), (float)r->proDebug);
     pro_quad(r);
     /* staat terug zoals de UI het verwacht */
     pro_bind_tex(3, 0); pro_bind_tex(2, 0); pro_bind_tex(1, 0);
