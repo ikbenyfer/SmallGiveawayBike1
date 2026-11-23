@@ -68,7 +68,7 @@ static const char *FS_BRIGHT =
     "         + texture2D(uTex, vUv + vec2(-uPx.x, uPx.y)).rgb + texture2D(uTex, vUv + vec2(uPx.x, uPx.y)).rgb;\n"
     "  c *= 0.25;\n"
     "  float l = max(c.r, max(c.g, c.b));\n"
-    "  vec3 b = c * smoothstep(0.62, 1.0, l) * 1.5;\n"
+    "  vec3 b = c * smoothstep(0.82, 1.0, l) * 1.4;\n"
     "  gl_FragColor = vec4(b, 1.0);\n"
     "}\n";
 
@@ -143,7 +143,7 @@ static const char *FS_FINAL =
     "  float ao = texture2D(uAO, vUv).r * 0.4 + 0.15 * (texture2D(uAO, vUv + vec2(uAoPx.x, 0.0)).r + texture2D(uAO, vUv - vec2(uAoPx.x, 0.0)).r\n"
     "           + texture2D(uAO, vUv + vec2(0.0, uAoPx.y)).r + texture2D(uAO, vUv - vec2(0.0, uAoPx.y)).r);\n"
     "  c *= mix(1.0, ao, 0.9 * uAoOn);\n"
-    "  c += texture2D(uBloom, vUv).rgb * 0.45;\n"
+    "  c += texture2D(uBloom, vUv).rgb * 0.35;\n"
     "  c += texture2D(uRays, vUv).r * uRayCol;\n"
     "  float vg = 1.0 - smoothstep(0.3, 0.92, length(vUv - 0.5));\n"
     "  c *= mix(0.8, 1.0, vg);\n"

@@ -356,7 +356,6 @@ static void body_col(V3 p, V3 n, const HP *h, int part, Col *c, int *mat) {
                 *c = col_mul(h->hairc, 0.4f); *mat = MAT_HAIR; return;
             }
             sk = cmix(sk, col((int)(sk.r * 1.05f), (int)(sk.g * 0.86f), (int)(sk.b * 0.84f)), 0.6f * clampf(1.0f - sd_sph(q, v3(0.052f, 1.775f, 0.085f), 0.0f) / 0.03f, 0, 1));   /* blosjes */
-            if (h->beard == 0 && !h->fem && p.y < 1.75f && p.z > 0.04f) sk = cmix(sk, col_mul(sk, 0.88f), 0.5f);   /* stoppels */
             *c = sk; *mat = MAT_SKIN; return;
         }
         if (p.y > 1.115f) {   /* shirt */
@@ -385,8 +384,8 @@ static void body_col(V3 p, V3 n, const HP *h, int part, Col *c, int *mat) {
 
 void human_body(MeshB *m, int v) {
     HP h = hp_of(v);
-    snets(m, v3(-0.41f, 0.84f, -0.21f), v3(0.41f, 1.67f, 0.21f), 0.006f, body_lower, body_col, &h);
-    snets(m, v3(-0.145f, 1.63f, -0.2f), v3(0.145f, 2.0f, 0.21f), 0.0028f, body_upper, body_col, &h);
+    snets(m, v3(-0.41f, 0.84f, -0.21f), v3(0.41f, 1.67f, 0.21f), 0.0068f, body_lower, body_col, &h);
+    snets(m, v3(-0.145f, 1.63f, -0.2f), v3(0.145f, 2.0f, 0.21f), 0.0031f, body_upper, body_col, &h);
 }
 
 /* ------------------------------------------------------------------ benen */
@@ -427,12 +426,12 @@ static float shin_sdf(V3 p, const HP *h, int *part) {
 
 void human_thigh(MeshB *m, int v) {
     HP h = hp_of(v);
-    snets(m, v3(-0.13f, -KNEE_Y - 0.09f, -0.12f), v3(0.13f, 0.14f, 0.13f), 0.005f, thigh_sdf, leg_col, &h);
+    snets(m, v3(-0.13f, -KNEE_Y - 0.09f, -0.12f), v3(0.13f, 0.14f, 0.13f), 0.0058f, thigh_sdf, leg_col, &h);
 }
 
 void human_shin(MeshB *m, int v) {
     HP h = hp_of(v);
-    snets(m, v3(-0.085f, -0.49f, -0.115f), v3(0.085f, 0.08f, 0.25f), 0.0038f, shin_sdf, leg_col, &h);
+    snets(m, v3(-0.085f, -0.49f, -0.115f), v3(0.085f, 0.08f, 0.25f), 0.0044f, shin_sdf, leg_col, &h);
 }
 
 /* ------------------------------------------------------------------ armen */
@@ -484,10 +483,10 @@ static void farm_col(V3 p, V3 n, const HP *h, int part, Col *c, int *mat) {
 
 void human_uarm(MeshB *m, int v) {
     HP h = hp_of(v);
-    snets(m, v3(-0.09f, -ELBOW_Y - 0.06f, -0.09f), v3(0.09f, 0.085f, 0.09f), 0.0042f, uarm_sdf, arm_col, &h);
+    snets(m, v3(-0.09f, -ELBOW_Y - 0.06f, -0.09f), v3(0.09f, 0.085f, 0.09f), 0.0048f, uarm_sdf, arm_col, &h);
 }
 
 void human_farm(MeshB *m, int v) {
     HP h = hp_of(v);
-    snets(m, v3(-0.065f, -0.44f, -0.06f), v3(0.065f, 0.06f, 0.08f), 0.0024f, farm_sdf, farm_col, &h);
+    snets(m, v3(-0.065f, -0.44f, -0.06f), v3(0.065f, 0.06f, 0.08f), 0.0027f, farm_sdf, farm_col, &h);
 }

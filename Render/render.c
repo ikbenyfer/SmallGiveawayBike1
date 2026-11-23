@@ -239,6 +239,7 @@ static const char *FS_HQ_BODY =
     "    if (n.y < 0.7) joint = 0.0;\n"
     "    c *= (0.86 + 0.2 * hash(floor(tp))) * (0.92 + 0.12 * noise(vW.xz * 4.0));\n"
     "    c = mix(c, c * 0.62, joint);\n"
+    "    if (uUltra > 0.5) c *= 0.8;\n"
     "    spec = 0.06; rough = 0.8; wetOk = 1.0;\n"
     "    if (bf > 0.0 && n.y > 0.7) {\n"
     "      vec2 t0 = vW.xz / 0.6;\n"
@@ -299,8 +300,8 @@ static const char *FS_HQ_BODY =
     "    float fh = 0.04 + 0.96 * pow(1.0 - max(dot(h, v), 0.0), 5.0);\n"
     "    sp = min(ggx(n, h, rough) * fh * spec * max(ndr, 0.0) * 0.6, 24.0) * sh;\n"
     "    if (paint > 0.5) {\n"
-    "      float fl = step(0.9, hash(floor(vW.xz * 260.0) + floor(vW.y * 260.0) * 7.0));\n"
-    "      sp += fl * pow(max(dot(n, h), 0.0), 18.0) * 0.9 * sh;\n"
+    "      float fl = step(0.96, hash(floor(vW.xz * 300.0) + floor(vW.y * 300.0) * 7.0)) * (1.0 - smoothstep(4.0, 12.0, length(uCam - vW)));\n"
+    "      sp += fl * pow(max(dot(n, h), 0.0), 24.0) * 0.3 * sh;\n"
     "      sp += min(ggx(n, h, 0.035) * fh * 0.5 * max(ndr, 0.0), 30.0) * sh;\n"
     "    }\n"
     "    if (cloth > 0.5) sp += pow(1.0 - max(dot(n, v), 0.0), 4.0) * 0.12 * max(ndr + 0.3, 0.0);\n"
@@ -1578,7 +1579,8 @@ static void draw_scene_one(Renderer *r, Game *g) {
         glUniform1f(r->wAlpha, 0.38f);
         tint(r, 1, 1, 1);
         glUniform1f(r->wUnlit, 1.0f);
-        for (k = 0; k < nsh; k++) draw_shadow(r, shadows[k].x, shadows[k].y, shadows[k].z, shs[k][0], shs[k][1], shs[k][2]);
+        if (!(r->pro && r->proOk && r->shadowsOn && r->shOk && r->shVP.m[15] != 0))   /* v7.0.0: PRO = echte schaduwen */
+            for (k = 0; k < nsh; k++) draw_shadow(r, shadows[k].x, shadows[k].y, shadows[k].z, shs[k][0], shs[k][1], shs[k][2]);
         glBlendFunc(GL_ONE, GL_ONE);
         glUniform1f(r->wAlpha, 1.0f);
         glDisable(GL_CULL_FACE);
