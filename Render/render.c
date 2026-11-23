@@ -1579,7 +1579,7 @@ static void draw_scene_one(Renderer *r, Game *g) {
         glUniform1f(r->wAlpha, 0.38f);
         tint(r, 1, 1, 1);
         glUniform1f(r->wUnlit, 1.0f);
-        if (!(r->pro && r->proOk && r->shadowsOn && r->shOk && r->shVP.m[15] != 0))   /* v7.0.0: PRO = echte schaduwen */
+        if (!(r->pro && r->proOk && r->shadowsOn && r->shOk && r->sun[1] >= 0.1f && r->sunCol[0] + r->sunCol[1] >= 0.35f))   /* v7.0.0: PRO = echte schaduwen */
             for (k = 0; k < nsh; k++) draw_shadow(r, shadows[k].x, shadows[k].y, shadows[k].z, shs[k][0], shs[k][1], shs[k][2]);
         glBlendFunc(GL_ONE, GL_ONE);
         glUniform1f(r->wAlpha, 1.0f);
