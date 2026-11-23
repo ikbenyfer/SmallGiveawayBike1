@@ -31,7 +31,7 @@ typedef struct {
     GLint hqShadowVP, hqShadowTex, hqShadowOn, hqTexel, hqRain, hqTime, hqSkyTop, hqSkyHor;
     GLuint progSky; GLint skVP, skModel, skTop, skHor, skSun, skSunCol, skAmb, skFog, skRain, skTime;
     GMesh skyDome, rainMesh;
-    GMesh phPart[PP_COUNT], phWheel, rampMesh;   /* v6.0.1 PHYSICS-modus */
+    GMesh phPart[PP_COUNT], phWheel, rampMesh, buildFloor;   /* v6.0.1 PHYSICS-modus */
     float shArea;      /* breedte van de schaduwkaart (m) */
     GLuint shFbo, shTex, shDepth; int shSize, shOk;
     M4 shVP;
@@ -98,7 +98,10 @@ typedef struct {
 
 int r_init(Renderer *r, int w, int h);
 void r_set_quality(Renderer *r, int q);           /* v6.0: 2 = HQ-shader + schaduwen */
-void r_set_time(Renderer *r, float hours, float rain);   /* v6.0: vloeiende dag/nacht + weer */          /* shaders, basistexturen, logo + achtergrond */
+void r_set_time(Renderer *r, float hours, float rain);   /* v6.0: vloeiende dag/nacht + weer */
+/* v6.0.2: 3D-bouwscherm van de PHYSICS-modus. ghost = hokje waar het onderdeel komt (gx < 0 = geen),
+ * ghostType 0 = wissen (rood vlak op het hokje) */
+void r_draw_build(Renderer *r, const PDesign *d, V3 cam, V3 tgt, float fov, int gx, int gy, int gz, int ghostType, float t);          /* shaders, basistexturen, logo + achtergrond */
 int r_load_font(Renderer *r);
 void r_upload_world(Renderer *r, World *w, int slot); /* chunks naar VBO's, CPU-geheugen vrij */
 void r_build_models(Renderer *r);

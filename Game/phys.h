@@ -9,7 +9,7 @@
 
 #define PH_GX 7          /* breedte (x), midden = 3 */
 #define PH_GZ 9          /* lengte (z), voorkant = 8 */
-#define PH_GY 3          /* lagen (y) */
+#define PH_GY 4          /* lagen (y) */
 #define PH_CELL 0.6f     /* meter per hokje */
 #define PH_MAXP (PH_GX * PH_GZ * PH_GY)
 #define PH_DEBRIS 40
@@ -47,6 +47,7 @@ typedef struct {
 } Craft;
 
 const char *ph_part_name(int t);
+V3 ph_cell_pos(int gx, int gy, int gz);       /* midden van een hokje (bouwscherm en physics) */
 void ph_default(PDesign *d);                   /* een simpele auto */
 void ph_stats(const PDesign *d, float *mass, int *motors, int *wheels, int *wings, int *jets, int *seats);
 void ph_spawn(Craft *c, const PDesign *d, V3 pos, float heading);

@@ -65,6 +65,8 @@ static struct {
     long atMart0;
     int atCam; V3 atCamPos, atCamTgt;
     int bSel, bLayer, physPending, physNL;   /* v6.0.1 bouwscherm */
+    float bYaw, bPitch, bDist, bDownX, bDownY, bLastX, bLastY, bHoverX, bHoverY;
+    int bDown, bDrag, bMirror, bHover;   /* v6.0.2 3D-bouwscherm */
     int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
@@ -933,10 +935,10 @@ static const char *PH_SHORT[PP_COUNT] = {"", "BLK", "SEAT", "MOT", "WHL", "WING"
 
 static void design_load(void) {
     char *d = NULL; long len = 0;
-    if (plat_read_file("physics_design.bin", &d, &len) && len == (long)sizeof(PDesign)) memcpy(&F.G.design, d, sizeof(PDesign));
+    if (plat_read_file("physics_design4.bin", &d, &len) && len == (long)sizeof(PDesign)) memcpy(&F.G.design, d, sizeof(PDesign));
     free(d);
 }
-static void design_save(void) { plat_write_file("physics_design.bin", (const char *)&F.G.design, (long)sizeof(PDesign)); }
+static void design_save(void) { plat_write_file("physics_design4.bin", (const char *)&F.G.design, (long)sizeof(PDesign)); }
 
 static void open_builder(void) {
     design_load();
@@ -944,68 +946,120 @@ static void open_builder(void) {
     set_state(ST_BUILD);
 }
 
+/* camera van het 3D-bouwscherm */
+static void build_cam(V3 *cam, V3 *tgt) {
+    float cp = cosf(F.bPitch);
+    *tgt = v3(0, 0.9f, 0);
+    *cam = v3(sinf(F.bYaw) * cp * F.bDist, 0.9f + sinf(F.bPitch) * F.bDist, cosf(F.bYaw) * cp * F.bDist);
+}
+
+/* straal door het scherm (UI-coordinaten) -> eerste bezette hokje en het lege hokje ervoor */
+static int build_pick(float ux, float uy, int *hx, int *hy, int *hz, int *px, int *py, int *pz) {
+    Renderer *R = &F.R;
+    V3 cam, tgt, f, rt, up, dir, p;
+    float th = tanf(50.0f * PI_F / 180.0f * 0.5f), nx = ux / R->W * 2.0f - 1.0f, ny = 1.0f - uy / R->H * 2.0f, s;
+    int lx = -1, ly = -1, lz = -1;
+    const PDesign *d = &F.G.design;
+    build_cam(&cam, &tgt);
+    f = v3norm(v3sub(tgt, cam));
+    rt = v3norm(v3cross(f, v3(0, 1, 0)));
+    up = v3cross(rt, f);
+    dir = v3norm(v3add(f, v3add(v3scale(rt, nx * th * ((float)R->W / R->H)), v3scale(up, ny * th))));
+    *hx = *px = -1;
+    for (s = 0; s < 40.0f; s += 0.03f) {
+        int gx, gy, gz;
+        p = v3add(cam, v3scale(dir, s));
+        gx = (int)floorf(p.x / PH_CELL + PH_GX * 0.5f);
+        gz = (int)floorf(p.z / PH_CELL + PH_GZ * 0.5f);
+        gy = (int)floorf((p.y - 0.15f) / PH_CELL);
+        if (p.y < 0.15f) {   /* vloer: op laag 1 neerzetten */
+            if (gx >= 0 && gx < PH_GX && gz >= 0 && gz < PH_GZ && !d->c[0][gz][gx]) { *px = gx; *py = 0; *pz = gz; }
+            else if (lx >= 0) { *px = lx; *py = ly; *pz = lz; }
+            return *px >= 0;
+        }
+        if (gx < 0 || gx >= PH_GX || gz < 0 || gz >= PH_GZ || gy < 0 || gy >= PH_GY) { lx = -1; continue; }
+        if (d->c[gy][gz][gx]) {
+            *hx = gx; *hy = gy; *hz = gz;
+            if (lx >= 0) { *px = lx; *py = ly; *pz = lz; }
+            return 1;
+        }
+        lx = gx; ly = gy; lz = gz;
+    }
+    return 0;
+}
+
 static void draw_build(void) {
     Renderer *R = &F.R;
     PDesign *d = &F.G.design;
-    float W = (float)R->W, mass;
-    int x, z, y, t, motors, wheels, wings, jets, seats;
+    float W = (float)R->W, H = (float)R->H, mass;
+    int t, motors, wheels, wings, jets, seats, gx = -1, gy = 0, gz = 0;
     char b[160];
-    ui_rect(R, 0, 0, W, (float)R->H, 0.06f, 0.07f, 0.1f, 1);
-    ui_text(R, "PHYSICS MODE - BUILD YOUR VEHICLE", W * 0.5f, 26, 40, 1, 0.85f, 0.25f, 1, 1);
-    ui_text(R, "Top view (front = up). Pick a part, tap squares to place it. 3 layers high.", W * 0.5f, 78, 18, 0.85f, 0.85f, 0.9f, 1, 1);
-    for (t = 0; t < PP_COUNT; t++) {   /* onderdelen */
-        float py = 140.0f + t * 60.0f, sel = F.bSel == t;
-        ui_rect(R, 30, py, 200, 50, sel ? 0.9f : 0.2f, sel ? 0.6f : 0.22f, sel ? 0.1f : 0.28f, 0.95f);
-        ui_rect(R, 40, py + 10, 30, 30, PCOL[t][0], PCOL[t][1], PCOL[t][2], 1);
-        ui_text(R, ph_part_name(t), 84, py + 12, 22, 1, 1, 1, 1, 0);
-    }
-    for (y = 0; y < PH_GY; y++) {   /* lagen */
-        float lx = BG_X + y * 122.0f;
-        int sel = F.bLayer == y;
-        ui_rect(R, lx, 104, 112, 36, sel ? 0.9f : 0.2f, sel ? 0.6f : 0.22f, sel ? 0.1f : 0.28f, 0.95f);
-        snprintf(b, sizeof(b), "LAYER %d", y + 1);
-        ui_text(R, b, lx + 56, 110, 18, 1, 1, 1, 1, 1);
-    }
-    ui_rect(R, BG_X - 4, BG_Y - 4, PH_GX * BG_C + 8, PH_GZ * BG_C + 8, 0.25f, 0.27f, 0.32f, 1);
-    for (z = 0; z < PH_GZ; z++)
-        for (x = 0; x < PH_GX; x++) {
-            float cx = BG_X + x * BG_C, cy = BG_Y + (PH_GZ - 1 - z) * BG_C;
-            int cur = d->c[F.bLayer][z][x], below = F.bLayer > 0 ? d->c[F.bLayer - 1][z][x] : 0;
-            ui_rect(R, cx + 2, cy + 2, BG_C - 4, BG_C - 4, 0.12f, 0.13f, 0.16f, 1);
-            if (below && !cur) ui_rect(R, cx + 6, cy + 6, BG_C - 12, BG_C - 12, PCOL[below][0], PCOL[below][1], PCOL[below][2], 0.3f);
-            if (cur) {
-                ui_rect(R, cx + 3, cy + 3, BG_C - 6, BG_C - 6, PCOL[cur][0], PCOL[cur][1], PCOL[cur][2], 1);
-                ui_text(R, PH_SHORT[cur], cx + BG_C * 0.5f, cy + 16, 15, cur == PP_WING ? 0.1f : 1, cur == PP_WING ? 0.1f : 1, cur == PP_WING ? 0.1f : 1, 1, 1);
-            }
+    V3 cam, tgt;
+    if (F.bDist < 2.0f) { F.bDist = 7.5f; F.bYaw = 0.7f; F.bPitch = 0.45f; }
+    if (P.connected && P.active) { F.bHover = 1; F.bHoverX = P.cx; F.bHoverY = P.cy; }
+    if (F.bHover && F.bHoverX > 240 && !(F.bHoverX > W - 330 && F.bHoverY > 380)) {
+        int hx, hy, hz, px, py, pz;
+        if (build_pick(F.bHoverX, F.bHoverY, &hx, &hy, &hz, &px, &py, &pz)) {
+            if (F.bSel == PP_NONE) { if (hx >= 0) { gx = hx; gy = hy; gz = hz; } }
+            else if (px >= 0) { gx = px; gy = py; gz = pz; }
         }
-    ui_text(R, "FRONT", BG_X + PH_GX * BG_C * 0.5f, BG_Y - 30, 18, 0.8f, 0.9f, 1, 1, 1);
-    /* zijaanzicht */
-    ui_text(R, "SIDE VIEW", 820, 140, 20, 0.8f, 0.9f, 1, 1, 1);
-    ui_rect(R, 700, 170, 240, 110, 0.12f, 0.13f, 0.16f, 1);
-    for (y = 0; y < PH_GY; y++) for (z = 0; z < PH_GZ; z++) for (x = 0; x < PH_GX; x++) {
-        int c2 = d->c[y][z][x];
-        if (!c2) continue;
-        ui_rect(R, 712 + z * 24.0f, 250 - y * 26.0f, 22, 24, PCOL[c2][0], PCOL[c2][1], PCOL[c2][2], 0.85f);
+    }
+    build_cam(&cam, &tgt);
+    ui_flush(R);
+    r_draw_build(R, d, cam, tgt, 50.0f, gx, gy, gz, F.bSel, F.t);
+    ui_begin(R);
+    ui_rect(R, 0, 0, W, 64, 0, 0, 0, 0.45f);
+    ui_text(R, "PHYSICS MODE - 3D BUILDER", W * 0.5f, 12, 36, 1, 0.85f, 0.25f, 1, 1);
+    ui_text(R, "Click a part face to attach, click the floor to start. Drag = rotate, wheel/+- = zoom.", W * 0.5f, 70, 16, 0.9f, 0.9f, 1, 0.9f, 1);
+    for (t = 0; t < PP_COUNT; t++) {   /* onderdelen */
+        float py = 110.0f + t * 56.0f, sel = F.bSel == t;
+        ui_rect(R, 20, py, 200, 48, sel ? 0.9f : 0.12f, sel ? 0.6f : 0.14f, sel ? 0.1f : 0.2f, 0.9f);
+        ui_rect(R, 30, py + 9, 30, 30, PCOL[t][0], PCOL[t][1], PCOL[t][2], 1);
+        ui_text(R, ph_part_name(t), 72, py + 11, 22, 1, 1, 1, 1, 0);
+    }
+    {
+        float py = 110.0f + PP_COUNT * 56.0f + 8;
+        ui_rect(R, 20, py, 200, 44, F.bMirror ? 0.2f : 0.12f, F.bMirror ? 0.6f : 0.14f, F.bMirror ? 0.3f : 0.2f, 0.9f);
+        ui_text(R, F.bMirror ? "MIRROR: ON" : "MIRROR: OFF", 120, py + 10, 20, 1, 1, 1, 1, 1);
+        ui_rect(R, 20, py + 52, 96, 44, 0.12f, 0.14f, 0.2f, 0.9f); ui_text(R, "ZOOM +", 68, py + 62, 18, 1, 1, 1, 1, 1);
+        ui_rect(R, 124, py + 52, 96, 44, 0.12f, 0.14f, 0.2f, 0.9f); ui_text(R, "ZOOM -", 172, py + 62, 18, 1, 1, 1, 1, 1);
     }
     ph_stats(d, &mass, &motors, &wheels, &wings, &jets, &seats);
+    ui_rect(R, W - 330, 100, 310, 120, 0, 0, 0, 0.45f);
     snprintf(b, sizeof(b), "%.0f kg   %d motor   %d wheels", mass, motors, wheels);
-    ui_text(R, b, 820, 300, 18, 1, 1, 1, 1, 1);
+    ui_text(R, b, W - 175, 112, 18, 1, 1, 1, 1, 1);
     snprintf(b, sizeof(b), "%d wing   %d jet", wings, jets);
-    ui_text(R, b, 820, 324, 18, 1, 1, 1, 1, 1);
-    if (!seats) ui_text(R, "Needs a SEAT (driver)!", 820, 356, 18, 1, 0.4f, 0.3f, 1, 1);
-    else if (!motors && !jets) ui_text(R, "Tip: add a MOTOR or JET", 820, 356, 18, 1, 0.8f, 0.3f, 1, 1);
-    else if (motors && !wheels) ui_text(R, "Tip: motors drive WHEELS", 820, 356, 18, 1, 0.8f, 0.3f, 1, 1);
-    else ui_text(R, "Ready!", 820, 356, 20, 0.4f, 1, 0.5f, 1, 1);
+    ui_text(R, b, W - 175, 138, 18, 1, 1, 1, 1, 1);
+    if (!seats) ui_text(R, "Needs a SEAT (driver)!", W - 175, 172, 18, 1, 0.4f, 0.3f, 1, 1);
+    else if (!motors && !jets) ui_text(R, "Tip: add a MOTOR or JET", W - 175, 172, 18, 1, 0.8f, 0.3f, 1, 1);
+    else if (motors && !wheels) ui_text(R, "Tip: motors drive WHEELS", W - 175, 172, 18, 1, 0.8f, 0.3f, 1, 1);
+    else ui_text(R, "Ready!", W - 175, 172, 20, 0.4f, 1, 0.5f, 1, 1);
     {   /* knoppen */
         static const char *bt[5] = {"DRIVE: TEST TRACK", "DRIVE: REAL NL", "SIMPLE CAR", "CLEAR", "BACK"};
         int k;
         for (k = 0; k < 5; k++) {
-            float bx = 700, by = 400.0f + k * 62.0f;
+            float bx = W - 320, by = 400.0f + k * 62.0f;
             int pr = F.pressed == 2000 + k;
             ui_rect(R, bx, by, 300, 52, pr ? 0.9f : (k < 2 ? 0.15f : 0.22f), pr ? 0.6f : (k < 2 ? 0.5f : 0.24f), pr ? 0.1f : (k < 2 ? 0.25f : 0.3f), 0.95f);
             ui_text(R, bt[k], bx + 150, by + 13, 22, 1, 1, 1, 1, 1);
         }
     }
+}
+
+static void build_place(float x, float y) {
+    PDesign *d = &F.G.design;
+    int hx, hy, hz, px, py, pz;
+    if (!build_pick(x, y, &hx, &hy, &hz, &px, &py, &pz)) return;
+    if (F.bSel == PP_NONE) {
+        if (hx < 0) return;
+        d->c[hy][hz][hx] = 0;
+        if (F.bMirror) d->c[hy][hz][PH_GX - 1 - hx] = 0;
+    } else {
+        if (px < 0) return;
+        d->c[py][pz][px] = (unsigned char)F.bSel;
+        if (F.bMirror && !d->c[py][pz][PH_GX - 1 - px]) d->c[py][pz][PH_GX - 1 - px] = (unsigned char)F.bSel;
+    }
+    if (F.sfxOn) plat_sfx(SFX_CLICK, 0.5f);
 }
 
 static void phys_go(int nl) {
@@ -1031,23 +1085,44 @@ static void phys_go(int nl) {
 }
 
 static void build_tap(float x, float y, int phase) {
+    Renderer *R = &F.R;
     PDesign *d = &F.G.design;
+    float W = (float)R->W;
     int t, k, hit = 0;
-    for (t = 0; t < PP_COUNT; t++) if (x > 30 && x < 230 && y > 140 + t * 60 && y < 190 + t * 60) { if (phase == TOUCH_BEGIN) F.bSel = t; return; }
-    for (k = 0; k < PH_GY; k++) if (x > BG_X + k * 122 && x < BG_X + k * 122 + 112 && y > 104 && y < 140) { if (phase == TOUCH_BEGIN) F.bLayer = k; return; }
-    if (x >= BG_X && x < BG_X + PH_GX * BG_C && y >= BG_Y && y < BG_Y + PH_GZ * BG_C) {
-        int gx = (int)((x - BG_X) / BG_C), gz = PH_GZ - 1 - (int)((y - BG_Y) / BG_C);
-        if (phase != TOUCH_END && gx >= 0 && gx < PH_GX && gz >= 0 && gz < PH_GZ) d->c[F.bLayer][gz][gx] = (unsigned char)F.bSel;
+    float py0 = 110.0f + PP_COUNT * 56.0f + 8;
+    F.bHover = 1; F.bHoverX = x; F.bHoverY = y;
+    if (x > 20 && x < 220 && y > 110 && y < 110 + PP_COUNT * 56.0f) {
+        for (t = 0; t < PP_COUNT; t++) if (y > 110 + t * 56 && y < 158 + t * 56) { if (phase == TOUCH_BEGIN) F.bSel = t; }
         return;
     }
-    for (k = 0; k < 5; k++) if (x > 700 && x < 1000 && y > 400 + k * 62 && y < 452 + k * 62) hit = 2000 + k;
-    if (phase != TOUCH_END) { F.pressed = hit; return; }
-    F.pressed = 0;
-    if (hit == 2000) phys_go(0);
-    else if (hit == 2001) phys_go(1);
-    else if (hit == 2002) ph_default(d);
-    else if (hit == 2003) memset(d, 0, sizeof(*d));
-    else if (hit == 2004) { design_save(); set_state(ST_MENU); }
+    if (x > 20 && x < 220 && y > py0 && y < py0 + 44) { if (phase == TOUCH_BEGIN) F.bMirror = !F.bMirror; return; }
+    if (x > 20 && x < 116 && y > py0 + 52 && y < py0 + 96) { if (phase == TOUCH_BEGIN) F.bDist = clampf(F.bDist * 0.8f, 3.0f, 18.0f); return; }
+    if (x > 124 && x < 220 && y > py0 + 52 && y < py0 + 96) { if (phase == TOUCH_BEGIN) F.bDist = clampf(F.bDist * 1.25f, 3.0f, 18.0f); return; }
+    for (k = 0; k < 5; k++) if (x > W - 320 && x < W - 20 && y > 400 + k * 62 && y < 452 + k * 62) hit = 2000 + k;
+    if (hit || F.pressed) {
+        if (phase != TOUCH_END) { F.pressed = hit; return; }
+        F.pressed = 0;
+        if (hit == 2000) phys_go(0);
+        else if (hit == 2001) phys_go(1);
+        else if (hit == 2002) ph_default(d);
+        else if (hit == 2003) memset(d, 0, sizeof(*d));
+        else if (hit == 2004) { design_save(); set_state(ST_MENU); }
+        return;
+    }
+    /* 3D-gebied: slepen = draaien, tikken = plaatsen */
+    if (phase == TOUCH_BEGIN) { F.bDown = 1; F.bDrag = 0; F.bDownX = F.bLastX = x; F.bDownY = F.bLastY = y; return; }
+    if (!F.bDown) return;
+    if (phase == TOUCH_MOVE) {
+        if (fabsf(x - F.bDownX) + fabsf(y - F.bDownY) > 14.0f) F.bDrag = 1;
+        if (F.bDrag) {
+            F.bYaw -= (x - F.bLastX) * 0.008f;
+            F.bPitch = clampf(F.bPitch + (y - F.bLastY) * 0.006f, 0.05f, 1.45f);
+        }
+        F.bLastX = x; F.bLastY = y;
+        return;
+    }
+    F.bDown = 0;
+    if (!F.bDrag) build_place(x, y);
 }
 
 static void draw_pad_cursor(void) {
@@ -4194,6 +4269,7 @@ void fe_mouse_look(float dx, float dy) {
 
 void fe_mouse_wheel(float dy) {
     if (F.state == ST_BIGMAP) F.bmScale = clampf(F.bmScale * (dy > 0 ? 1.25f : 0.8f), 0.06f, 4.0f);
+    if (F.state == ST_BUILD) F.bDist = clampf(F.bDist * (dy > 0 ? 0.88f : 1.14f), 3.0f, 18.0f);
 }
 
 int fe_text_wanted(void) { return F.ready && (F.state == ST_NLINPUT || F.state == ST_MP); }

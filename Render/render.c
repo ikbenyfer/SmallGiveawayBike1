@@ -622,6 +622,17 @@ void r_build_models(Renderer *r) {
         }
         g_meshMat = 0;
         upload(&r->rampMesh, &m);
+        /* bouwstudio: vloer met raster van de bouwruimte */
+        mb_reset(&m);
+        g_meshMat = MAT_CONCRETE;
+        mb_flat(&m, -20, -20, 20, 20, 0.0f, col(120, 124, 132));
+        g_meshMat = 0;
+        mb_flat(&m, -PH_GX * PH_CELL * 0.5f, -PH_GZ * PH_CELL * 0.5f, PH_GX * PH_CELL * 0.5f, PH_GZ * PH_CELL * 0.5f, 0.01f, col(70, 84, 110));
+        for (k = 0; k <= PH_GX; k++) { float x = (k - PH_GX * 0.5f) * PH_CELL; mb_flat(&m, x - 0.012f, -PH_GZ * PH_CELL * 0.5f, x + 0.012f, PH_GZ * PH_CELL * 0.5f, 0.02f, col_e(150, 190, 255, 120)); }
+        for (k = 0; k <= PH_GZ; k++) { float z = (k - PH_GZ * 0.5f) * PH_CELL; mb_flat(&m, -PH_GX * PH_CELL * 0.5f, z - 0.012f, PH_GX * PH_CELL * 0.5f, z + 0.012f, 0.02f, col_e(150, 190, 255, 120)); }
+        mb_box(&m, v3(-0.15f, 0.0f, PH_GZ * PH_CELL * 0.5f + 0.3f), v3(0.15f, 0.04f, PH_GZ * PH_CELL * 0.5f + 0.9f), col_e(255, 200, 40, 200), 0);   /* pijl: voorkant */
+        mb_box(&m, v3(-0.4f, 0.0f, PH_GZ * PH_CELL * 0.5f + 0.75f), v3(0.4f, 0.04f, PH_GZ * PH_CELL * 0.5f + 0.9f), col_e(255, 200, 40, 200), 0);
+        upload(&r->buildFloor, &m);
     }
     {   /* v6.0: luchtkoepel (eenheidsbol) en regendruppels */
         int a, b2;
@@ -1797,4 +1808,66 @@ void ui_text(Renderer *r, const char *s, float x, float y, float size, float cr,
             ui_quad(r, &r->font, x + g->xoff * sc, y + g->yoff * sc, g->w * sc, g->h * sc, g->u0, g->v0, g->u1, g->v1, cr, cg, cb, ca);
         x += g->adv * sc;
     }
+}
+
+/* v6.0.2: 3D-bouwscherm (vloer, onderdelen, spookonderdeel) */
+void r_draw_build(Renderer *r, const PDesign *d, V3 cam, V3 tgt, float fov, int gx, int gy, int gz, int ghostType, float t) {
+    float aspect = (float)r->W / (float)(r->H > 0 ? r->H : 1);
+    GLint *L = r->loc[0];
+    M4 id = m4_identity();
+    int x, y, z;
+    r->cam = cam;
+    r->proj = m4_perspective(fov * PI_F / 180.0f, aspect, 0.1f, 120.0f);
+    r->view = m4_lookat(cam, tgt, v3(0, 1, 0));
+    r->vp = m4_mul(r->proj, r->view);
+    extract_planes(r);
+    glClearColor(0.16f, 0.18f, 0.24f, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST); glDepthMask(GL_TRUE); glDepthFunc(GL_LEQUAL);
+    glEnable(GL_CULL_FACE); glCullFace(GL_BACK); glFrontFace(GL_CCW); glDisable(GL_BLEND);
+    r->progW = r->prog[0];
+    r->wVP = L[0]; r->wModel = L[1]; r->wSun = L[2]; r->wSunCol = L[3]; r->wAmb = L[4]; r->wCam = L[5];
+    r->wFog = L[6]; r->wFogCol = L[7]; r->wTint = L[8]; r->wEmis = L[9]; r->wAlpha = L[10]; r->wUnlit = L[11];
+    glUseProgram(r->progW);
+    glEnableVertexAttribArray(0); glEnableVertexAttribArray(1); glEnableVertexAttribArray(2);
+    glUniformMatrix4fv(r->wVP, 1, GL_FALSE, r->vp.m);
+    glUniform3f(r->wSun, -0.45f, 0.8f, 0.4f);
+    glUniform3f(r->wSunCol, 0.75f, 0.72f, 0.66f);
+    glUniform3f(r->wAmb, 0.55f, 0.58f, 0.66f);
+    glUniform3f(r->wCam, cam.x, cam.y, cam.z);
+    glUniform2f(r->wFog, 60.0f, 110.0f);
+    glUniform3f(r->wFogCol, 0.16f, 0.18f, 0.24f);
+    glUniform1f(r->wEmis, 0.6f);
+    glUniform1f(r->wAlpha, 1.0f);
+    glUniform1f(r->wUnlit, 0.0f);
+    tint(r, 1, 1, 1);
+    draw_mesh(r, &r->buildFloor, &id);
+    for (y = 0; y < PH_GY; y++) for (z = 0; z < PH_GZ; z++) for (x = 0; x < PH_GX; x++) {
+        int tp = d->c[y][z][x];
+        V3 c;
+        M4 m;
+        if (tp <= 0 || tp >= PP_COUNT) continue;
+        c = ph_cell_pos(x, y, z);
+        m = m4_translate(c.x, c.y, c.z);
+        draw_mesh(r, tp == PP_WHEEL ? &r->phWheel : &r->phPart[tp], &m);
+        if (tp == PP_SEAT) draw_char(r, 0, m4_translate(c.x, c.y - 0.6f, c.z - 0.05f), 0, 3, 0, 0, 0);
+    }
+    if (gx >= 0) {   /* spookonderdeel: waar het komt (of rood: wat er weggaat) */
+        V3 c = ph_cell_pos(gx, gy, gz);
+        M4 m = m4_translate(c.x, c.y, c.z);
+        float pulse = 0.35f + 0.15f * sinf(t * 6.0f);
+        glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+        glUniform1f(r->wUnlit, 0.6f);
+        glUniform1f(r->wAlpha, pulse + 0.15f);
+        if (ghostType > 0 && ghostType < PP_COUNT) { tint(r, 0.6f, 1.0f, 0.6f); draw_mesh(r, ghostType == PP_WHEEL ? &r->phWheel : &r->phPart[ghostType], &m); }
+        else { m = m4_mul(m, m4_scale(1.08f, 1.08f, 1.08f)); tint(r, 1.0f, 0.2f, 0.15f); draw_mesh(r, &r->phPart[PP_BLOCK], &m); }
+        tint(r, 1, 1, 1);
+        glUniform1f(r->wUnlit, 0.0f);
+        glUniform1f(r->wAlpha, 1.0f);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glDisableVertexAttribArray(1);
 }

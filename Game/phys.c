@@ -77,7 +77,8 @@ V3 ph_to_world(const Craft *c, V3 l) { return v3add(c->pos, q_rot(c->q, l)); }
 
 /* ------------------------------------------------------------------ ontwerp */
 
-static V3 cell_pos(int gx, int gy, int gz) { return v3((gx - PH_GX / 2) * PH_CELL, gy * PH_CELL + 0.45f, (gz - PH_GZ / 2) * PH_CELL); }
+V3 ph_cell_pos(int gx, int gy, int gz) { return v3((gx - PH_GX / 2) * PH_CELL, gy * PH_CELL + 0.45f, (gz - PH_GZ / 2) * PH_CELL); }
+#define cell_pos ph_cell_pos
 
 void ph_default(PDesign *d) {
     int z;
