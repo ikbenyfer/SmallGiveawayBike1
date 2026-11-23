@@ -63,6 +63,7 @@ static struct {
     float atMaxSpeed;
     int atShot2, bizShop, atBiz, controlsFrom;
     long atMart0;
+    int atCam; V3 atCamPos, atCamTgt;
     int slot, slotDelArm;   /* opslagslot 1..3; slotDelArm = slot dat op bevestiging wacht */
     long sfxPlayed;
     float lbx, lby, lkx, lky, rbx, rby, rkx, rky;
@@ -3204,9 +3205,22 @@ static void autotest_tick(float dt) {
             F.atT3 = t;
             F.atStep = 152;
         }
-        else if (F.atStep == 152 && t > F.atT3 + 0.8f) {   /* v5.5: daken van bovenaf */
-            g->camPitch = 1.0f;
+        else if (F.atStep == 152 && t > F.atT3 + 0.8f) {   /* v5.5: daken van bovenaf (luchtcamera) */
+            F.atCam = 1;
+            F.atCamPos = v3(g->p.x - 70.0f, g->p.y + 75.0f, g->p.z + 70.0f);
+            F.atCamTgt = v3(g->p.x, g->p.y, g->p.z);
+            F.atT3 = t;
+            F.atStep = 153;
+        }
+        else if (F.atStep == 153 && t > F.atT3 + 0.5f) {
             at_shot("20b_nl_roofs");
+            F.atCamPos = v3(g->p.x + 25.0f, g->p.y + 22.0f, g->p.z - 30.0f);
+            F.atT3 = t;
+            F.atStep = 154;
+        }
+        else if (F.atStep == 154 && t > F.atT3 + 0.5f) {
+            at_shot("20c_nl_roofs_close");
+            F.atCam = 0;
             g->camPitch = 0.25f;
             ns_set_detail(F.quality >= 2);
             F.atStep = 53;
@@ -3828,6 +3842,7 @@ void fe_frame(double now) {
             if (F.at) autotest_tick(dt);
             else build_input();
             if (F.state == ST_GAME || F.at) game_update(&F.G, &F.in, dt);
+            if (F.atCam) { F.G.camPos = F.atCamPos; F.G.camTarget = F.atCamTgt; }   /* testmodus: vaste luchtcamera */
             if (F.G.shopOpen) { F.G.shopOpen = 0; F.shopMsg[0] = 0; set_state(ST_SHOP); }
             if (F.G.dealerOpen) { F.G.dealerOpen = 0; F.shopMsg[0] = 0; set_state(ST_DEALER); }
             if (F.G.customsOpen) { F.G.customsOpen = 0; F.shopMsg[0] = 0; set_state(ST_CUSTOMS); }
