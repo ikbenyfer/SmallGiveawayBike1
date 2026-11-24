@@ -218,12 +218,15 @@ static float car_sdf(V3 p, const void *u) {
     cab_shape(c, p.y, &hw, &zf, &zr);
     cab = fmaxf(fmaxf(ax - hw, fmaxf(p.z - zf, zr - p.z)), fmaxf(p.y - c->roof, c->yt - 0.08f - p.y));
     d = smin(d, cab * 0.78f, 0.07f);
-    /* wielkasten */
+    /* spatborden (lage auto's: anders snijdt de wielkast door de motorkap), daarna de wielkasten */
+    for (k = 0; k < 2; k++) {
+        float wz = k ? c->wzr : c->wzf, wr = k ? c->wrr : c->wr;
+        if (c->haunch || wr * 2.0f + 0.16f > c->yt) d = smin(d, sd_ell(v3(ax, p.y, p.z), v3(W - 0.1f, wr + 0.17f, wz), v3(0.18f, 0.27f, 0.6f)), 0.08f);
+    }
     for (k = 0; k < 2; k++) {
         float wz = k ? c->wzr : c->wzf, wr = k ? c->wrr : c->wr;
         float cy = sqrtf((p.y - wr) * (p.y - wr) + (p.z - wz) * (p.z - wz)) - (wr + 0.075f);
         d = smax(d, -fmaxf(cy, (W - 0.42f) - ax), 0.025f);
-        if (c->haunch && k == 1) d = smin(d, sd_ell(v3(ax, p.y, p.z), v3(W - 0.08f, wr + 0.12f, wz), v3(0.16f, 0.2f, 0.62f)), 0.08f);
     }
     /* bumpers */
     d = smin(d, sd_rbox(p, v3(0, c->yb + 0.11f, L - 0.02f), v3(W - 0.03f, 0.1f, 0.08f), 0.05f), 0.03f);
