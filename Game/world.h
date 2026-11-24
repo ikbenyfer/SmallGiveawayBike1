@@ -60,6 +60,9 @@ typedef struct {
 
     ParkSpot park[40]; int npark;
     V3 cash[MAX_CASH]; int ncash;
+    /* v7.1.0 PRO-bomen: plekken (de renderer tekent een echt 3D-model) */
+#define MAX_TREES 1500
+    float treeX[MAX_TREES], treeZ[MAX_TREES], treeS[MAX_TREES]; unsigned char treeK[MAX_TREES]; int ntrees;
     V3 houses[16]; int nhouses;   /* voordeuren voor bezorgmissies */
     V3 gifts[8]; int ngifts;
     V3 dealerSpot[4]; float dealerSpotH;
@@ -93,6 +96,7 @@ int world_on_road(const World *w, float x, float z);
 static inline float block_x0(int i) { return i * PITCH + ROADW; }
 static inline float road_c(int k) { return k * PITCH + ROADW * 0.5f; }
 
+void world_set_pro(int on);   /* v7.1.0: bomen als PRO-modellen (pc, ULTRA+) */
 void world_set_detail(int d);   /* v5.5: 0 laag, 1 midden, 2 hoog (voor world_init/het bouwen van de stad) */
 
 #endif

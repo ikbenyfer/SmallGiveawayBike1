@@ -17,6 +17,7 @@ typedef struct {
 
 #define UI_MAX 6000
 #define RW_SLOTS 256
+#define WALK_STYLES 9   /* v7.1.0: NORMAL, RELAXED, ATHLETIC, SWAGGER, CATWALK, TOUGH, SNEAK, ROBOT, ZOMBIE */
 
 enum { TOD_DUSK = 0, TOD_NIGHT = 1, TOD_DAY = 2 };
 
@@ -40,6 +41,7 @@ typedef struct {
     int ultra;         /* v6.2.0: ULTRA+ (niet op de iPad) */
     /* v7.0.0 PRO-engine (pc, ULTRA+): nabewerking (pro_post.h) */
     int pro, proOk, proFailed, proW, proH, proDebug;
+    int walkStyle;     /* v7.1.0: loopstijl van de speler (WALK_STYLES) */
     GLuint pFbo[6], pTex[6], pRb[6], pProg[5], pQuad;
     int shadowsOn;     /* schaduwen (kan automatisch uit bij lage fps) */
     float rain;        /* 0..1 regen (nat asfalt, druppels) */
@@ -56,6 +58,7 @@ typedef struct {
     GMesh store[6];   /* v4.0: winkel-interieurs (STORE_COUNT) */
     GMesh homeExt[3], homeInt[3], homeGar[4];   /* eigen huis: buiten, binnen, ondergrondse garage */
     GMesh decor[3][5];                            /* luxe spullen uit BLING, per huisgrootte */
+    GMesh treeHi[3], treeLo[3];                   /* v7.1.0 PRO-bomen (PRO_TREE_KINDS) */
     struct RWorld {
         GMesh ground;
         GMesh chunk[RW_SLOTS];

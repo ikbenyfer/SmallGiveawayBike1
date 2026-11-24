@@ -4,6 +4,7 @@
 #include "../Game/stores.h"
 #include "../Game/voice.h"
 #include "../Game/human.h"
+#include "../Game/pro_models.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -667,8 +668,13 @@ void r_build_models(Renderer *r) {
     }
     g_autoMat = 2;   /* v6.2.0: banden van rubber */
     for (i = 0; i < BIKE_VARIANTS; i++) { BUILD(r->bike[i], model_bike(&m, i)); BUILD(r->bikeLo[i], model_bike_lo(&m, i)); }
-    for (i = 0; i < CAR_VARIANTS; i++) { BUILD(r->car[i], model_car(&m, i)); BUILD(r->carLo[i], model_car_lo(&m, i)); }
+    for (i = 0; i < CAR_VARIANTS; i++) {
+        if (hd) BUILD(r->car[i], pro_car_traffic(&m, i));   /* v7.1.0 PRO-auto's */
+        else BUILD(r->car[i], model_car(&m, i));
+        BUILD(r->carLo[i], model_car_lo(&m, i));
+    }
     g_autoMat = 0;
+    if (hd) for (i = 0; i < PRO_TREE_KINDS; i++) { BUILD(r->treeHi[i], pro_tree(&m, i, 1)); BUILD(r->treeLo[i], pro_tree(&m, i, 0)); }
     for (i = 1; i < 4; i++) BUILD(r->weapon[i], model_weapon(&m, i));
     BUILD(r->cash, model_cash(&m));
     BUILD(r->gift, model_gift(&m));
@@ -681,7 +687,8 @@ void r_build_models(Renderer *r) {
     BUILD(r->spoiler, model_spoiler(&m));
     g_autoMat = 2;
     for (i = 0; i < CAR_MODELS; i++) {
-        BUILD(r->carBody[i], model_car_body(&m, i)); BUILD(r->carDetail[i], model_car_detail(&m, i));
+        if (hd) { BUILD(r->carBody[i], pro_car_body(&m, i)); BUILD(r->carDetail[i], pro_car_detail(&m, i)); }
+        else { BUILD(r->carBody[i], model_car_body(&m, i)); BUILD(r->carDetail[i], model_car_detail(&m, i)); }
         BUILD(r->carBodyLo[i], model_car_body_lo(&m, i)); BUILD(r->carDetailLo[i], model_car_detail_lo(&m, i));
     }
     for (i = 0; i < MOTO_MODELS; i++) { BUILD(r->moto[i], model_moto(&m, i)); BUILD(r->motoLo[i], model_moto_lo(&m, i)); }
@@ -973,6 +980,7 @@ static int sphere_visible(Renderer *r, float x, float y, float z, float rad, flo
 typedef struct { float lean, bob, seatY, seatZ, th[2], kn[2], sh[2], el[2]; } CPose;   /* [0] = links (k=-1), [1] = rechts */
 
 static float g_animT;   /* speltijd, voor ademhalen in stilstand */
+static int g_poseStyle;  /* v7.1.0: loopstijl voor de pose die nu getekend wordt (alleen de speler) */
 
 static CPose pose_lerp(CPose a, CPose b, float t) {
     CPose o;
@@ -1002,6 +1010,56 @@ static CPose pose_walk(float w, float speed, int idSeed) {
     }
     p.lean = 0.2f * run + 0.03f * mv;
     p.bob = -(0.025f + 0.04f * run) * fabsf(cosf(w)) * mv;
+    if (g_poseStyle && mv >= 0.05f) {   /* v7.1.0: loopstijlen (alleen lopen; rennen blijft gewoon rennen) */
+        float wk = mv * (1.0f - run);
+        for (i = 0; i < 2; i++) {
+            float ph = w + (i ? 0.0f : PI_F), s = sinf(ph), c = fmaxf(0.0f, -cosf(ph));
+            switch (g_poseStyle) {
+            case 1:   /* RELAXED: kleine passen, armen hangen los */
+                p.th[i] = lerpf(p.th[i], 0.38f * s, wk); p.kn[i] = lerpf(p.kn[i], 0.05f + 0.45f * c, wk);
+                p.sh[i] = lerpf(p.sh[i], -0.22f * s, wk); p.el[i] = lerpf(p.el[i], -0.08f, wk);
+                break;
+            case 2:   /* ATHLETIC: grote passen, armen gebogen en krachtig */
+                p.th[i] = lerpf(p.th[i], 0.68f * s, wk); p.kn[i] = lerpf(p.kn[i], 0.1f + 0.9f * c, wk);
+                p.sh[i] = lerpf(p.sh[i], -0.75f * s, wk); p.el[i] = lerpf(p.el[i], -0.95f, wk);
+                break;
+            case 3:   /* SWAGGER: brede zwaai, armen ver mee, licht achterover */
+                p.th[i] = lerpf(p.th[i], 0.5f * s, wk); p.kn[i] = lerpf(p.kn[i], 0.12f + 0.55f * c, wk);
+                p.sh[i] = lerpf(p.sh[i], -0.9f * s, wk); p.el[i] = lerpf(p.el[i], -0.35f - 0.25f * fmaxf(0.0f, s), wk);
+                break;
+            case 4:   /* CATWALK: voeten voor elkaar, gestrekte knieen, kleine armzwaai */
+                p.th[i] = lerpf(p.th[i], 0.55f * s, wk); p.kn[i] = lerpf(p.kn[i], 0.02f + 0.35f * c, wk);
+                p.sh[i] = lerpf(p.sh[i], -0.3f * s, wk); p.el[i] = lerpf(p.el[i], -0.05f, wk);
+                break;
+            case 5:   /* TOUGH: zware stap, ellebogen naar buiten gebogen */
+                p.th[i] = lerpf(p.th[i], 0.45f * s, wk); p.kn[i] = lerpf(p.kn[i], 0.15f + 0.5f * c, wk);
+                p.sh[i] = lerpf(p.sh[i], -0.15f - 0.35f * s, wk); p.el[i] = lerpf(p.el[i], -0.75f, wk);
+                break;
+            case 6:   /* SNEAK: diep door de knieen, voorovergebogen, kleine passen */
+                p.th[i] = lerpf(p.th[i], -0.45f + 0.42f * s, wk); p.kn[i] = lerpf(p.kn[i], 0.75f + 0.45f * c, wk);
+                p.sh[i] = lerpf(p.sh[i], -0.5f - 0.2f * s, wk); p.el[i] = lerpf(p.el[i], -1.2f, wk);
+                break;
+            case 7:   /* ROBOT: stijve benen, armen recht als een slinger */
+                p.th[i] = lerpf(p.th[i], 0.45f * (s > 0 ? 1.0f : -1.0f) * fminf(1.0f, fabsf(s) * 2.5f), wk); p.kn[i] = lerpf(p.kn[i], 0.0f, wk);
+                p.sh[i] = lerpf(p.sh[i], -0.85f * (s > 0 ? 1.0f : -1.0f) * fminf(1.0f, fabsf(s) * 2.5f), wk); p.el[i] = lerpf(p.el[i], -1.57f, wk);
+                break;
+            case 8:   /* ZOMBIE: armen vooruit, slepende stijve passen */
+                p.th[i] = lerpf(p.th[i], 0.3f * s, wk); p.kn[i] = lerpf(p.kn[i], 0.05f + 0.2f * c, wk);
+                p.sh[i] = lerpf(p.sh[i], -1.45f + 0.08f * s, wk); p.el[i] = lerpf(p.el[i], -0.12f, wk);
+                break;
+            }
+        }
+        switch (g_poseStyle) {
+        case 1: p.lean = lerpf(p.lean, -0.02f, wk); p.bob *= 0.6f; break;
+        case 2: p.lean = lerpf(p.lean, 0.1f, wk); p.bob *= 1.2f; break;
+        case 3: p.lean = lerpf(p.lean, -0.08f, wk); p.bob = lerpf(p.bob, -0.05f * fabsf(cosf(w)), wk); break;
+        case 4: p.lean = lerpf(p.lean, -0.03f, wk); p.bob *= 0.5f; break;
+        case 5: p.lean = lerpf(p.lean, 0.06f, wk); p.bob *= 1.4f; break;
+        case 6: p.lean = lerpf(p.lean, 0.38f, wk); p.bob = lerpf(p.bob, -0.16f, wk); break;
+        case 7: p.lean = lerpf(p.lean, 0.0f, wk); p.bob = lerpf(p.bob, -0.015f * fabsf(sinf(w * 2.0f)), wk); break;
+        case 8: p.lean = lerpf(p.lean, 0.18f, wk); p.bob *= 0.8f; break;
+        }
+    }
     if (mv < 0.05f) {   /* stilstaan: rustig ademen, armen iets los */
         float b = sinf(g_animT * 1.8f + idSeed * 1.7f);
         p.sh[0] = 0.03f + 0.03f * b; p.sh[1] = 0.03f - 0.03f * b;
@@ -1353,6 +1411,17 @@ static void draw_scene_one(Renderer *r, Game *g) {
             r->drawnChunks++;
         }
     }
+    if (r->cur == 0 && g->w->ntrees > 0 && r->treeLo[0].count > 0) {   /* v7.1.0 PRO-bomen */
+        int t;
+        for (t = 0; t < g->w->ntrees; t++) {
+            float tx = g->w->treeX[t], tz = g->w->treeZ[t], ts = g->w->treeS[t], dx = tx - r->cam.x, dz = tz - r->cam.z;
+            int kd = g->w->treeK[t] % PRO_TREE_KINDS;
+            M4 tm;
+            if (!sphere_visible(r, tx, 3.5f * ts, tz, 4.2f * ts, fogEnd + 10.0f)) continue;
+            tm = m4_mul(m4_trs_y(tx, CURB, tz, (float)(t * 2.39996)), m4_scale(ts, ts, ts));
+            draw_mesh(r, dx * dx + dz * dz < 75.0f * 75.0f ? &r->treeHi[kd] : &r->treeLo[kd], &tm);
+        }
+    }
 
     /* voertuigen */
     for (i = 0; i < g->nveh; i++) {
@@ -1527,7 +1596,9 @@ static void draw_scene_one(Renderer *r, Game *g) {
     } else if (mode == MODE_FOOT && !r->vr.hidePlayer) {
         M4 m = m4_trs_y(g->p.x, g->p.y, g->p.z, g->p.h);
         float ground = world_ground_y(g->w, g->p.x, g->p.z);
+        g_poseStyle = r->walkStyle % WALK_STYLES;   /* v7.1.0: alleen de speler loopt in de gekozen stijl */
         draw_char(r, biz_outfit_variant(g->outfit), m, g->p.anim, g->p.onGround ? 0 : 2, 0, g->weapon % WP_COUNT, g->p.onGround ? fabsf(g->p.speed) : 0);
+        g_poseStyle = 0;
         if (nsh < (int)(sizeof(shadows) / sizeof(shadows[0]))) {
             float s = clampf(0.5f - (g->p.y - ground) * 0.15f, 0.2f, 0.5f);
             shadows[nsh] = v3(g->p.x, ground, g->p.z); shs[nsh][0] = s; shs[nsh][1] = s; shs[nsh][2] = 0; nsh++;

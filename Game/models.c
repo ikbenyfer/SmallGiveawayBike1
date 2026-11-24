@@ -679,6 +679,8 @@ static void car_wheels(MeshB *m, float wx, float wzf, float wzr, float r, float 
     }
 }
 
+void model_wheels4(MeshB *m, float wx, float wzf, float wzr, float r, float rr, Col rim) { car_wheels(m, wx, wzf, wzr, r, rr, rim); }
+
 /* v5.5: deurnaden, handgrepen, sierlijst, ruitenwissers en antenne (op elke auto) */
 static void car_extras(MeshB *m, float hw, float y, float zDoor0, float zDoor1, float zWind, float yWind, Col trim) {
     Col seam = col(18, 18, 20), chrome = col(200, 202, 208);

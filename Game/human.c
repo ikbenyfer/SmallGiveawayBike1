@@ -236,7 +236,7 @@ static float face_sdf(V3 p, const HP *h) {
     d = smin(d, sd_ell(p, v3(0, 1.7355f, 0.0995f), v3(0.0205f, 0.0072f, 0.011f)), 0.006f);           /* onderlip */
     d = smax(d, -sd_rbox(p, v3(0, 1.7412f, 0.116f), v3(0.024f, 0.0011f, 0.012f), 0.0008f), 0.0015f);   /* mondspleet */
     d = smax(d, -sd_sph(q, v3(0.033f, 1.81f, 0.106f), 0.0165f), 0.012f);                              /* oogkassen */
-    d = smin(d, sd_ell(q, v3(0.033f, 1.8185f, 0.093f), v3(0.0165f, 0.0065f, 0.0125f)), 0.004f);       /* bovenoogleden */
+    d = smin(d, sd_ell(q, v3(0.033f, 1.8215f, 0.0925f), v3(0.0165f, 0.0055f, 0.0122f)), 0.004f);       /* bovenoogleden (meer open) */
     d = smin(d, sd_ell(q, v3(0.033f, 1.8015f, 0.093f), v3(0.014f, 0.0035f, 0.01f)), 0.004f);          /* onderoogleden */
     d = smin(d, sd_ell(q, v3(0.088f, 1.795f, -0.008f), v3(0.012f, 0.031f, 0.02f)), 0.01f);           /* oren */
     d = smax(d, -sd_sph(q, v3(0.098f, 1.797f, -0.004f), 0.0105f), 0.004f);                            /* oorschelp */

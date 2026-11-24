@@ -14,6 +14,36 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v7.1.0 (alle platforms; PRO-modellen alleen op de pc): echte auto's en bomen + loopstijlen
+
+- **WALK STYLE** in SETTINGS (alle platforms, ook de iPad): kies hoe je personage loopt. Er zijn 9 stijlen: **NORMAL, RELAXED, ATHLETIC, SWAGGER, CATWALK, TOUGH, SNEAK, ROBOT en ZOMBIE**. Elke stijl heeft eigen passen, knieën, armzwaai, ellebogen, houding en op-en-neer. Rennen blijft gewoon rennen. De keuze wordt bewaard.
+- **PRO-auto's** (pc, ULTRA+): alle auto's worden bij het laden opnieuw opgebouwd als één vloeiende carrosserie (signed distance fields + surface nets), dus zonder losse blokken:
+  - Vorm: een aflopende motorkap, een cabine met schuine voor- en achterruit en een smallere bovenkant (tumblehome), uitgesneden wielkasten met een donkere binnenkant, en geïntegreerde bumpers.
+  - Ruiten en stijlen: echte ruiten met A-, B- en C-stijlen en rubberranden.
+  - Verlichting: koplampen met chroomrand, richtingaanwijzers en achterlichten.
+  - Afwerking:
+    - Een grille met lamellen.
+    - Kentekens, deurgrepen, deurnaden en een motorkapnaad.
+    - Spiegels met spiegelglas.
+  - Per model:
+    - RHINO V8: luchthapper en dubbele uitlaat.
+    - VORTEX GT: brede achterspatborden (fastback).
+    - BOLT X: wigvorm met vleugel.
+    - Politie: zwart-wit met een zwaailichtbalk.
+    - Taxi: bord op het dak.
+  - Wielen met bandprofiel en remschijf.
+- **PRO-bomen** (pc, ULTRA+): echte bomen in plaats van blokken en kegels. Er zijn drie soorten:
+  - **loofbomen:** stam met wortelvoet en takken, een bolle kruin van bladerclusters, en reliëf van blaadjes in verschillende groentinten;
+  - **dennen:** gelaagd, met naaldstructuur;
+  - **populieren:** smal en hoog.
+
+  Ze vangen licht, werpen schaduw en krijgen SSAO. Dichtbij worden ze met veel detail getekend, ver weg met minder.
+- Mensen: ogen iets meer open.
+- **Eerlijk:**
+  - "100x" kan ik niet letterlijk meten. Wel zijn de auto's nu één echte carrosserie in plaats van samengevoegde blokken, en de bomen echte 3D-bomen.
+  - Motoren en fietsen houden hun bestaande (al ronde) modellen. Die hebben wel bandprofiel en remschijven in ULTRA+.
+  - Gebouwen zijn nog de bestaande modellen, met reliëf in de muren.
+
 ## v7.0.0 (pc: Windows en Linux): de PRO-engine
 
 Kies **ULTRA+** in SETTINGS en start de game opnieuw. Op Windows en Linux draait de game dan op de nieuwe **PRO-engine**. Android, Quest en Switch houden de huidige engine (met ULTRA+). De iPad krijgt deze versie niet.

@@ -66,4 +66,6 @@ void model_tracer(MeshB *m);    /* lijntje van z=0 tot z=1 */       /* missie-st
 
 void model_char_colors(int v, Col *skin, Col *hair);   /* v6.2.0: voor automatische materialen */
 
+void model_wheels4(MeshB *m, float wx, float wzf, float wzr, float r, float rr, Col rim);   /* v7.1.0: vier wielen (PRO-auto's) */
+
 #endif

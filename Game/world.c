@@ -105,9 +105,19 @@ static void window_at(V3 A, V3 dir, V3 n, float tc, float hw, float y0, float y1
     }
 }
 
+static int g_worldPro;
+void world_set_pro(int on) { g_worldPro = on; }
+
 static void tree(float x, float z, Rng *r) {
     float s = rng_range(r, 0.8f, 1.25f);
     Col trunk = col(105, 75, 50);
+    if (g_worldPro && W->ntrees < MAX_TREES) {   /* v7.1.0: echte boom (getekend door de renderer) */
+        int k = rng_f(r) < 0.5f ? 1 : (rng_f(r) < 0.8f ? 0 : 2);
+        W->treeX[W->ntrees] = x; W->treeZ[W->ntrees] = z; W->treeS[W->ntrees] = s * 0.95f; W->treeK[W->ntrees] = (unsigned char)k;
+        W->ntrees++;
+        add_box(x - 0.3f, z - 0.3f, x + 0.3f, z + 0.3f, 6.0f, BOX_TREE);
+        return;
+    }
     mb_box(cur, v3(x - 0.18f, CURB, z - 0.18f), v3(x + 0.18f, CURB + 2.0f * s, z + 0.18f), trunk, BOX_NOBOTTOM);
     if (rng_f(r) < 0.5f) {
         Col g = col(40 + rng_int(r, 20), 110 + rng_int(r, 30), 50);
