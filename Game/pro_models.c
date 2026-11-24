@@ -226,7 +226,7 @@ static float car_sdf(V3 p, const void *u) {
     for (k = 0; k < 2; k++) {
         float wz = k ? c->wzr : c->wzf, wr = k ? c->wrr : c->wr;
         float cy = sqrtf((p.y - wr) * (p.y - wr) + (p.z - wz) * (p.z - wz)) - (wr + 0.075f);
-        d = smax(d, -fmaxf(cy, (W - 0.27f) - ax), 0.025f);   /* alleen zo diep als de band breed is */
+        d = smax(d, -fmaxf(fmaxf(cy, (W - 0.27f) - ax), p.y - (2.0f * wr + 0.035f)), 0.025f);   /* zo diep als de band, niet hoger dan de band */
     }
     /* bumpers */
     d = smin(d, sd_rbox(p, v3(0, c->yb + 0.11f, L - 0.02f), v3(W - 0.03f, 0.1f, 0.08f), 0.05f), 0.03f);
