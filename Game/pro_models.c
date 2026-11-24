@@ -280,7 +280,8 @@ static void car_col(V3 p, V3 n, const void *u, Col *out, int *mat) {
     for (k = 0; k < 2; k++) {
         float wz = k ? c->wzr : c->wzf, wr = k ? c->wrr : c->wr;
         float cy = sqrtf((p.y - wr) * (p.y - wr) + (p.z - wz) * (p.z - wz));
-        if (cy < wr + 0.1f && ax < W - 0.025f && p.y < wr + 0.45f) { *out = col(18, 18, 20); *mat = MAT_RUBBER; return; }
+        /* binnenkant: normaal wijst naar de wielas */
+        if (cy < wr + 0.1f && ax < W - 0.025f && (n.y * (p.y - wr) + n.z * (p.z - wz)) < -0.3f * cy) { *out = col(18, 18, 20); *mat = MAT_RUBBER; return; }
     }
     /* koplampen, richtingaanwijzers, achterlichten */
     if (p.z > L - 0.3f && n.z > 0.2f && fabsf(p.y - c->yL) < 0.055f && ax > W - 0.44f && ax < W - 0.05f) {
@@ -292,7 +293,11 @@ static void car_col(V3 p, V3 n, const void *u, Col *out, int *mat) {
         *out = ax > W - 0.13f ? col_e(255, 160, 40, 110) : col_e(205, 16, 18, 150); *mat = MAT_SHINY; return;
     }
     /* grille */
-    if (p.z > L - 0.25f && n.z > 0.3f && ax < W * 0.42f && p.y < c->yL + 0.035f && p.y > c->yL - 0.13f) {
+    if (c->nose >= 0.25f) {   /* sportwagen: smalle luchtinlaat onderin in plaats van een grote grille */
+        if (p.z > L - 0.25f && n.z > 0.3f && ax < W * 0.62f && p.y > c->yb + 0.06f && p.y < c->yb + 0.14f) {
+            *out = fmodf((p.x + 4.0f) * 30.0f, 1.0f) < 0.25f ? col(60, 60, 64) : col(10, 10, 12); *mat = MAT_SHINY; return;
+        }
+    } else if (p.z > L - 0.25f && n.z > 0.3f && ax < W * 0.42f && p.y < c->yL + 0.035f && p.y > c->yL - 0.13f) {
         *out = fmodf((p.y + 4.0f) * 55.0f, 1.0f) < 0.3f ? col(70, 70, 74) : col(10, 10, 12); *mat = MAT_SHINY; return;
     }
     /* kentekens */
