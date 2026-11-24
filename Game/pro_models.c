@@ -221,12 +221,12 @@ static float car_sdf(V3 p, const void *u) {
     /* spatborden (lage auto's: anders snijdt de wielkast door de motorkap), daarna de wielkasten */
     for (k = 0; k < 2; k++) {
         float wz = k ? c->wzr : c->wzf, wr = k ? c->wrr : c->wr;
-        if (c->haunch || wr * 2.0f + 0.16f > c->yt) d = smin(d, sd_ell(v3(ax, p.y, p.z), v3(W - 0.1f, wr + 0.17f, wz), v3(0.18f, 0.27f, 0.6f)), 0.08f);
+        if (c->haunch || wr * 2.0f + 0.16f > c->yt) d = smin(d, sd_ell(v3(ax, p.y, p.z), v3(W - 0.1f, wr + 0.17f, wz), v3(0.21f, 0.27f, 0.6f)), 0.08f);
     }
     for (k = 0; k < 2; k++) {
         float wz = k ? c->wzr : c->wzf, wr = k ? c->wrr : c->wr;
         float cy = sqrtf((p.y - wr) * (p.y - wr) + (p.z - wz) * (p.z - wz)) - (wr + 0.075f);
-        d = smax(d, -fmaxf(cy, (W - 0.42f) - ax), 0.025f);
+        d = smax(d, -fmaxf(cy, (W - 0.27f) - ax), 0.025f);   /* alleen zo diep als de band breed is */
     }
     /* bumpers */
     d = smin(d, sd_rbox(p, v3(0, c->yb + 0.11f, L - 0.02f), v3(W - 0.03f, 0.1f, 0.08f), 0.05f), 0.03f);
@@ -284,7 +284,7 @@ static void car_col(V3 p, V3 n, const void *u, Col *out, int *mat) {
         float wz = k ? c->wzr : c->wzf, wr = k ? c->wrr : c->wr;
         float cy = sqrtf((p.y - wr) * (p.y - wr) + (p.z - wz) * (p.z - wz));
         /* binnenkant: normaal wijst naar de wielas */
-        if (cy < wr + 0.1f && ax < W - 0.025f && (n.y * (p.y - wr) + n.z * (p.z - wz)) < -0.3f * cy) { *out = col(18, 18, 20); *mat = MAT_RUBBER; return; }
+        if (cy < wr + 0.1f && ax < W - 0.025f && ax > W - 0.3f && (n.y * (p.y - wr) + n.z * (p.z - wz)) < -0.3f * cy) { *out = col(18, 18, 20); *mat = MAT_RUBBER; return; }
     }
     /* koplampen, richtingaanwijzers, achterlichten */
     if (p.z > L - 0.3f && n.z > 0.2f && fabsf(p.y - c->yL) < 0.055f && ax > W - 0.44f && ax < W - 0.05f) {
