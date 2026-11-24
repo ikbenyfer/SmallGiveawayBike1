@@ -5,6 +5,7 @@
 #include "../Game/voice.h"
 #include "../Game/human.h"
 #include "../Game/pro_models.h"
+#include "../Game/pro_jobs.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -639,6 +640,32 @@ void r_slot_clear(Renderer *r, int world, int slot) {
 
 void r_tex_upload(Tex *t, int w, int h, const uint8_t *rgba) { tex_from_rgba(t, w, h, rgba, 1, 0); }
 
+/* v7.1.1: klare PRO-modellen van de threads naar de videokaart; geeft terug hoeveel er nog komen */
+int r_pro_poll(Renderer *r, double budget) {
+    double t0 = plat_time();
+    int kind, idx;
+    MeshB m;
+    while (pro_jobs_take(&kind, &idx, &m)) {
+        GMesh *g = NULL;
+        switch (kind) {
+        case PJ_BODY: g = &r->body[idx]; break;
+        case PJ_THIGH: g = &r->thigh[idx]; break;
+        case PJ_SHIN: g = &r->shin[idx]; break;
+        case PJ_UARM: g = &r->uarm[idx]; break;
+        case PJ_FARM: g = &r->farm[idx]; break;
+        case PJ_CAR: g = &r->car[idx]; break;
+        case PJ_CARBODY: g = &r->carBody[idx]; break;
+        case PJ_CARDETAIL: g = &r->carDetail[idx]; break;
+        case PJ_TREEHI: g = &r->treeHi[idx]; break;
+        default: g = &r->treeLo[idx]; break;
+        }
+        upload(g, &m);
+        mb_free(&m);
+        if (plat_time() - t0 > budget) break;
+    }
+    return pro_jobs_left();
+}
+
 void r_build_models(Renderer *r) {
     MeshB m;
     int i, hd = SGB_PRO_OK && g_sqDetail > 2.0f;   /* v7.0.0: ULTRA+ op de pc = PRO-mensen */
@@ -648,13 +675,7 @@ void r_build_models(Renderer *r) {
     for (i = 0; i < CHAR_VARIANTS; i++) {
         model_char_colors(i, &g_amSkin, &g_amHair);
         g_autoMat = 1;   /* v6.2.0: huid, haar, stof en ogen krijgen hun eigen materiaal */
-        if (hd) {   /* v7.0.0 PRO-mensen (organisch, hoge detail) */
-            BUILD(r->body[i], human_body(&m, i));
-            BUILD(r->thigh[i], human_thigh(&m, i));
-            BUILD(r->shin[i], human_shin(&m, i));
-            BUILD(r->uarm[i], human_uarm(&m, i));
-            BUILD(r->farm[i], human_farm(&m, i));
-        } else {
+        if (!hd) {   /* PRO-mensen komen van de threads (pro_jobs.c) */
             BUILD(r->body[i], model_char_body(&m, i));
             BUILD(r->thigh[i], model_char_thigh(&m, i));
             BUILD(r->shin[i], model_char_shin(&m, i));
@@ -669,12 +690,10 @@ void r_build_models(Renderer *r) {
     g_autoMat = 2;   /* v6.2.0: banden van rubber */
     for (i = 0; i < BIKE_VARIANTS; i++) { BUILD(r->bike[i], model_bike(&m, i)); BUILD(r->bikeLo[i], model_bike_lo(&m, i)); }
     for (i = 0; i < CAR_VARIANTS; i++) {
-        if (hd) BUILD(r->car[i], pro_car_traffic(&m, i));   /* v7.1.0 PRO-auto's */
-        else BUILD(r->car[i], model_car(&m, i));
+        if (!hd) BUILD(r->car[i], model_car(&m, i));   /* PRO-auto's: pro_jobs.c */
         BUILD(r->carLo[i], model_car_lo(&m, i));
     }
     g_autoMat = 0;
-    if (hd) for (i = 0; i < PRO_TREE_KINDS; i++) { BUILD(r->treeHi[i], pro_tree(&m, i, 1)); BUILD(r->treeLo[i], pro_tree(&m, i, 0)); }
     for (i = 1; i < 4; i++) BUILD(r->weapon[i], model_weapon(&m, i));
     BUILD(r->cash, model_cash(&m));
     BUILD(r->gift, model_gift(&m));
@@ -687,8 +706,7 @@ void r_build_models(Renderer *r) {
     BUILD(r->spoiler, model_spoiler(&m));
     g_autoMat = 2;
     for (i = 0; i < CAR_MODELS; i++) {
-        if (hd) { BUILD(r->carBody[i], pro_car_body(&m, i)); BUILD(r->carDetail[i], pro_car_detail(&m, i)); }
-        else { BUILD(r->carBody[i], model_car_body(&m, i)); BUILD(r->carDetail[i], model_car_detail(&m, i)); }
+        if (!hd) { BUILD(r->carBody[i], model_car_body(&m, i)); BUILD(r->carDetail[i], model_car_detail(&m, i)); }
         BUILD(r->carBodyLo[i], model_car_body_lo(&m, i)); BUILD(r->carDetailLo[i], model_car_detail_lo(&m, i));
     }
     for (i = 0; i < MOTO_MODELS; i++) { BUILD(r->moto[i], model_moto(&m, i)); BUILD(r->motoLo[i], model_moto_lo(&m, i)); }

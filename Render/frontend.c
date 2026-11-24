@@ -3,6 +3,7 @@
 #define strtok_r strtok_s
 #endif
 #include "frontend.h"
+#include "../Game/pro_jobs.h"
 #include "render.h"
 #include "../Game/nlmap.h"
 #include <stdlib.h>
@@ -427,9 +428,12 @@ static void load_slot(void) {
     }
 }
 
-static void load_step(void) {
+/* 0 = nog wachten op de threads (volgende frame weer proberen) */
+static int load_step(void) {
     int s = F.loadStep;
     int nb = world_build_steps();
+    if (s == 0 && SGB_PRO_OK && s_detail0 > 2.0f) pro_jobs_start(s_detail0);
+    if (s == nb + 2 && r_pro_poll(&F.R, 0.02) > 0) return 0;
     if (s == 0) r_load_font(&F.R);
     else if (s >= 1 && s <= nb) world_build_step(&F.W, s - 1);
     else if (s == nb + 1) r_upload_world(&F.R, &F.W, 0);
@@ -446,6 +450,7 @@ static void load_step(void) {
                  F.loadSecs, F.W.verts_total, F.W.nboxes, plat_memory_kb());
     }
     F.loadStep++;
+    return 1;
 }
 
 /* ------------------------------------------------------------------ tekenhulp */
@@ -4062,8 +4067,11 @@ void fe_frame(double now) {
     case ST_LOAD: {
         double t0 = plat_time();
         int n = 0;
-        while (F.loadStep < F.loadTotal && (n == 0 || plat_time() - t0 < 0.025)) { load_step(); n++; }
-        F.loadShown = approachf(F.loadShown, (float)F.loadStep / (float)F.loadTotal, dt * 0.9f);
+        while (F.loadStep < F.loadTotal && (n == 0 || plat_time() - t0 < 0.025)) { n++; if (!load_step()) break; }
+        {   /* de modellen van de threads tellen mee in de balk */
+            int pt = pro_jobs_total() * 3;
+            F.loadShown = approachf(F.loadShown, (float)(F.loadStep + pt - pro_jobs_left() * 3) / (float)(F.loadTotal + pt), dt * 0.9f);
+        }
         if (F.st > (float)(F.tip + 1) * 3.2f) F.tip++;
         ui_begin(R);
         draw_logo_and_load();

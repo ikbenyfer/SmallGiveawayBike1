@@ -107,10 +107,20 @@ static void snets(MeshB *m, V3 lo, V3 hi, float cell, SdfFn f, ColFn cf, const H
     int nv = 0, cap = 0, i, j, k, a;
     if (!val || !vid) { free(val); free(vid); return; }
 #define IDX(i, j, k) (((size_t)(k) * ny + (j)) * nx + (i))
-    for (k = 0; k < nz; k++)
-        for (j = 0; j < ny; j++)
-            for (i = 0; i < nx; i++)
-                val[IDX(i, j, k)] = eval(f, v3(lo.x + i * cell, lo.y + j * cell, lo.z + k * cell), h);
+    {   /* v7.1.1: per blok van 4x4x4 eerst het midden; ver van het oppervlak = alleen het teken invullen.
+         * Halve diagonaal van een blok is 2,6 cellen; 10 cellen marge omdat de afstanden benaderingen zijn. */
+        int bi, bj, bk;
+        for (bk = 0; bk < nz; bk += 4)
+            for (bj = 0; bj < ny; bj += 4)
+                for (bi = 0; bi < nx; bi += 4) {
+                    float dc = eval(f, v3(lo.x + (bi + 1.5f) * cell, lo.y + (bj + 1.5f) * cell, lo.z + (bk + 1.5f) * cell), h);
+                    int far_ = fabsf(dc) > 10.0f * cell;
+                    for (k = bk; k < bk + 4 && k < nz; k++)
+                        for (j = bj; j < bj + 4 && j < ny; j++)
+                            for (i = bi; i < bi + 4 && i < nx; i++)
+                                val[IDX(i, j, k)] = far_ ? dc : eval(f, v3(lo.x + i * cell, lo.y + j * cell, lo.z + k * cell), h);
+                }
+    }
     /* per cel een punt op het oppervlak: gemiddelde van de randkruisingen */
     for (k = 0; k < nz - 1; k++)
         for (j = 0; j < ny - 1; j++)

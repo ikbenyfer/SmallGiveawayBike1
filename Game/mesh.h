@@ -5,6 +5,19 @@
 
 #include "mathx.h"
 
+/* v7.0.0 PRO-engine (nieuwe nabewerking en hoge-detail mensen): alleen op de pc (Windows/Linux) */
+#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__SWITCH__)
+#define SGB_PRO_OK 1
+#else
+#define SGB_PRO_OK 0
+#endif
+/* v7.1.1: materiaal en detail per thread, want de PRO-modellen worden op meerdere threads gebouwd */
+#if SGB_PRO_OK
+#define SGB_TLS __thread
+#else
+#define SGB_TLS
+#endif
+
 typedef struct {
     float x, y, z;
     int8_t nx, ny, nz, pad;
@@ -16,10 +29,10 @@ typedef struct { uint8_t r, g, b, a; } Col;
 /* v6.0 materialen (in Vtx.pad): de HQ-shader geeft elk materiaal eigen detail, glans en reflectie */
 enum { MAT_DEFAULT = 0, MAT_ASPHALT, MAT_BRICK, MAT_GLASS, MAT_PAINT, MAT_SHINY, MAT_GRASS, MAT_CONCRETE, MAT_ROOF, MAT_WATER,
        MAT_SKIN, MAT_CLOTH, MAT_HAIR, MAT_RUBBER };   /* v6.2.0: huid, stof, haar, rubber */
-extern int g_meshMat;
+extern SGB_TLS int g_meshMat;
 /* v6.2.0: automatisch materiaal kiezen op kleur: 1 = personage (huid/haar/stof/ogen), 2 = voertuig (banden = rubber) */
-extern int g_autoMat;
-extern Col g_amSkin, g_amHair;   /* materiaal voor alles wat nu gebouwd wordt */
+extern SGB_TLS int g_autoMat;
+extern SGB_TLS Col g_amSkin, g_amHair;   /* materiaal voor alles wat nu gebouwd wordt */
 
 static inline Col col(int r, int g, int b) { Col c; c.r = (uint8_t)r; c.g = (uint8_t)g; c.b = (uint8_t)b; c.a = 0; return c; }
 static inline Col col_e(int r, int g, int b, int e) { Col c = col(r, g, b); c.a = (uint8_t)e; return c; }
@@ -50,12 +63,7 @@ void mb_tri(MeshB *m, V3 a, V3 b, V3 c, V3 n, Col c0);
 /* v7.0.0: driehoek met eigen normaal en kleur per hoekpunt en een vast materiaal (gladde, organische modellen) */
 void mb_tri_nm(MeshB *m, V3 a, V3 b, V3 c, V3 na, V3 nb, V3 nc, Col ca, Col cb, Col cc, int mat);
 
-/* v7.0.0 PRO-engine (nieuwe nabewerking en hoge-detail mensen): alleen op de pc (Windows/Linux) */
-#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__SWITCH__)
-#define SGB_PRO_OK 1
-#else
-#define SGB_PRO_OK 0
-#endif
+
 
 #define BOX_NOBOTTOM 1
 #define BOX_NOTOP 2
@@ -91,7 +99,7 @@ typedef struct {
 } SQ;
 SQ sq(V3 c, V3 h, float roundV, float roundH, Col col);   /* standaard 16x10 segmenten, geen taper */
 void mb_sq(MeshB *m, const SQ *s);
-extern float g_sqDetail;   /* v5.5: 1.0 normaal; >1 meer segmenten (hoge kwaliteit, bij het bouwen van de modellen) */
+extern SGB_TLS float g_sqDetail;   /* v5.5: 1.0 normaal; >1 meer segmenten (hoge kwaliteit, bij het bouwen van de modellen) */
 
 /* Ronde buis van a naar b (straal ra -> rb): capsule met bolle uiteinden, of open buis. */
 void mb_capsule(MeshB *m, V3 a, V3 b, float ra, float rb, int seg, Col c);

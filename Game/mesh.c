@@ -1,9 +1,9 @@
 #include "mesh.h"
 
-float g_sqDetail = 1.0f;
-int g_meshMat;
-int g_autoMat;
-Col g_amSkin, g_amHair;
+SGB_TLS float g_sqDetail = 1.0f;
+SGB_TLS int g_meshMat;
+SGB_TLS int g_autoMat;
+SGB_TLS Col g_amSkin, g_amHair;
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -40,27 +40,26 @@ static int auto_mat(Col c) {
     return g_meshMat;
 }
 
-static void put(MeshB *m, V3 p, V3 n, Col c) {
+static void put_mat(MeshB *m, V3 p, V3 n, Col c, int mat) {
     if (m->n >= m->cap) { grow(m, 1); if (m->n >= m->cap) return; }
     Vtx *v = &m->v[m->n++];
     v->x = p.x; v->y = p.y; v->z = p.z;
     v->nx = (int8_t)clampf(n.x * 127.0f, -127, 127);
     v->ny = (int8_t)clampf(n.y * 127.0f, -127, 127);
     v->nz = (int8_t)clampf(n.z * 127.0f, -127, 127);
-    v->pad = (int8_t)(g_autoMat ? auto_mat(c) : g_meshMat);
+    v->pad = (int8_t)mat;
     v->r = c.r; v->g = c.g; v->b = c.b; v->a = c.a;
 }
 
+static void put(MeshB *m, V3 p, V3 n, Col c) { put_mat(m, p, n, c, g_autoMat ? auto_mat(c) : g_meshMat); }
+
 void mb_tri_nm(MeshB *m, V3 a, V3 b, V3 c, V3 na, V3 nb, V3 nc, Col ca, Col cb, Col cc, int mat) {
-    int km = g_meshMat, ka = g_autoMat;
     if (m->has_xf) {
         a = m4_point(&m->xf, a); b = m4_point(&m->xf, b); c = m4_point(&m->xf, c);
         na = v3norm(m4_dir(&m->xf, na)); nb = v3norm(m4_dir(&m->xf, nb)); nc = v3norm(m4_dir(&m->xf, nc));
     }
-    g_meshMat = mat; g_autoMat = 0;
     grow(m, 3);
-    put(m, a, na, ca); put(m, b, nb, cb); put(m, c, nc, cc);
-    g_meshMat = km; g_autoMat = ka;
+    put_mat(m, a, na, ca, mat); put_mat(m, b, nb, cb, mat); put_mat(m, c, nc, cc, mat);
 }
 
 void mb_tri(MeshB *m, V3 a, V3 b, V3 c, V3 n, Col c0) {

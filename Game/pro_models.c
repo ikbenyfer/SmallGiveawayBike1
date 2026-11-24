@@ -70,10 +70,20 @@ static void sn_mesh(MeshB *m, V3 lo, V3 hi, float cell, SdfV f, ColV cf, const v
     int nv = 0, cap = 0, i, j, k, a;
     if (!val || !vid) { free(val); free(vid); return; }
 #define IX(i, j, k) (((size_t)(k) * ny + (j)) * nx + (i))
-    for (k = 0; k < nz; k++)
-        for (j = 0; j < ny; j++)
-            for (i = 0; i < nx; i++)
-                val[IX(i, j, k)] = f(v3(lo.x + i * cell, lo.y + j * cell, lo.z + k * cell), u);
+    {   /* v7.1.1: per blok van 4x4x4 eerst het midden; ver van het oppervlak = alleen het teken invullen.
+         * Halve diagonaal van een blok is 2,6 cellen; 10 cellen marge omdat de afstanden benaderingen zijn. */
+        int bi, bj, bk;
+        for (bk = 0; bk < nz; bk += 4)
+            for (bj = 0; bj < ny; bj += 4)
+                for (bi = 0; bi < nx; bi += 4) {
+                    float dc = f(v3(lo.x + (bi + 1.5f) * cell, lo.y + (bj + 1.5f) * cell, lo.z + (bk + 1.5f) * cell), u);
+                    int far_ = fabsf(dc) > 10.0f * cell;
+                    for (k = bk; k < bk + 4 && k < nz; k++)
+                        for (j = bj; j < bj + 4 && j < ny; j++)
+                            for (i = bi; i < bi + 4 && i < nx; i++)
+                                val[IX(i, j, k)] = far_ ? dc : f(v3(lo.x + i * cell, lo.y + j * cell, lo.z + k * cell), u);
+                }
+    }
     for (k = 0; k < nz - 1; k++)
         for (j = 0; j < ny - 1; j++)
             for (i = 0; i < nx - 1; i++) {
@@ -266,10 +276,10 @@ static void car_col(V3 p, V3 n, const void *u, Col *out, int *mat) {
         return;
     }
     /* ruiten en stijlen */
-    if (p.y > c->yt + 0.035f && p.y < c->roof - 0.035f && !(c->wing && p.z < -1.7f)) {
+    if (p.y > c->yt + 0.035f && p.y < c->roof - 0.035f && ax < hw + 0.05f && p.z < zf + 0.08f && p.z > zr - 0.08f) {
         float bz = c->cz + 0.04f;
         int pillar = 0;
-        if (n.y > 0.82f) return;   /* dak */
+        if (n.y > 0.96f) return;   /* dak (een vlakke voorruit is geen dak) */
         if (an > 0.35f) {   /* zijkant */
             if (p.z > zf - 0.07f || p.z < zr + (c->wsR > 0.5f ? 0.1f : 0.16f) || fabsf(p.z - bz) < 0.045f) pillar = 1;
             if (fabsf(p.z - bz) < 0.045f && !pillar) pillar = 1;

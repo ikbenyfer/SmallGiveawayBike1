@@ -14,6 +14,12 @@ Na elke wijziging op `main` maakt GitHub Actions automatisch een nieuwe release 
 - **Linux:** `SmallGiveawayBike1-Linux.tar.gz`
 - **Android:** `SmallGiveawayBike1-Android.apk`
 
+## v7.1.1: de pc-versie loopt niet meer vast bij het laden
+
+- **Bugfix (Windows en Linux, ULTRA+):** in v7.0.0 en v7.1.0 werden alle PRO-modellen in een keer gebouwd. Op een echte pc duurde dat 25 seconden, en al die tijd reageerde het venster niet. Windows sloot het spel dan af. Nu worden de modellen op meerdere processorkernen tegelijk gebouwd, terwijl het laadscherm gewoon doorloopt. Lege ruimte wordt bij het rekenen overgeslagen.
+- **Bugfix PRO-auto's:** de voorruit van de lage sportauto's (VORTEX GT en BOLT X) werd als dak gezien en kreeg de kleur van de lak. Dat is nu weer glas.
+- Voor de iPad, Android, Quest en Switch verandert er niets.
+
 ## v7.1.0 (alle platforms; PRO-modellen alleen op de pc): echte auto's en bomen + loopstijlen
 
 - **WALK STYLE** in SETTINGS (alle platforms, ook de iPad): kies hoe je personage loopt. Er zijn 9 stijlen: **NORMAL, RELAXED, ATHLETIC, SWAGGER, CATWALK, TOUGH, SNEAK, ROBOT en ZOMBIE**. Elke stijl heeft eigen passen, knieën, armzwaai, ellebogen, houding en op-en-neer. Rennen blijft gewoon rennen. De keuze wordt bewaard.

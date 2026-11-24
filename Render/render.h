@@ -112,6 +112,7 @@ void r_draw_build(Renderer *r, const PDesign *d, V3 cam, V3 tgt, float fov, int 
 int r_load_font(Renderer *r);
 void r_upload_world(Renderer *r, World *w, int slot); /* chunks naar VBO's, CPU-geheugen vrij */
 void r_build_models(Renderer *r);
+int r_pro_poll(Renderer *r, double budget);   /* v7.1.1: klare PRO-modellen uploaden; terug = hoeveel nog */
 void r_slot_upload(Renderer *r, int world, int slot, MeshB *m);   /* tegel-deelmesh in slot */
 void r_slot_clear(Renderer *r, int world, int slot);
 void r_tex_upload(Tex *t, int w, int h, const uint8_t *rgba);
